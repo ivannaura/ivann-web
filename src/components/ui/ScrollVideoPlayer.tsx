@@ -59,12 +59,25 @@ export default function ScrollVideoPlayer({
     setReady(true);
   }, []);
 
-  // Handle case where video is already ready
+  // Handle case where video is already ready (SSR hydration race condition)
   useEffect(() => {
     const video = videoRef.current;
-    if (video && video.readyState >= 1 && !readyRef.current) {
+    if (!video) return;
+
+    // Already loaded before React hydrated
+    if (video.readyState >= 1 && !readyRef.current) {
       handleLoadedMetadata();
+      return;
     }
+
+    // Re-attach listeners in case React's onLoadedMetadata missed the event
+    const handler = () => handleLoadedMetadata();
+    video.addEventListener("loadedmetadata", handler);
+    video.addEventListener("canplay", handler);
+    return () => {
+      video.removeEventListener("loadedmetadata", handler);
+      video.removeEventListener("canplay", handler);
+    };
   }, [handleLoadedMetadata]);
 
   // Seek video and report frame change
