@@ -88,8 +88,9 @@ export default function ScrollVideoPlayer({
       const progress = getBufferProgress(video);
       setBufferProgress(progress);
 
-      // Ready when 90%+ buffered, or canplaythrough fired
-      if (progress >= 0.9 && video.duration) {
+      // With all-keyframe encoding, any buffered position is instantly seekable.
+      // Start at 15% so the user can begin scrolling while the rest loads.
+      if (progress >= 0.15 && video.duration) {
         markReady();
       }
     };
@@ -121,6 +122,17 @@ export default function ScrollVideoPlayer({
     };
   }, [markReady]);
 
+  // Clamp time to the furthest contiguous buffered position
+  const clampToBuffered = useCallback((video: HTMLVideoElement, time: number): number => {
+    if (!video.buffered.length) return 0;
+    for (let i = 0; i < video.buffered.length; i++) {
+      if (video.buffered.start(i) <= 0.5) {
+        return Math.min(time, video.buffered.end(i) - 0.1);
+      }
+    }
+    return 0;
+  }, []);
+
   // rAF-throttled seek: applies pending seek on next animation frame
   const scheduleSeek = useCallback(
     (time: number) => {
@@ -146,15 +158,17 @@ export default function ScrollVideoPlayer({
           seekRafRef.current = 0;
           const target = pendingSeekRef.current;
           if (target !== null && video) {
-            if (Math.abs(video.currentTime - target) > 0.05) {
-              video.currentTime = target;
+            // Clamp to buffered range to avoid stalling on unbuffered data
+            const safeTarget = clampToBuffered(video, target);
+            if (Math.abs(video.currentTime - safeTarget) > 0.05) {
+              video.currentTime = safeTarget;
             }
             pendingSeekRef.current = null;
           }
         });
       }
     },
-    [onFrameChange, timeToFrame]
+    [onFrameChange, timeToFrame, clampToBuffered]
   );
 
   // Cleanup seek rAF on unmount
