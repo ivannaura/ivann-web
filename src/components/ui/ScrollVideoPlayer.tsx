@@ -23,6 +23,21 @@ interface ScrollVideoPlayerProps {
   children?: React.ReactNode;
 }
 
+/**
+ * Returns the fraction (0-1) of the video that is buffered from the start.
+ * Only counts contiguous buffer from time 0.
+ */
+function getBufferProgress(video: HTMLVideoElement): number {
+  if (!video.duration || !video.buffered.length) return 0;
+  // Find the contiguous buffered range starting near 0
+  for (let i = 0; i < video.buffered.length; i++) {
+    if (video.buffered.start(i) <= 0.5) {
+      return video.buffered.end(i) / video.duration;
+    }
+  }
+  return 0;
+}
+
 export default function ScrollVideoPlayer({
   videoSrc,
   audioSrc,
@@ -35,6 +50,7 @@ export default function ScrollVideoPlayer({
   const containerRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const [ready, setReady] = useState(false);
+  const [bufferProgress, setBufferProgress] = useState(0);
 
   // Tracking refs
   const currentTimeRef = useRef(0);
@@ -44,14 +60,17 @@ export default function ScrollVideoPlayer({
   const rafRef = useRef<number>(0);
   const momentumRef = useRef<AudioMomentum | null>(null);
 
+  // rAF-throttled seek target
+  const pendingSeekRef = useRef<number | null>(null);
+  const seekRafRef = useRef<number>(0);
+
   // Convert video time to 3fps frame index (overlay compatibility)
   const timeToFrame = useCallback((time: number) => Math.floor(time * 3), []);
 
-  // Ref to prevent double-init without putting `ready` in callback deps
+  // Ref to prevent double-init
   const readyRef = useRef(false);
 
-  // Video metadata loaded — we can seek now (fires before canplay)
-  const handleLoadedMetadata = useCallback(() => {
+  const markReady = useCallback(() => {
     const video = videoRef.current;
     if (!video || !video.duration || readyRef.current) return;
     readyRef.current = true;
@@ -59,41 +78,60 @@ export default function ScrollVideoPlayer({
     setReady(true);
   }, []);
 
-  // Handle case where video is already ready (SSR hydration race condition)
+  // Track buffer progress and mark ready when enough is buffered
   useEffect(() => {
     const video = videoRef.current;
     if (!video) return;
 
-    // Already loaded before React hydrated
-    if (video.readyState >= 1 && !readyRef.current) {
-      handleLoadedMetadata();
+    const checkBuffer = () => {
+      if (readyRef.current) return;
+      const progress = getBufferProgress(video);
+      setBufferProgress(progress);
+
+      // Ready when 90%+ buffered, or canplaythrough fired
+      if (progress >= 0.9 && video.duration) {
+        markReady();
+      }
+    };
+
+    // Check if already fully loaded (local dev / cache hit)
+    if (video.readyState >= 4) {
+      setBufferProgress(1);
+      markReady();
       return;
     }
 
-    // Re-attach listeners in case React's onLoadedMetadata missed the event
-    const handler = () => handleLoadedMetadata();
-    video.addEventListener("loadedmetadata", handler);
-    video.addEventListener("canplay", handler);
-    return () => {
-      video.removeEventListener("loadedmetadata", handler);
-      video.removeEventListener("canplay", handler);
+    const onCanPlayThrough = () => {
+      setBufferProgress(1);
+      markReady();
     };
-  }, [handleLoadedMetadata]);
 
-  // Seek video and report frame change
-  const seekTo = useCallback(
+    video.addEventListener("progress", checkBuffer);
+    video.addEventListener("canplaythrough", onCanPlayThrough);
+    // Also check on loadedmetadata in case readyState jumps
+    video.addEventListener("loadedmetadata", checkBuffer);
+
+    // Initial check
+    checkBuffer();
+
+    return () => {
+      video.removeEventListener("progress", checkBuffer);
+      video.removeEventListener("canplaythrough", onCanPlayThrough);
+      video.removeEventListener("loadedmetadata", checkBuffer);
+    };
+  }, [markReady]);
+
+  // rAF-throttled seek: applies pending seek on next animation frame
+  const scheduleSeek = useCallback(
     (time: number) => {
       const video = videoRef.current;
       if (!video || !durationRef.current) return;
 
       const clamped = Math.max(0, Math.min(time, durationRef.current - 0.05));
       currentTimeRef.current = clamped;
+      pendingSeekRef.current = clamped;
 
-      // Only set currentTime if it actually changed (avoid redundant seeks)
-      if (Math.abs(video.currentTime - clamped) > 0.03) {
-        video.currentTime = clamped;
-      }
-
+      // Report frame change immediately (overlay stays responsive)
       const frameIndex = timeToFrame(clamped);
       if (frameIndex !== lastFrameIndexRef.current) {
         const direction =
@@ -101,9 +139,30 @@ export default function ScrollVideoPlayer({
         lastFrameIndexRef.current = frameIndex;
         onFrameChange?.(frameIndex, direction);
       }
+
+      // Batch the actual video.currentTime update to next rAF
+      if (!seekRafRef.current) {
+        seekRafRef.current = requestAnimationFrame(() => {
+          seekRafRef.current = 0;
+          const target = pendingSeekRef.current;
+          if (target !== null && video) {
+            if (Math.abs(video.currentTime - target) > 0.05) {
+              video.currentTime = target;
+            }
+            pendingSeekRef.current = null;
+          }
+        });
+      }
     },
     [onFrameChange, timeToFrame]
   );
+
+  // Cleanup seek rAF on unmount
+  useEffect(() => {
+    return () => {
+      if (seekRafRef.current) cancelAnimationFrame(seekRafRef.current);
+    };
+  }, []);
 
   // Initialize AudioMomentum when ready and audioSrc available
   useEffect(() => {
@@ -139,7 +198,7 @@ export default function ScrollVideoPlayer({
       const scrollingForward = currentY > lastScrollYRef.current;
       lastScrollYRef.current = currentY;
 
-      seekTo(targetTime);
+      scheduleSeek(targetTime);
 
       // Add impulse on forward scroll
       if (scrollingForward) {
@@ -151,7 +210,7 @@ export default function ScrollVideoPlayer({
     return () => {
       window.removeEventListener("scroll", onScroll);
     };
-  }, [ready, seekTo]);
+  }, [ready, scheduleSeek]);
 
   // Energy reporting loop
   useEffect(() => {
@@ -187,29 +246,29 @@ export default function ScrollVideoPlayer({
           muted
           playsInline
           preload="auto"
-          onLoadedMetadata={handleLoadedMetadata}
-          onCanPlay={handleLoadedMetadata}
           onError={onError}
           className="absolute inset-0 w-full h-full object-cover"
           style={{ background: "var(--bg-void)" }}
         />
 
-        {/* Loading state */}
+        {/* Loading state with real progress */}
         {!ready && (
           <div className="absolute inset-0 flex flex-col items-center justify-center z-10">
-            <div className="w-16 h-[1px] relative overflow-hidden bg-white/10">
+            <div className="w-24 h-[1px] relative overflow-hidden bg-white/10">
               <div
-                className="absolute left-0 top-0 h-full bg-white/40 animate-pulse"
-                style={{ width: "60%" }}
+                className="absolute left-0 top-0 h-full bg-white/50 transition-all duration-300"
+                style={{ width: `${bufferProgress * 100}%` }}
               />
             </div>
             <span className="text-[10px] font-mono mt-3 text-white/30">
-              Cargando...
+              {bufferProgress < 0.1
+                ? "Conectando..."
+                : `Cargando ${Math.round(bufferProgress * 100)}%`}
             </span>
           </div>
         )}
 
-        {/* Overlay content — pointer-events managed by children */}
+        {/* Overlay content */}
         <div className="absolute inset-0 z-20">
           {children}
         </div>
