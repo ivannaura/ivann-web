@@ -74,10 +74,10 @@ Constants: `IMPULSE=0.2`, `FRICTION=0.985`, `MIN_RATE=0.25`, `MAX_RATE=1.0`, `MA
 Scroll does NOT directly set `video.currentTime`. Instead:
 
 1. Scroll sets `scrollTargetRef` (the desired video time)
-2. A rAF loop interpolates `currentTimeRef` toward the target at `MAX_SCRUB_SPEED = 2.0` (video-seconds per real-second)
+2. A rAF loop applies exponential ease (`EASE_FACTOR = 0.1`) toward the target, capped at `MAX_SCRUB_SPEED = 3.0` video-seconds per real-second
 3. Seeks are clamped to the contiguous buffered range
 
-This caps the maximum video advance speed — even aggressive scrolling produces smooth, cinematic movement.
+The exponential ease means the video moves fast when far from target and slows as it approaches — settling quickly after scroll stops. The speed cap prevents jarring jumps during aggressive scrolling.
 
 ## Design Tokens (CSS Custom Properties)
 
@@ -110,8 +110,8 @@ Audio: `public/audio/flamenco.m4a` (AAC 128kbps, 3.9MB)
 ## Commands
 
 ```bash
-npm run dev          # Dev server (Turbopack)
-npm run build        # Production build
+npm run dev          # Dev server (webpack)
+npm run build        # Production build (Turbopack)
 ```
 
 ## Public Assets

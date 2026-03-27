@@ -118,8 +118,11 @@ export class AudioMomentum {
         this.syncToVideo();
         this.audio.playbackRate = rate;
         this.audio.volume = volume;
-        this.audio.play().catch(() => {});
-        this.wasPlaying = true;
+        this.audio.play().then(() => {
+          this.wasPlaying = true;
+        }).catch(() => {
+          // Autoplay blocked — wasPlaying stays false, will retry on next impulse
+        });
       }
 
       // --- stop playing ---
