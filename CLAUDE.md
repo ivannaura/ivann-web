@@ -11,7 +11,7 @@ Awwwards-quality immersive website for IVANN AURA, a Colombian pianist and live 
 - **Next.js 16.2.1** (App Router, Turbopack)
 - **React 19.2.4** + TypeScript
 - **Tailwind CSS v4** (with `@theme inline` custom properties)
-- **GSAP + ScrollTrigger** for scroll-driven video orchestration (`scrub: 1.5`)
+- **GSAP + ScrollTrigger + SplitText + matchMedia** for scroll-driven video + per-char text reveals + responsive/a11y
 - **Lenis** for smooth scrolling (single RAF loop via GSAP ticker, `autoRaf: false`)
 - **WebGL2** for unified cinema rendering (video post-processing + luminance-reactive particles)
 - **Zustand** for UI state (cursor, menu)
@@ -40,7 +40,7 @@ page.tsx
 | `ScrollVideoPlayer` | `ui/ScrollVideoPlayer.tsx` | GSAP ScrollTrigger + unified WebGL2 canvas + AudioMomentum |
 | `CinemaGL` | `lib/cinema-gl.ts` | Unified WebGL2: video post-processing + luminance-reactive particles (single context) |
 | `AudioMomentum` | `lib/audio-momentum.ts` | Physics engine: energy/friction → playbackRate + volume + mute + visibility pause |
-| `ScrollStoryOverlay` | `ui/ScrollStoryOverlay.tsx` | 20+ story beats with fade/slide/typewriter animations |
+| `ScrollStoryOverlay` | `ui/ScrollStoryOverlay.tsx` | 20+ story beats with GSAP SplitText per-char/word reveals |
 | `usePianoScroll` | `hooks/usePianoScroll.ts` | Letter keys (a-z) / click → smooth scroll forward |
 | `PianoIndicator` | `ui/PianoIndicator.tsx` | Energy-driven equalizer (gold when energy > 0.3) |
 | `Navigation` | `ui/Navigation.tsx` | Fixed nav, scroll progress, native `<dialog>` mobile menu, sound toggle |
@@ -75,14 +75,35 @@ Constants: `IMPULSE=0.2`, `FRICTION=0.985`, `MIN_RATE=0.25`, `MAX_RATE=1.0`, `MA
 
 Energy half-life: FRICTION=0.985 → ~46 frames ≈ 766ms at 60fps.
 
-## Scroll → Video Pipeline (GSAP ScrollTrigger)
+## Scroll → Video Pipeline (GSAP ScrollTrigger + matchMedia)
 
 1. Lenis smooth-scrolls the page (`lerp: 0.08`, `autoRaf: false`)
 2. GSAP ticker drives Lenis (`gsap.ticker.add → lenis.raf`) — single RAF loop
-3. ScrollTrigger (`scrub: 1.5`) maps scroll progress (0-1) to video timeline
+3. `gsap.matchMedia()` wraps ScrollTrigger with responsive breakpoints:
+   - Desktop: `scrub: 1.5` (vinyl feel)
+   - Mobile: `scrub: 2` (gentler for touch)
+   - `prefers-reduced-motion`: `scrub: true` (instant sync, no audio impulse)
 4. `onUpdate` clamps to buffered range, sets `video.currentTime`, reports frame changes
-5. Scroll velocity > 50px/s triggers `AudioMomentum.addImpulse()`
+5. Scroll velocity > 50px/s triggers `AudioMomentum.addImpulse()` (disabled for reduced-motion)
 6. A rAF render loop uploads video frames to WebGL2 canvas with post-processing + particles
+
+## Story Beat Text Animations (GSAP SplitText)
+
+`ScrollStoryOverlay.tsx` uses three animation tiers driven by `data-split` attributes:
+
+| Tier | Attribute | Effect | Used on |
+|------|-----------|--------|---------|
+| **Masked reveal** | `data-split="chars" data-split-mask="words"` | Chars slide up from behind word overflow | Hero titles, climax text |
+| **Char fade+blur** | `data-split="chars"` | Opacity + y + blur(4px) per character | Section labels, medium text |
+| **Word fade** | `data-split="words"` | Opacity + y per word | Quotes, body text |
+| **Stagger** | `data-stagger` | Compound element children stagger in | Stats, cards, albums |
+
+`AnimatedBeat` component (`useLayoutEffect` for flicker-free init):
+- `gsap.matchMedia("(prefers-reduced-motion: no-preference)")` — no animations for reduced-motion
+- `SplitText.create()` within GSAP context — auto-reverted on cleanup
+- Timeline with `">-0.3"` overlap for cascading multi-target reveals
+- Desktop: blur filter + longer durations; Mobile: no blur + snappier timing
+- Exit: CSS opacity fade (progress > 0.85), works regardless of motion preference
 
 ## Unified WebGL2 Cinema
 
