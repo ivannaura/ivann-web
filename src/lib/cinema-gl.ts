@@ -212,7 +212,10 @@ export function initCinemaGL(canvas: HTMLCanvasElement): CinemaGL | null {
   gl.vertexAttribPointer(cinemaAPos, 2, gl.FLOAT, false, 0, 0);
   gl.bindVertexArray(null);
 
-  // Cinema uniforms
+  // Cinema uniforms — explicit texture unit binding (don't rely on default 0)
+  const cUTex = gl.getUniformLocation(cinemaProg, "u_tex");
+  gl.useProgram(cinemaProg);
+  gl.uniform1i(cUTex, 0);
   const cUTime = gl.getUniformLocation(cinemaProg, "u_time");
   const cUEnergy = gl.getUniformLocation(cinemaProg, "u_energy");
   const cUProgress = gl.getUniformLocation(cinemaProg, "u_progress");

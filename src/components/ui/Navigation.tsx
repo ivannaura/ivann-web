@@ -20,7 +20,7 @@ interface NavigationProps {
 export default function Navigation({
   audioActive = false,
   onSoundToggle,
-  soundMuted = true,
+  soundMuted = false,
 }: NavigationProps) {
   const [scrolled, setScrolled] = useState(false);
   const [scrollProgress, setScrollProgress] = useState(0);

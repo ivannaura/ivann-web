@@ -284,9 +284,6 @@ export default function ScrollVideoPlayer({
     momentum.setVideoTimeGetter(() => currentTimeRef.current);
     momentumRef.current = momentum;
 
-    // Apply initial mute state
-    momentum.setMuted(audioMuted);
-
     return () => {
       momentum.destroy();
       momentumRef.current = null;
