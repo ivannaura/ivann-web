@@ -60,9 +60,13 @@ export default function ScrollVideoPlayer({
   const rafRef = useRef<number>(0);
   const momentumRef = useRef<AudioMomentum | null>(null);
 
-  // rAF-throttled seek target
-  const pendingSeekRef = useRef<number | null>(null);
-  const seekRafRef = useRef<number>(0);
+  // Vinyl inertia: scroll sets a target, video glides toward it at max speed
+  const scrollTargetRef = useRef(0);
+  const scrubRafRef = useRef<number>(0);
+  const lastTickRef = useRef(0);
+
+  // Max video-seconds per real-second — the "vinyl speed limit"
+  const MAX_SCRUB_SPEED = 2.0;
 
   // Convert video time to 3fps frame index (overlay compatibility)
   const timeToFrame = useCallback((time: number) => Math.floor(time * 3), []);
@@ -133,50 +137,55 @@ export default function ScrollVideoPlayer({
     return 0;
   }, []);
 
-  // rAF-throttled seek: applies pending seek on next animation frame
-  const scheduleSeek = useCallback(
-    (time: number) => {
-      const video = videoRef.current;
-      if (!video || !durationRef.current) return;
-
-      const clamped = Math.max(0, Math.min(time, durationRef.current - 0.05));
-      currentTimeRef.current = clamped;
-      pendingSeekRef.current = clamped;
-
-      // Report frame change immediately (overlay stays responsive)
-      const frameIndex = timeToFrame(clamped);
-      if (frameIndex !== lastFrameIndexRef.current) {
-        const direction =
-          frameIndex > lastFrameIndexRef.current ? "forward" : "backward";
-        lastFrameIndexRef.current = frameIndex;
-        onFrameChange?.(frameIndex, direction);
-      }
-
-      // Batch the actual video.currentTime update to next rAF
-      if (!seekRafRef.current) {
-        seekRafRef.current = requestAnimationFrame(() => {
-          seekRafRef.current = 0;
-          const target = pendingSeekRef.current;
-          if (target !== null && video) {
-            // Clamp to buffered range to avoid stalling on unbuffered data
-            const safeTarget = clampToBuffered(video, target);
-            if (Math.abs(video.currentTime - safeTarget) > 0.05) {
-              video.currentTime = safeTarget;
-            }
-            pendingSeekRef.current = null;
-          }
-        });
-      }
-    },
-    [onFrameChange, timeToFrame, clampToBuffered]
-  );
-
-  // Cleanup seek rAF on unmount
+  // Vinyl inertia loop: glides currentTime toward scrollTarget at capped speed
   useEffect(() => {
-    return () => {
-      if (seekRafRef.current) cancelAnimationFrame(seekRafRef.current);
+    if (!ready) return;
+
+    const video = videoRef.current;
+    if (!video) return;
+
+    lastTickRef.current = performance.now();
+
+    const tick = (now: number) => {
+      const dt = Math.min((now - lastTickRef.current) / 1000, 0.05); // cap dt at 50ms
+      lastTickRef.current = now;
+
+      const target = scrollTargetRef.current;
+      const current = currentTimeRef.current;
+      const delta = target - current;
+
+      if (Math.abs(delta) > 0.01) {
+        // Clamp the step to MAX_SCRUB_SPEED * dt
+        const maxStep = MAX_SCRUB_SPEED * dt;
+        const step = Math.max(-maxStep, Math.min(maxStep, delta));
+        const newTime = current + step;
+
+        currentTimeRef.current = newTime;
+
+        // Clamp to buffered range and apply to video
+        const safeTime = clampToBuffered(video, newTime);
+        if (Math.abs(video.currentTime - safeTime) > 0.03) {
+          video.currentTime = safeTime;
+        }
+
+        // Report frame change
+        const frameIndex = timeToFrame(newTime);
+        if (frameIndex !== lastFrameIndexRef.current) {
+          const direction =
+            frameIndex > lastFrameIndexRef.current ? "forward" : "backward";
+          lastFrameIndexRef.current = frameIndex;
+          onFrameChange?.(frameIndex, direction);
+        }
+      }
+
+      scrubRafRef.current = requestAnimationFrame(tick);
     };
-  }, []);
+
+    scrubRafRef.current = requestAnimationFrame(tick);
+    return () => {
+      cancelAnimationFrame(scrubRafRef.current);
+    };
+  }, [ready, clampToBuffered, timeToFrame, onFrameChange]);
 
   // Initialize AudioMomentum when ready and audioSrc available
   useEffect(() => {
@@ -193,7 +202,7 @@ export default function ScrollVideoPlayer({
     };
   }, [ready, audioSrc]);
 
-  // Scroll-driven seeking
+  // Scroll-driven target update (vinyl loop handles the actual seeking)
   useEffect(() => {
     const container = containerRef.current;
     if (!container || !ready) return;
@@ -207,14 +216,17 @@ export default function ScrollVideoPlayer({
       const progress = Math.max(0, Math.min(1, scrolled / scrollableHeight));
       const targetTime = progress * durationRef.current;
 
-      // Direction
+      // Set target — the vinyl inertia loop will glide toward it
+      scrollTargetRef.current = Math.max(
+        0,
+        Math.min(targetTime, durationRef.current - 0.05)
+      );
+
+      // Direction for audio impulse
       const currentY = window.scrollY;
       const scrollingForward = currentY > lastScrollYRef.current;
       lastScrollYRef.current = currentY;
 
-      scheduleSeek(targetTime);
-
-      // Add impulse on forward scroll
       if (scrollingForward) {
         momentumRef.current?.addImpulse();
       }
@@ -224,7 +236,7 @@ export default function ScrollVideoPlayer({
     return () => {
       window.removeEventListener("scroll", onScroll);
     };
-  }, [ready, scheduleSeek]);
+  }, [ready]);
 
   // Energy reporting loop
   useEffect(() => {
