@@ -39,3 +39,12 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# large/obsolete assets (keep only graded video + audio in git)
+public/frames/
+public/images/
+public/videos/storyboard/
+public/videos/cuts/
+public/videos/demos/
+public/videos/flamenco-de-esfera.mp4
+public/videos/Video_de_Fur_Eliza_Apasionado.mp4

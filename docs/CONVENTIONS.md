@@ -125,25 +125,36 @@ Without a speed cap, aggressive scrolling makes the video jump 30+ seconds insta
 ### How it works
 
 ```
-MAX_SCRUB_SPEED = 2.0  // video-seconds per real-second
+MAX_SCRUB_SPEED = 3.0  // video-seconds per real-second (speed cap)
+EASE_FACTOR = 0.1      // exponential lerp per frame
 
 scrollTarget = desired video time (from scroll position)
 currentTime = actual video time (interpolated)
 
 Per rAF frame:
   delta = scrollTarget - currentTime
-  maxStep = MAX_SCRUB_SPEED * dt
-  step = clamp(delta, -maxStep, +maxStep)
+  eased = delta * EASE_FACTOR          // exponential ease (fast far, slow near)
+  maxStep = MAX_SCRUB_SPEED * dt       // hard speed cap
+  step = clamp(eased, -maxStep, +maxStep)
   currentTime += step
   video.currentTime = currentTime
 ```
 
+The two-layer approach: EASE_FACTOR handles the smooth settling near the target, MAX_SCRUB_SPEED prevents large jumps when the target is far away (aggressive scrolling).
+
 ### Tuning `MAX_SCRUB_SPEED`
 
-- **1.0** — very cinematic, video feels heavy/slow to respond
-- **2.0** — balanced (current setting)
-- **3.0** — more responsive, less vinyl feel
-- **5.0+** — effectively no cap, video jumps like before
+- **1.5** — very cinematic, video feels heavy/slow to respond
+- **3.0** — balanced (current setting)
+- **5.0** — more responsive, less vinyl feel
+- **10.0+** — effectively no cap, video jumps like before
+
+### Tuning `EASE_FACTOR`
+
+- **0.05** — very smooth, slow to settle (noticeable lag)
+- **0.10** — balanced (current setting)
+- **0.20** — snappy, quick to settle
+- **0.50+** — almost direct, minimal easing
 
 ---
 
