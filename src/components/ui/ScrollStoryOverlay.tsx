@@ -33,6 +33,10 @@ interface StoryBeat {
 // Act 6: frames 450-539 (2:30-3:00)
 // Act 7: frames 540-629 (3:00-3:30)
 // Act 8: frames 630-738 (3:30-4:06)
+//
+// Gaps between acts are intentional "breathing room" — the video plays
+// without overlay text, letting the concert footage speak for itself.
+// These gaps also prevent visual clutter during scene transitions.
 
 const STORY_BEATS: StoryBeat[] = [
   // === ACT 1: EL DESPERTAR ===

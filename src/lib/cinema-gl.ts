@@ -1,7 +1,8 @@
 // ---------------------------------------------------------------------------
 // CinemaGL — WebGL post-processing for scroll-driven video
-// Renders video frames through cinematic fragment shaders:
-//   vignette, chromatic aberration, film grain, soft bloom
+// Renders video frames through cinematic fragment shaders.
+// Effects vary dynamically per narrative act (u_progress):
+//   - Gentle during Despertar/Cierre, intense during Tormenta/Clímax
 // ---------------------------------------------------------------------------
 
 const VERT = `
@@ -12,14 +13,17 @@ void main() {
   gl_Position = vec4(a_pos, 0.0, 1.0);
 }`;
 
+// Dynamic mood: u_progress (0-1) maps to narrative intensity.
+// Acts 1-2: gentle (0.5), Acts 3-4: building (0.8), Acts 5-6: peak (1.2),
+// Acts 7-8: resolution (0.6). All effects scale with this intensity.
 const FRAG = `
 precision mediump float;
 varying vec2 v_uv;
 uniform sampler2D u_tex;
 uniform float u_time;
 uniform float u_energy;
+uniform float u_progress;
 
-// Pseudo-random hash for film grain
 float hash(vec2 p) {
   return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453);
 }
@@ -28,27 +32,43 @@ void main() {
   vec2 uv = v_uv;
   float d = length(uv - 0.5);
 
+  // --- Narrative mood ---
+  // Map scroll progress to effect intensity across 8 acts
+  float act = u_progress * 8.0;
+  float mood;
+  if (act < 1.0) mood = 0.5;        // Act 1: Despertar — gentle
+  else if (act < 2.0) mood = 0.6;   // Act 2: Entrada — warming up
+  else if (act < 3.0) mood = 0.8;   // Act 3: Danza — building
+  else if (act < 4.0) mood = 0.9;   // Act 4: Espectáculo — strong
+  else if (act < 5.0) mood = 1.1;   // Act 5: Fuego — peak
+  else if (act < 6.0) mood = 1.2;   // Act 6: Clímax — maximum
+  else if (act < 7.0) mood = 0.8;   // Act 7: Resolución — calming
+  else mood = 0.5;                   // Act 8: Cierre — peaceful
+
   // --- Chromatic aberration ---
-  // Shifts R and B channels outward from center.
-  // Stronger at edges, amplified by scroll energy.
-  float ca = d * 0.002 * (1.0 + u_energy * 3.0);
+  // Stronger at edges, amplified by energy AND narrative mood
+  float ca = d * 0.002 * (1.0 + u_energy * 3.0) * mood;
   vec3 c;
   c.r = texture2D(u_tex, uv + vec2(ca, 0.0)).r;
   c.g = texture2D(u_tex, uv).g;
   c.b = texture2D(u_tex, uv - vec2(ca, 0.0)).b;
 
   // --- Vignette ---
-  // Darkens edges to focus the viewer's eye on center.
-  c *= mix(0.3, 1.0, smoothstep(0.7, 0.3, d));
+  // Tighter vignette during intense acts, softer during gentle ones
+  float vigEdge = 0.7 - mood * 0.1;
+  float vigCenter = 0.3 - mood * 0.05;
+  c *= mix(0.2 + (1.0 - mood) * 0.15, 1.0, smoothstep(vigEdge, vigCenter, d));
 
   // --- Film grain ---
-  // Animated noise that eliminates the "too clean" digital look.
-  c += hash(uv * 800.0 + fract(u_time)) * 0.06 - 0.03;
+  // More grain during transitions and dark moments
+  float grainAmt = (0.04 + mood * 0.025);
+  c += hash(uv * 800.0 + fract(u_time)) * grainAmt * 2.0 - grainAmt;
 
   // --- Soft bloom ---
-  // Brightens already-bright areas for a dreamy glow.
+  // Lower threshold during peak acts = more glow
+  float bloomThresh = 0.7 - mood * 0.1;
   float lum = dot(c, vec3(0.2126, 0.7152, 0.0722));
-  c += max(0.0, lum - 0.65) * 0.4;
+  c += max(0.0, lum - bloomThresh) * (0.3 + mood * 0.15);
 
   gl_FragColor = vec4(c, 1.0);
 }`;
@@ -58,8 +78,8 @@ void main() {
 // ---------------------------------------------------------------------------
 
 export interface CinemaGL {
-  /** Draw one frame: uploads video texture, runs post-processing shader. */
-  render(video: HTMLVideoElement, time: number, energy: number): void;
+  /** Draw one frame with post-processing. Progress = scroll position 0-1. */
+  render(video: HTMLVideoElement, time: number, energy: number, progress: number): void;
   /** Update canvas resolution (call on resize). */
   resize(w: number, h: number): void;
   /** Release all GL resources. */
@@ -107,14 +127,16 @@ export function initCinemaGL(canvas: HTMLCanvasElement): CinemaGL | null {
 
   const uTime = gl.getUniformLocation(prog, "u_time");
   const uEnergy = gl.getUniformLocation(prog, "u_energy");
+  const uProgress = gl.getUniformLocation(prog, "u_progress");
 
   return {
-    render(video, time, energy) {
-      if (video.readyState < 2) return; // need HAVE_CURRENT_DATA
+    render(video, time, energy, progress) {
+      if (video.readyState < 2) return;
       gl.bindTexture(gl.TEXTURE_2D, tex);
       gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, video);
       gl.uniform1f(uTime, time);
       gl.uniform1f(uEnergy, energy);
+      gl.uniform1f(uProgress, progress);
       gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
     },
 

@@ -25,7 +25,8 @@ page.tsx
  ├── PianoIndicator        (energy-driven equalizer, bottom-left)
  │
  ├── ScrollVideoPlayer     (GSAP ScrollTrigger → video.currentTime + WebGL canvas)
- │    ├── CinemaGL         (WebGL shaders: vignette, chromatic aberration, grain, bloom)
+ │    ├── CinemaGL         (WebGL shaders: vignette, CA, grain, bloom — dynamic mood per act)
+ │    ├── ParticlesGL      (250 WebGL light motes, energy-responsive, additive blending)
  │    ├── AudioMomentum    (physics engine: impulse → energy → playbackRate)
  │    └── ScrollStoryOverlay (20+ frame-synced story beats over video)
  │
@@ -38,7 +39,8 @@ page.tsx
 | Component | File | Purpose |
 |-----------|------|---------|
 | `ScrollVideoPlayer` | `ui/ScrollVideoPlayer.tsx` | GSAP ScrollTrigger + WebGL canvas + AudioMomentum |
-| `CinemaGL` | `lib/cinema-gl.ts` | WebGL post-processing: vignette, chromatic aberration, grain, bloom |
+| `CinemaGL` | `lib/cinema-gl.ts` | WebGL post-processing with dynamic mood per narrative act |
+| `ParticlesGL` | `lib/particles-gl.ts` | 250 GL_POINTS light motes, additive blending, energy-responsive |
 | `AudioMomentum` | `lib/audio-momentum.ts` | Physics engine: energy/friction → playbackRate + volume + visibility pause |
 | `ScrollStoryOverlay` | `ui/ScrollStoryOverlay.tsx` | 20+ story beats with fade/slide/typewriter animations |
 | `usePianoScroll` | `hooks/usePianoScroll.ts` | Letter keys (a-z) / click → smooth scroll forward |
@@ -92,7 +94,11 @@ GSAP ScrollTrigger replaces the previous manual vinyl inertia system. The entire
 - **Film grain**: Animated noise for organic, non-digital texture
 - **Soft bloom**: Glow on highlights for dreamy quality
 
-Falls back to raw `<video>` element if WebGL is unavailable. Canvas uses `object-fit: cover` at video resolution.
+Effects vary dynamically by narrative act via `u_progress` uniform — gentle during Despertar/Cierre, peak during Fuego/Clímax. Falls back to raw `<video>` element if WebGL is unavailable. Canvas uses `object-fit: cover` at video resolution.
+
+## Particle System (ParticlesGL)
+
+250 GL_POINTS with additive blending — floating light motes that respond to scroll energy. Speed multiplier: `0.05 + energy * 0.95` (nearly frozen at idle, full speed at peak). Colors shift from warm white (#FFFDE8) to gold (#E8C85A) with energy. Follows VISION.md "Regla de Oro" — tied to scroll, nothing animates autonomously.
 
 ## Design Tokens (CSS Custom Properties)
 

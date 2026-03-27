@@ -13,19 +13,30 @@ User scrolls
     ↓
 Lenis smooth scroll (lerp 0.1, duration 1.2s)
     ↓
-scroll event → progress = scrolled / scrollableHeight (0 to 1)
+useLenis → ScrollTrigger.update()      (LenisGSAPBridge)
     ↓
-scrollTargetRef = progress * videoDuration
+GSAP ScrollTrigger (scrub: 1.5)
+  progress = scroll position 0-1       (smooth 1.5s catch-up)
     ↓
-Vinyl inertia rAF loop:
-  delta = target - current
-  step = clamp(delta, -MAX_SPEED * dt, +MAX_SPEED * dt)
-  currentTime += step
+targetTime = progress * videoDuration
+safeTime = clampToBuffered(targetTime)
+video.currentTime = safeTime
     ↓
-video.currentTime = clampToBuffered(currentTime)
+frameIndex = Math.floor(safeTime * 3) → ScrollStoryOverlay
     ↓
-frameIndex = Math.floor(currentTime * 3) → ScrollStoryOverlay
+Cinema rAF loop:
+  cinema.render(video, time, energy, progress)  → WebGL post-processing
+  particles.render(time, energy)                → floating light motes
 ```
+
+### Why GSAP ScrollTrigger instead of manual inertia?
+
+The previous system used a custom rAF loop with exponential easing and speed capping (`scrollTargetRef`, `EASE_FACTOR=0.1`, `MAX_SCRUB_SPEED=3.0`). GSAP's `scrub: 1.5` replaces ~150 lines with one config value and provides:
+
+- Battle-tested smooth interpolation (1.5s catch-up = vinyl feel)
+- Built-in velocity tracking (`self.getVelocity()`)
+- Automatic cleanup and SSR safety
+- No manual `requestAnimationFrame` management for scroll sync
 
 ### Video encoding for scroll scrubbing
 
@@ -114,47 +125,65 @@ if abs(audio.currentTime - videoTime) > 3.0 seconds:
 - `STOP_THRESHOLD = 0.02` — pause audio (with natural fade from smoothstep)
 - Hysteresis (play > stop) prevents rapid play/pause toggling near threshold
 
+### Energy half-life
+
+`FRICTION = 0.985` per frame. At 60fps: half-life ≈ 46 frames ≈ 766ms. This means energy drops to 50% about 0.77 seconds after the last impulse. The decay is fast enough to feel responsive but slow enough for the audio to fade naturally rather than cutting.
+
+### Visibility API integration
+
+When the tab goes hidden (`document.hidden`), AudioMomentum:
+1. Pauses audio playback
+2. Stops the rAF loop (saves CPU)
+3. On return: decays energy by `Math.pow(FRICTION, elapsedFrames)` — the audio doesn't slam back in after a long tab switch
+
 ---
 
-## Vinyl Inertia (Scrub Speed Cap)
+## WebGL Post-Processing (CinemaGL)
 
-### Why cap scroll speed?
+### Dynamic Narrative Mood
 
-Without a speed cap, aggressive scrolling makes the video jump 30+ seconds instantly — jarring and un-cinematic. The vinyl inertia makes the video "glide" to the target position at a maximum rate, like a physical record that has inertia.
+The cinema shader uses a `u_progress` uniform (0-1 from scroll position) to vary effect intensity across 8 narrative acts:
 
-### How it works
+| Act | Name | Mood | Effect |
+|-----|------|------|--------|
+| 1 | Despertar | 0.5 | Gentle — minimal effects |
+| 2 | Entrada | 0.6 | Warming up |
+| 3 | Danza | 0.8 | Building — stronger aberration |
+| 4 | Espectáculo | 0.9 | Strong vignette |
+| 5 | Fuego | 1.1 | Peak — maximum effects |
+| 6 | Clímax | 1.2 | Maximum glow + aberration |
+| 7 | Resolución | 0.8 | Calming back down |
+| 8 | Cierre | 0.5 | Peaceful — back to gentle |
 
-```
-MAX_SCRUB_SPEED = 3.0  // video-seconds per real-second (speed cap)
-EASE_FACTOR = 0.1      // exponential lerp per frame
+All four effects (chromatic aberration, vignette, grain, bloom) scale with `mood`:
+- **Chromatic aberration**: `d * 0.002 * (1 + energy * 3) * mood` — edge offset
+- **Vignette**: tighter edges during intense acts
+- **Film grain**: more grain during transitions
+- **Bloom**: lower threshold at peak = more glow
 
-scrollTarget = desired video time (from scroll position)
-currentTime = actual video time (interpolated)
+### Graceful degradation
 
-Per rAF frame:
-  delta = scrollTarget - currentTime
-  eased = delta * EASE_FACTOR          // exponential ease (fast far, slow near)
-  maxStep = MAX_SCRUB_SPEED * dt       // hard speed cap
-  step = clamp(eased, -maxStep, +maxStep)
-  currentTime += step
-  video.currentTime = currentTime
-```
+`initCinemaGL()` returns `null` if WebGL is unavailable. `ScrollVideoPlayer` tracks `hasGL` state — when false, the raw `<video>` element is shown directly with `opacity: 1`.
 
-The two-layer approach: EASE_FACTOR handles the smooth settling near the target, MAX_SCRUB_SPEED prevents large jumps when the target is far away (aggressive scrolling).
+---
 
-### Tuning `MAX_SCRUB_SPEED`
+## Particle System (ParticlesGL)
 
-- **1.5** — very cinematic, video feels heavy/slow to respond
-- **3.0** — balanced (current setting)
-- **5.0** — more responsive, less vinyl feel
-- **10.0+** — effectively no cap, video jumps like before
+250 GL_POINTS with additive blending (`gl.blendFunc(SRC_ALPHA, ONE)`) creating glowing light motes.
 
-### Tuning `EASE_FACTOR`
+### Energy response (VISION "Regla de Oro")
 
-- **0.05** — very smooth, slow to settle (noticeable lag)
-- **0.10** — balanced (current setting)
-- **0.20** — snappy, quick to settle
-- **0.50+** — almost direct, minimal easing
+Speed multiplier: `0.05 + energy * 0.95` — particles nearly freeze when scroll stops (5% drift), full speed at peak energy. This ensures everything on screen is tied to user interaction.
+
+### Colors
+
+- Idle: `--particle-core` (#FFFDE8) — warm white dust
+- Active: `--aura-gold-bright` (#E8C85A) — energized gold
+- Interpolated by `u_energy` in the fragment shader
+
+### Lifecycle
+
+Each particle has `life` / `maxLife` counters. Alpha fades in over first 20% and out over last 30% of life. Gentle upward drift simulates dust in a sunbeam. Particles wrap at screen edges.
 
 ---
 
@@ -237,10 +266,8 @@ Zustand store (`useUIStore`) manages ephemeral UI state:
 | State | Purpose | Used by |
 |-------|---------|---------|
 | `isLoaded` | Preloader completion flag | Preloader |
-| `currentSection` | Active section index (0-based) | Navigation |
 | `menuOpen` | Mobile menu toggle | Navigation |
 | `cursorVariant` | Cursor style (default/hover/text/hidden) | CustomCursor, all components |
-| `scrollProgress` | Page scroll progress (0-1) | Navigation progress bar |
 
 ---
 
@@ -298,9 +325,11 @@ src/
     sections/
       Contact.tsx             Booking form
   hooks/
-    usePianoScroll.ts  Keyboard/click → scroll
+    usePianoScroll.ts  Keyboard/click → scroll (a-z keys only)
   lib/
     audio-momentum.ts  Physics-driven audio engine
+    cinema-gl.ts       WebGL post-processing (vignette, CA, grain, bloom)
+    particles-gl.ts    WebGL particle system (250 light motes)
   stores/
     useUIStore.ts      Global UI state (Zustand)
 ```

@@ -5,6 +5,7 @@ import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 import { AudioMomentum } from "@/lib/audio-momentum";
 import { initCinemaGL, type CinemaGL } from "@/lib/cinema-gl";
+import { initParticlesGL, type ParticlesGL } from "@/lib/particles-gl";
 
 if (typeof window !== "undefined") {
   gsap.registerPlugin(ScrollTrigger);
@@ -56,7 +57,9 @@ export default function ScrollVideoPlayer({
   const containerRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const particleCanvasRef = useRef<HTMLCanvasElement>(null);
   const cinemaRef = useRef<CinemaGL | null>(null);
+  const particlesRef = useRef<ParticlesGL | null>(null);
   const [ready, setReady] = useState(false);
   const [bufferProgress, setBufferProgress] = useState(0);
   const [hasGL, setHasGL] = useState(true);
@@ -66,6 +69,7 @@ export default function ScrollVideoPlayer({
   const lastFrameIndexRef = useRef(0);
   const durationRef = useRef(0);
   const energyRef = useRef(0);
+  const progressRef = useRef(0);
   const renderRafRef = useRef<number>(0);
   const momentumRef = useRef<AudioMomentum | null>(null);
   const readyRef = useRef(false);
@@ -136,6 +140,26 @@ export default function ScrollVideoPlayer({
   }, [markReady]);
 
   // ---------------------------------------------------------------------------
+  // iOS fix: Safari on cellular ignores preload="auto" until user gesture.
+  // A brief play+pause on first touch unlocks buffering (muted autoplay allowed).
+  // ---------------------------------------------------------------------------
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+
+    const unlock = () => {
+      if (video.readyState < 2) {
+        video.play()
+          .then(() => { video.pause(); video.currentTime = 0; })
+          .catch(() => {});
+      }
+    };
+
+    document.addEventListener("touchstart", unlock, { once: true });
+    return () => document.removeEventListener("touchstart", unlock);
+  }, []);
+
+  // ---------------------------------------------------------------------------
   // WebGL cinema canvas — post-processing shaders
   // ---------------------------------------------------------------------------
   useEffect(() => {
@@ -167,13 +191,46 @@ export default function ScrollVideoPlayer({
   }, []);
 
   // ---------------------------------------------------------------------------
-  // Render loop — draws video to WebGL canvas + energy tracking
+  // Particle system — floating light motes that respond to energy
+  // ---------------------------------------------------------------------------
+  useEffect(() => {
+    const canvas = particleCanvasRef.current;
+    if (!canvas || !hasGL) return;
+
+    const particles = initParticlesGL(canvas);
+    if (!particles) return;
+    particlesRef.current = particles;
+
+    // Size to viewport
+    const resize = () => {
+      const dpr = Math.min(window.devicePixelRatio, 2);
+      particles.resize(
+        canvas.clientWidth * dpr,
+        canvas.clientHeight * dpr
+      );
+    };
+    resize();
+
+    const ro = new ResizeObserver(resize);
+    ro.observe(canvas);
+
+    return () => {
+      ro.disconnect();
+      particles.destroy();
+      particlesRef.current = null;
+    };
+  }, [hasGL]);
+
+  // ---------------------------------------------------------------------------
+  // Render loop — cinema canvas + particles + energy tracking
   // ---------------------------------------------------------------------------
   useEffect(() => {
     if (!ready) return;
 
     let lastEnergy = -1;
     const tick = () => {
+      const now = performance.now() / 1000;
+
       // Energy tracking
       const e = momentumRef.current?.getEnergy() ?? 0;
       energyRef.current = e;
@@ -182,11 +239,17 @@ export default function ScrollVideoPlayer({
         onEnergyChangeRef.current?.(e);
       }
 
-      // WebGL render
+      // Cinema canvas — video + post-processing with narrative mood
       const video = videoRef.current;
       const cinema = cinemaRef.current;
       if (video && cinema) {
-        cinema.render(video, performance.now() / 1000, e);
+        cinema.render(video, now, e, progressRef.current);
+      }
+
+      // Particle system — floating motes
+      const particles = particlesRef.current;
+      if (particles) {
+        particles.render(now, e);
       }
 
       renderRafRef.current = requestAnimationFrame(tick);
@@ -213,6 +276,7 @@ export default function ScrollVideoPlayer({
         end: "bottom bottom",
         scrub: 1.5,
         onUpdate: (self) => {
+          progressRef.current = self.progress;
           const targetTime = self.progress * durationRef.current;
           const safeTime = clampToBuffered(video, targetTime);
           currentTimeRef.current = safeTime;
@@ -290,6 +354,15 @@ export default function ScrollVideoPlayer({
           <canvas
             ref={canvasRef}
             className="absolute inset-0 w-full h-full object-cover"
+            style={{ opacity: ready ? 1 : 0 }}
+          />
+        )}
+
+        {/* Particle canvas — floating light motes, transparent overlay */}
+        {hasGL && (
+          <canvas
+            ref={particleCanvasRef}
+            className="absolute inset-0 w-full h-full pointer-events-none z-10"
             style={{ opacity: ready ? 1 : 0 }}
           />
         )}
