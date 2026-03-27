@@ -33,15 +33,21 @@ export default function Navigation() {
       const sections = NAV_ITEMS.map((item) =>
         document.querySelector(item.href)
       );
+      let found = false;
       for (let i = sections.length - 1; i >= 0; i--) {
         const section = sections[i];
         if (section) {
           const rect = section.getBoundingClientRect();
           if (rect.top <= window.innerHeight * 0.4) {
             setActiveSection(i);
+            found = true;
             break;
           }
         }
+      }
+      // #top has no DOM element — treat scroll near top as section 0
+      if (!found && y < window.innerHeight * 0.3) {
+        setActiveSection(0);
       }
     };
     window.addEventListener("scroll", onScroll, { passive: true });
@@ -216,9 +222,10 @@ export default function Navigation() {
               style={{ background: "var(--bg-subtle)" }}
             />
 
-            {/* Sound toggle placeholder */}
+            {/* Sound toggle placeholder — disabled until wired */}
             <button
-              className="w-8 h-8 flex items-center justify-center rounded-full transition-all duration-300 hover:bg-white/5"
+              disabled
+              className="w-8 h-8 flex items-center justify-center rounded-full transition-all duration-300 hover:bg-white/5 disabled:opacity-30 disabled:cursor-not-allowed"
               aria-label="Toggle sound"
               onMouseEnter={() => setCursorVariant("hover")}
               onMouseLeave={() => setCursorVariant("default")}
@@ -243,6 +250,7 @@ export default function Navigation() {
             className="md:hidden relative z-[1001] w-10 h-10 flex flex-col items-center justify-center gap-[5px] rounded-full transition-all duration-300 hover:bg-white/5"
             onClick={toggleMenu}
             aria-label="Menu"
+            aria-expanded={menuOpen}
           >
             <span
               className="w-5 h-[1px] transition-all duration-500 origin-center"
@@ -276,6 +284,8 @@ export default function Navigation() {
 
       {/* Mobile menu overlay — cinematic */}
       <div
+        role="dialog"
+        aria-modal={menuOpen}
         className={`fixed inset-0 z-[999] md:hidden transition-all duration-700 ${
           menuOpen ? "opacity-100 visible" : "opacity-0 invisible pointer-events-none"
         }`}

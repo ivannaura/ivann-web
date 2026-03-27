@@ -12,7 +12,7 @@ Awwwards-quality immersive website for IVANN AURA, a Colombian pianist and live 
 - **React 19.2.4** + TypeScript
 - **Tailwind CSS v4** (with `@theme inline` custom properties)
 - **Lenis** for smooth scrolling (intercepts `window.scrollTo`)
-- **Zustand** for UI state (cursor, menu, scroll progress)
+- **Zustand** for UI state (cursor, menu)
 
 ## Architecture
 
@@ -37,18 +37,17 @@ page.tsx
 | `ScrollVideoPlayer` | `ui/ScrollVideoPlayer.tsx` | Scroll-driven video with vinyl inertia + AudioMomentum |
 | `AudioMomentum` | `lib/audio-momentum.ts` | Physics engine: energy/friction → playbackRate + volume |
 | `ScrollStoryOverlay` | `ui/ScrollStoryOverlay.tsx` | 20+ story beats with fade/slide/typewriter animations |
-| `usePianoScroll` | `hooks/usePianoScroll.ts` | Keyboard/click → smooth scroll forward |
+| `usePianoScroll` | `hooks/usePianoScroll.ts` | Letter keys (a-z) / click → smooth scroll forward |
 | `PianoIndicator` | `ui/PianoIndicator.tsx` | Energy-driven equalizer (gold when energy > 0.3) |
 | `Navigation` | `ui/Navigation.tsx` | Fixed nav, scroll progress bar, mobile hamburger |
 | `CustomCursor` | `ui/CustomCursor.tsx` | Animated dot + ring cursor (desktop only) |
 | `Preloader` | `ui/Preloader.tsx` | Branded loading screen (1.8s ease-out) |
 | `SmoothScroll` | `providers/SmoothScroll.tsx` | Lenis wrapper (lerp 0.1, duration 1.2s) |
 
-### Dead code (safe to delete)
+### Deleted (previously dead code)
 
-- `ScrollFramePlayer.tsx` — old canvas-based frame player, replaced by ScrollVideoPlayer
-- `Hero.tsx`, `Experience.tsx`, `Music.tsx`, `LiveShow.tsx` — original sections, replaced by scroll cinema
-- `frames/all/` — 49MB obsolete frame sequence
+- `ScrollFramePlayer.tsx`, `Hero.tsx`, `Experience.tsx`, `Music.tsx`, `LiveShow.tsx` — removed in audit cleanup
+- `frames/all/` — 49MB obsolete frame sequence (gitignored)
 
 ## Audio Momentum System
 
@@ -67,7 +66,7 @@ User scroll/key/click → addImpulse(0.2)
                     (pitch drops as momentum decays = vinyl slowdown)
 ```
 
-Constants: `IMPULSE=0.2`, `FRICTION=0.985`, `MIN_RATE=0.25`, `MAX_RATE=1.0`, `MAX_VOLUME=0.7`, `DRIFT_THRESHOLD=3.0s`
+Constants: `IMPULSE=0.2`, `FRICTION=0.985`, `MIN_RATE=0.25`, `MAX_RATE=1.0`, `MAX_VOLUME=0.7`, `PLAY_THRESHOLD=0.05`, `STOP_THRESHOLD=0.02`, `DRIFT_THRESHOLD=3.0s`
 
 ## Vinyl Inertia (Scroll → Video)
 
@@ -82,10 +81,11 @@ The exponential ease means the video moves fast when far from target and slows a
 ## Design Tokens (CSS Custom Properties)
 
 ```
---bg-void: #050508       --bg-surface: #0A0A10    --bg-subtle: #12121A
+--bg-void: #050508       --bg-surface: #0A0A10      --bg-subtle: #12121A
 --text-primary: #F0EDE6  --text-secondary: #8A8A99  --text-muted: #4A4A5A
---aura-gold: #C9A84C     --crimson: #6B1520
---deep-blue: #1A2D5A     --electric-blue: #2E5BFF
+--aura-gold: #C9A84C     --aura-gold-bright: #E8C85A  --aura-gold-dim: #8A7435
+--crimson: #6B1520       --deep-blue: #1A2D5A       --electric-blue: #2E5BFF
+--particle-core: #FFFDE8 --border-subtle: rgba(255,255,255,0.06)
 ```
 
 ## Video Pipeline

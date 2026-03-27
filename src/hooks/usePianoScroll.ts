@@ -21,9 +21,13 @@ export function usePianoScroll(options: UsePianoScrollOptions = {}) {
     if (!enabled) return;
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.ctrlKey || e.metaKey || e.altKey) return;
-      if (e.key.length !== 1) return;
+      // Only trigger on letter keys (a-z) to respect WCAG 2.1.4
+      // Excludes Space (native page-down), numbers, punctuation, and
+      // screen reader shortcuts that happen to be single characters
+      if (!/^[a-zA-Z]$/.test(e.key)) return;
       const tag = (e.target as HTMLElement)?.tagName;
       if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
+      e.preventDefault();
       window.scrollBy({ top: scrollThreshold, behavior: "smooth" });
     };
     window.addEventListener("keydown", onKeyDown);

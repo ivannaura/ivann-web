@@ -37,6 +37,7 @@ export class AudioMomentum {
   private rafId: number = 0;
   private running: boolean = false;
   private wasPlaying: boolean = false;
+  private playPending: boolean = false;
   private videoTimeGetter: (() => number) | null = null;
 
   // ---- Public API ---------------------------------------------------------
@@ -48,10 +49,8 @@ export class AudioMomentum {
     this.audio.loop = false;
 
     // Disable pitch correction so playbackRate changes sound natural.
-    // Vendor-prefixed properties are not in the TS typings.
+    // preservesPitch is baseline since Dec 2023 — no vendor prefixes needed.
     (this.audio as any).preservesPitch = false;
-    (this.audio as any).mozPreservesPitch = false;
-    (this.audio as any).webkitPreservesPitch = false;
 
     this.startLoop();
   }
@@ -88,6 +87,7 @@ export class AudioMomentum {
 
     this.energy = 0;
     this.wasPlaying = false;
+    this.playPending = false;
     this.videoTimeGetter = null;
   }
 
@@ -114,14 +114,16 @@ export class AudioMomentum {
 
     if (this.audio) {
       // --- start playing ---
-      if (this.energy >= PLAY_THRESHOLD && !this.wasPlaying) {
+      if (this.energy >= PLAY_THRESHOLD && !this.wasPlaying && !this.playPending) {
         this.syncToVideo();
         this.audio.playbackRate = rate;
         this.audio.volume = volume;
+        this.playPending = true;
         this.audio.play().then(() => {
           this.wasPlaying = true;
+          this.playPending = false;
         }).catch(() => {
-          // Autoplay blocked — wasPlaying stays false, will retry on next impulse
+          this.playPending = false;
         });
       }
 

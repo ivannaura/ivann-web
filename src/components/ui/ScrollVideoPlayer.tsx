@@ -163,10 +163,9 @@ export default function ScrollVideoPlayer({
         const step = Math.max(-maxStep, Math.min(maxStep, eased));
         const newTime = current + step;
 
-        currentTimeRef.current = newTime;
-
         // Clamp to buffered range and apply to video
         const safeTime = clampToBuffered(video, newTime);
+        currentTimeRef.current = safeTime;
         if (Math.abs(video.currentTime - safeTime) > 0.03) {
           video.currentTime = safeTime;
         }
@@ -222,17 +221,15 @@ export default function ScrollVideoPlayer({
       // Set target — the vinyl inertia loop will glide toward it
       scrollTargetRef.current = Math.max(
         0,
-        Math.min(targetTime, durationRef.current - 0.05)
+        Math.min(targetTime, durationRef.current)
       );
 
-      // Direction for audio impulse
+      // Audio impulse in both scroll directions
       const currentY = window.scrollY;
-      const scrollingForward = currentY > lastScrollYRef.current;
-      lastScrollYRef.current = currentY;
-
-      if (scrollingForward) {
+      if (currentY !== lastScrollYRef.current) {
         momentumRef.current?.addImpulse();
       }
+      lastScrollYRef.current = currentY;
     };
 
     window.addEventListener("scroll", onScroll, { passive: true });

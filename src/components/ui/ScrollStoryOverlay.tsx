@@ -527,11 +527,13 @@ export default function ScrollStoryOverlay({
   const visibleBeats = useMemo(() => {
     return STORY_BEATS.filter(
       (beat) => currentFrame >= beat.frameStart && currentFrame <= beat.frameEnd
-    ).map((beat) => ({
-      ...beat,
-      progress:
-        (currentFrame - beat.frameStart) / (beat.frameEnd - beat.frameStart),
-    }));
+    ).map((beat) => {
+      const range = beat.frameEnd - beat.frameStart;
+      return {
+        ...beat,
+        progress: range > 0 ? (currentFrame - beat.frameStart) / range : 1,
+      };
+    });
   }, [currentFrame]);
 
   return (

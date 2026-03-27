@@ -46,6 +46,7 @@ export default function Home() {
       <main>
         {/* Scroll-driven cinematic video experience */}
         <ScrollVideoPlayer
+          key={videoSrc}
           videoSrc={videoSrc}
           audioSrc={AUDIO_SRC}
           scrollHeight={1200}

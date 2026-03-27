@@ -78,13 +78,6 @@ body { scrollbar-width: none; }
   animation: fade-in-up 0.8s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
-/* Text split animation base */
-.char-reveal .char {
-  display: inline-block;
-  opacity: 0;
-  transform: translateY(100%);
-}
-
 /* Magnetic button hover */
 .magnetic-btn {
   position: relative;
@@ -181,54 +174,3 @@ body { scrollbar-width: none; }
   }
 }
 
-@keyframes shimmer {
-  0% { background-position: -200% center; }
-  100% { background-position: 200% center; }
-}
-
-@keyframes spin-slow {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
-}
-
-/* Preloader */
-.preloader {
-  position: fixed;
-  inset: 0;
-  z-index: 100000;
-  background: var(--bg-void);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  transition: opacity 0.6s ease-out, visibility 0.6s ease-out;
-}
-
-.preloader.loaded {
-  opacity: 0;
-  visibility: hidden;
-  pointer-events: none;
-}
-
-.preloader-bar {
-  width: 120px;
-  height: 1px;
-  background: var(--text-muted);
-  position: relative;
-  overflow: hidden;
-}
-
-.preloader-bar::after {
-  content: "";
-  position: absolute;
-  left: 0;
-  top: 0;
-  height: 100%;
-  background: var(--aura-gold);
-  animation: preloader-fill 2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-}
-
-@keyframes preloader-fill {
-  from { width: 0%; }
-  to { width: 100%; }
-}
