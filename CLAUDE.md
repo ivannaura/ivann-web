@@ -12,41 +12,77 @@ Awwwards-quality immersive website for IVANN AURA, a Colombian pianist and live 
 - **React 19.2.4** + TypeScript
 - **Tailwind CSS v4** (with `@theme inline` custom properties)
 - **Lenis** for smooth scrolling (intercepts `window.scrollTo`)
-- **Web Audio API** piano synthesizer (currently disabled — video has its own audio)
-- **Zustand** for UI/audio stores
-- **GSAP + Framer Motion** available but not yet used
+- **Zustand** for UI state (cursor, menu, scroll progress)
 
 ## Architecture
 
-The page has one main flow:
-
 ```
 page.tsx
- ├── ScrollVideoPlayer (scroll → video.currentTime, audio plays on forward scroll)
- │    └── ScrollStoryOverlay (frame-synced text/stats/CTAs over video)
- ├── Contact section
- └── Footer
+ ├── CustomCursor          (dot + ring following mouse, desktop only)
+ ├── Navigation            (fixed nav, scroll progress, mobile menu)
+ ├── PianoIndicator        (energy-driven equalizer, bottom-left)
+ │
+ ├── ScrollVideoPlayer     (scroll → vinyl inertia → video.currentTime)
+ │    ├── AudioMomentum    (physics engine: impulse → energy → playbackRate)
+ │    └── ScrollStoryOverlay (20+ frame-synced story beats over video)
+ │
+ ├── Contact               (booking form + social links)
+ └── Footer                (branding, socials, quote)
 ```
 
 ### Key Components
 
-| Component | Purpose | Status |
-|-----------|---------|--------|
-| `ScrollVideoPlayer` | Scroll-driven HTML5 video with audio | **Active** |
-| `ScrollStoryOverlay` | 20+ story beats with animations over video | **Active** |
-| `ScrollFramePlayer` | Canvas-based frame-by-frame (old approach) | **Replaced** — can be deleted |
-| `usePianoScroll` hook | Keyboard/click → scroll page forward | **Active** (notes disabled) |
-| `piano.ts` | Web Audio Für Elise synthesizer | **Inactive** — video audio used instead |
+| Component | File | Purpose |
+|-----------|------|---------|
+| `ScrollVideoPlayer` | `ui/ScrollVideoPlayer.tsx` | Scroll-driven video with vinyl inertia + AudioMomentum |
+| `AudioMomentum` | `lib/audio-momentum.ts` | Physics engine: energy/friction → playbackRate + volume |
+| `ScrollStoryOverlay` | `ui/ScrollStoryOverlay.tsx` | 20+ story beats with fade/slide/typewriter animations |
+| `usePianoScroll` | `hooks/usePianoScroll.ts` | Keyboard/click → smooth scroll forward |
+| `PianoIndicator` | `ui/PianoIndicator.tsx` | Energy-driven equalizer (gold when energy > 0.3) |
+| `Navigation` | `ui/Navigation.tsx` | Fixed nav, scroll progress bar, mobile hamburger |
+| `CustomCursor` | `ui/CustomCursor.tsx` | Animated dot + ring cursor (desktop only) |
+| `Preloader` | `ui/Preloader.tsx` | Branded loading screen (1.8s ease-out) |
+| `SmoothScroll` | `providers/SmoothScroll.tsx` | Lenis wrapper (lerp 0.1, duration 1.2s) |
 
-### Sections (unused since scroll cinema)
+### Dead code (safe to delete)
 
-`Hero.tsx`, `Experience.tsx`, `Music.tsx`, `LiveShow.tsx` — original section components, replaced by the scroll cinema approach. Can be deleted.
+- `ScrollFramePlayer.tsx` — old canvas-based frame player, replaced by ScrollVideoPlayer
+- `Hero.tsx`, `Experience.tsx`, `Music.tsx`, `LiveShow.tsx` — original sections, replaced by scroll cinema
+- `frames/all/` — 49MB obsolete frame sequence
+
+## Audio Momentum System
+
+Physics-driven audio that responds to user interaction like a vinyl record.
+
+```
+User scroll/key/click → addImpulse(0.2)
+                              ↓
+                    energy += IMPULSE
+                    energy *= FRICTION (0.985/frame)
+                              ↓
+              playbackRate = lerp(0.25, 1.0, energy)
+              volume = smoothstep(0, 0.15, energy) * 0.7
+                              ↓
+                    preservesPitch = false
+                    (pitch drops as momentum decays = vinyl slowdown)
+```
+
+Constants: `IMPULSE=0.2`, `FRICTION=0.985`, `MIN_RATE=0.25`, `MAX_RATE=1.0`, `MAX_VOLUME=0.7`, `DRIFT_THRESHOLD=3.0s`
+
+## Vinyl Inertia (Scroll → Video)
+
+Scroll does NOT directly set `video.currentTime`. Instead:
+
+1. Scroll sets `scrollTargetRef` (the desired video time)
+2. A rAF loop interpolates `currentTimeRef` toward the target at `MAX_SCRUB_SPEED = 2.0` (video-seconds per real-second)
+3. Seeks are clamped to the contiguous buffered range
+
+This caps the maximum video advance speed — even aggressive scrolling produces smooth, cinematic movement.
 
 ## Design Tokens (CSS Custom Properties)
 
 ```
---bg-void: #050508       (page background)
---bg-surface: #0A0A10    --bg-subtle: #12121A
+--bg-void: #050508       --bg-surface: #0A0A10    --bg-subtle: #12121A
 --text-primary: #F0EDE6  --text-secondary: #8A8A99  --text-muted: #4A4A5A
 --aura-gold: #C9A84C     --crimson: #6B1520
 --deep-blue: #1A2D5A     --electric-blue: #2E5BFF
@@ -54,31 +90,35 @@ page.tsx
 
 ## Video Pipeline
 
-Source: `public/videos/flamenco-de-esfera.mp4` (1280x720, 4:06, 67MB, YouTube)
+Source: `public/videos/flamenco-de-esfera.mp4` (1280x720, 4:06, 67MB)
 
-Processing (ffmpeg):
-```
-crop to 2.39:1 letterbox → color grade → scale to 960p → H.264 CRF 30 → keyframes every 0.5s → AAC 96kbps → faststart
+Optimized for scroll scrubbing:
+```bash
+ffmpeg -i source.mp4 \
+  -vf "crop=in_w:in_w/2.39,scale=960:-2" \
+  -c:v libx264 -profile:v high -level 4.2 -pix_fmt yuv420p \
+  -crf 30 -g 1 -bf 0 -an \
+  -movflags +faststart \
+  flamenco-graded.mp4
 ```
 
-Output: `public/videos/flamenco-graded.mp4` (960x402, 26MB)
+Key flags: `-g 1` (every frame is a keyframe = instant seeking), `-bf 0` (no B-frames), `-an` (audio stripped, separate file used), `+faststart` (moov atom first for CDN seeking).
+
+Output: `public/videos/flamenco-graded.mp4` (960x402, 44MB, all-intra H.264)
+Audio: `public/audio/flamenco.m4a` (AAC 128kbps, 3.9MB)
 
 ## Commands
 
 ```bash
 npm run dev          # Dev server (Turbopack)
 npm run build        # Production build
-npx next dev --turbopack -p 3333   # Dev on port 3333
 ```
 
 ## Public Assets
 
-- `videos/flamenco-graded.mp4` — **26MB, active** (scroll-driven video)
+- `videos/flamenco-graded.mp4` — **44MB, active** (all-keyframe scroll video)
 - `videos/flamenco-de-esfera.mp4` — 67MB, original source (fallback)
-- `videos/demos/` — color grade demos (reference only)
-- `videos/storyboard/` — 491 storyboard frames (reference only)
-- `videos/cuts/` — 33 scene change thumbnails (reference only)
-- `frames/all/` — **49MB, OBSOLETE** (old 3fps frame approach, safe to delete)
+- `audio/flamenco.m4a` — **3.9MB, active** (momentum-driven audio)
 
 ## Conventions
 
@@ -87,3 +127,4 @@ npx next dev --turbopack -p 3333   # Dev on port 3333
 - `object-cover` on video element for fullscreen display
 - Frame indices use 3fps equivalence: `frameIndex = Math.floor(videoTime * 3)`
 - Story beats in ScrollStoryOverlay use these frame indices for timing
+- See `docs/CONVENTIONS.md` for full technical conventions

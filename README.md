@@ -1,36 +1,48 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# IVANN AURA
 
-## Getting Started
+Immersive scroll-driven cinematic website for IVANN AURA, a Colombian pianist and live show performer.
 
-First, run the development server:
+The entire page is a single scroll experience built on top of the concert video "Flamenco de Esfera". Each scroll, keypress, or click drives the video forward and triggers momentum-based audio that decays like a vinyl record slowing down.
+
+## Stack
+
+Next.js 16 &middot; React 19 &middot; TypeScript &middot; Tailwind CSS v4 &middot; Lenis &middot; Zustand
+
+## Quick Start
 
 ```bash
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [localhost:3000](http://localhost:3000).
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## How It Works
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+**Scroll** controls the video position. A vinyl inertia system caps the maximum scrub speed so the video always moves smoothly, even during aggressive scrolling.
 
-## Learn More
+**Audio** is driven by a physics-based momentum engine. Each interaction injects energy that decays with friction. The energy drives `playbackRate` (0.25x to 1.0x) and volume through a smoothstep curve. With `preservesPitch = false`, the audio pitch drops as momentum decays — like a vinyl record slowing to a stop.
 
-To learn more about Next.js, take a look at the following resources:
+**Story beats** appear over the video at specific frame ranges, creating a narrative experience synchronized to the concert footage.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Architecture
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+```
+ScrollVideoPlayer (scroll → vinyl inertia → video.currentTime)
+├── AudioMomentum (physics: impulse → energy → playbackRate + volume)
+└── ScrollStoryOverlay (20+ frame-synced narrative beats)
+```
 
-## Deploy on Vercel
+## Documentation
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+- [`CLAUDE.md`](./CLAUDE.md) — Project overview, component map, conventions
+- [`docs/CONVENTIONS.md`](./docs/CONVENTIONS.md) — Technical conventions and best practices
+- [`docs/plans/`](./docs/plans/) — Design documents and implementation plans
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Deployment
+
+Deployed on Vercel. Pushes to `main` trigger automatic deployments.
+
+## License
+
+Private. All rights reserved.
