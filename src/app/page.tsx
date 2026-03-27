@@ -48,7 +48,7 @@ export default function Home() {
         <ScrollVideoPlayer
           videoSrc={videoSrc}
           audioSrc={AUDIO_SRC}
-          scrollHeight={800}
+          scrollHeight={1200}
           onFrameChange={handleFrameChange}
           onEnergyChange={setEnergy}
           onError={handleVideoError}

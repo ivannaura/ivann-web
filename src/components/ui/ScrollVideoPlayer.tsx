@@ -65,8 +65,9 @@ export default function ScrollVideoPlayer({
   const scrubRafRef = useRef<number>(0);
   const lastTickRef = useRef(0);
 
-  // Max video-seconds per real-second — the "vinyl speed limit"
-  const MAX_SCRUB_SPEED = 2.0;
+  // Vinyl inertia tuning
+  const MAX_SCRUB_SPEED = 3.0;   // max video-seconds per real-second (speed cap)
+  const EASE_FACTOR = 0.1;       // lerp factor per frame — 0.1 = smooth ease, 0.2 = snappy
 
   // Convert video time to 3fps frame index (overlay compatibility)
   const timeToFrame = useCallback((time: number) => Math.floor(time * 3), []);
@@ -155,9 +156,11 @@ export default function ScrollVideoPlayer({
       const delta = target - current;
 
       if (Math.abs(delta) > 0.01) {
-        // Clamp the step to MAX_SCRUB_SPEED * dt
+        // Exponential ease toward target (fast when far, slows near target)
+        // then cap at MAX_SCRUB_SPEED so it never jumps too fast
+        const eased = delta * EASE_FACTOR;
         const maxStep = MAX_SCRUB_SPEED * dt;
-        const step = Math.max(-maxStep, Math.min(maxStep, delta));
+        const step = Math.max(-maxStep, Math.min(maxStep, eased));
         const newTime = current + step;
 
         currentTimeRef.current = newTime;
