@@ -1,15 +1,17 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useRef, useLayoutEffect } from "react";
+import gsap from "gsap";
+import { SplitText } from "gsap/SplitText";
+
+if (typeof window !== "undefined") {
+  gsap.registerPlugin(SplitText);
+}
 
 interface StoryBeat {
-  /** First frame where this element is visible */
   frameStart: number;
-  /** Last frame where this element is visible */
   frameEnd: number;
-  /** Content to render */
   content: React.ReactNode;
-  /** Position on screen */
   position:
     | "center"
     | "left"
@@ -18,9 +20,7 @@ interface StoryBeat {
     | "bottom-left"
     | "bottom-right"
     | "top-left";
-  /** Entry animation */
-  animation: "fade" | "slide-left" | "slide-up" | "slide-right" | "typewriter";
-  /** CSS blend mode for text-on-video interaction */
+  animation: "fade" | "slide-left" | "slide-up" | "slide-right";
   blendMode?: string;
 }
 
@@ -36,7 +36,6 @@ interface StoryBeat {
 //
 // Gaps between acts are intentional "breathing room" — the video plays
 // without overlay text, letting the concert footage speak for itself.
-// These gaps also prevent visual clutter during scene transitions.
 
 const STORY_BEATS: StoryBeat[] = [
   // === ACT 1: EL DESPERTAR ===
@@ -46,12 +45,18 @@ const STORY_BEATS: StoryBeat[] = [
     content: (
       <div className="text-center">
         <h1
+          data-split="chars"
+          data-split-mask="words"
+          data-split-stagger="0.04"
           className="text-[clamp(3rem,8vw,8rem)] font-extralight tracking-[0.3em] leading-none"
           style={{ color: "var(--text-primary)" }}
         >
           IVANN
         </h1>
         <h1
+          data-split="chars"
+          data-split-mask="words"
+          data-split-stagger="0.04"
           className="text-[clamp(3rem,8vw,8rem)] font-extralight tracking-[0.3em] leading-none mt-2"
           style={{ color: "var(--aura-gold)" }}
         >
@@ -68,6 +73,8 @@ const STORY_BEATS: StoryBeat[] = [
     frameEnd: 70,
     content: (
       <p
+        data-split="chars"
+        data-split-stagger="0.02"
         className="text-[clamp(0.6rem,1.2vw,0.9rem)] tracking-[0.4em] uppercase"
         style={{ color: "var(--text-muted)" }}
       >
@@ -103,19 +110,25 @@ const STORY_BEATS: StoryBeat[] = [
     frameStart: 95,
     frameEnd: 130,
     content: (
-      <p
-        className="text-[clamp(1rem,2.5vw,1.8rem)] italic font-light max-w-[600px] leading-relaxed"
-        style={{ color: "var(--text-secondary)" }}
-      >
-        &ldquo;Si Beethoven estuviera vivo, usaría la tecnología
-        disponible.&rdquo;
-        <span
-          className="block text-[0.6em] mt-3 not-italic tracking-[0.2em] uppercase"
+      <div className="max-w-[600px]">
+        <p
+          data-split="words"
+          data-split-stagger="0.06"
+          className="text-[clamp(1rem,2.5vw,1.8rem)] italic font-light leading-relaxed"
+          style={{ color: "var(--text-secondary)" }}
+        >
+          &ldquo;Si Beethoven estuviera vivo, usaría la tecnología
+          disponible.&rdquo;
+        </p>
+        <p
+          data-split="chars"
+          data-split-stagger="0.02"
+          className="text-[0.6em] mt-3 tracking-[0.2em] uppercase"
           style={{ color: "var(--text-muted)" }}
         >
           — IVANN AURA
-        </span>
-      </p>
+        </p>
+      </div>
     ),
     position: "left",
     animation: "slide-left",
@@ -131,7 +144,7 @@ const STORY_BEATS: StoryBeat[] = [
           { num: "4", label: "ÁLBUMES" },
           { num: "∞", label: "EMOCIONES" },
         ].map((stat) => (
-          <div key={stat.label} className="text-center">
+          <div key={stat.label} data-stagger className="text-center">
             <span
               className="text-[clamp(1.5rem,4vw,3.5rem)] font-extralight block"
               style={{ color: "var(--text-primary)" }}
@@ -156,6 +169,8 @@ const STORY_BEATS: StoryBeat[] = [
     frameEnd: 178,
     content: (
       <p
+        data-split="chars"
+        data-split-stagger="0.02"
         className="text-[clamp(0.7rem,1.5vw,1.1rem)] tracking-[0.15em] font-light"
         style={{ color: "var(--text-secondary)" }}
       >
@@ -172,6 +187,8 @@ const STORY_BEATS: StoryBeat[] = [
     frameEnd: 200,
     content: (
       <span
+        data-split="chars"
+        data-split-stagger="0.02"
         className="text-[10px] tracking-[0.4em] uppercase font-mono"
         style={{ color: "var(--aura-gold)" }}
       >
@@ -187,12 +204,16 @@ const STORY_BEATS: StoryBeat[] = [
     content: (
       <div className="max-w-[400px] space-y-3">
         <h3
+          data-split="chars"
+          data-split-stagger="0.02"
           className="text-[clamp(1rem,2vw,1.5rem)] font-light"
           style={{ color: "var(--text-primary)" }}
         >
           Ivan Darío Arias
         </h3>
         <p
+          data-split="words"
+          data-split-stagger="0.02"
           className="text-[clamp(0.65rem,1vw,0.8rem)] leading-relaxed"
           style={{ color: "var(--text-muted)" }}
         >
@@ -210,6 +231,9 @@ const STORY_BEATS: StoryBeat[] = [
     frameEnd: 268,
     content: (
       <p
+        data-split="chars"
+        data-split-mask="words"
+        data-split-stagger="0.03"
         className="text-[clamp(1.2rem,3vw,2.5rem)] font-extralight italic"
         style={{ color: "var(--text-primary)" }}
       >
@@ -226,6 +250,8 @@ const STORY_BEATS: StoryBeat[] = [
     frameEnd: 290,
     content: (
       <span
+        data-split="chars"
+        data-split-stagger="0.02"
         className="text-[10px] tracking-[0.4em] uppercase font-mono"
         style={{ color: "var(--aura-gold)" }}
       >
@@ -248,6 +274,7 @@ const STORY_BEATS: StoryBeat[] = [
         ].map((item) => (
           <div
             key={item.title}
+            data-stagger
             className="border px-4 py-3 md:px-6 md:py-4 backdrop-blur-sm"
             style={{
               borderColor: "var(--border-subtle)",
@@ -279,6 +306,8 @@ const STORY_BEATS: StoryBeat[] = [
     frameEnd: 358,
     content: (
       <p
+        data-split="words"
+        data-split-stagger="0.04"
         className="text-[clamp(1rem,2.5vw,2rem)] font-extralight max-w-[700px] text-center leading-relaxed"
         style={{ color: "var(--text-primary)" }}
       >
@@ -295,6 +324,8 @@ const STORY_BEATS: StoryBeat[] = [
     frameEnd: 380,
     content: (
       <span
+        data-split="chars"
+        data-split-stagger="0.02"
         className="text-[10px] tracking-[0.4em] uppercase font-mono"
         style={{ color: "var(--aura-gold)" }}
       >
@@ -315,7 +346,7 @@ const STORY_BEATS: StoryBeat[] = [
           { year: "2018", title: "Piano & Fire", color: "#8B2500" },
           { year: "2015", title: "First Light", color: "#2A4A6B" },
         ].map((album) => (
-          <div key={album.title} className="text-center">
+          <div key={album.title} data-stagger className="text-center">
             <div
               className="w-20 h-20 md:w-28 md:h-28 mb-2 border"
               style={{
@@ -349,6 +380,9 @@ const STORY_BEATS: StoryBeat[] = [
     frameEnd: 490,
     content: (
       <p
+        data-split="chars"
+        data-split-mask="words"
+        data-split-stagger="0.025"
         className="text-[clamp(1.5rem,4vw,3.5rem)] font-extralight tracking-[0.15em] text-center"
         style={{ color: "var(--text-primary)" }}
       >
@@ -392,6 +426,8 @@ const STORY_BEATS: StoryBeat[] = [
     frameEnd: 560,
     content: (
       <span
+        data-split="chars"
+        data-split-stagger="0.02"
         className="text-[10px] tracking-[0.4em] uppercase font-mono"
         style={{ color: "var(--aura-gold)" }}
       >
@@ -407,6 +443,8 @@ const STORY_BEATS: StoryBeat[] = [
     content: (
       <div className="max-w-[500px]">
         <p
+          data-split="words"
+          data-split-stagger="0.04"
           className="text-[clamp(0.8rem,1.5vw,1.1rem)] font-light italic leading-relaxed"
           style={{ color: "var(--text-secondary)" }}
         >
@@ -414,6 +452,8 @@ const STORY_BEATS: StoryBeat[] = [
           encuentra con el espectáculo, sucede algo que no se puede describir.
         </p>
         <p
+          data-split="chars"
+          data-split-stagger="0.03"
           className="text-[0.65rem] mt-4 tracking-[0.15em]"
           style={{ color: "var(--text-muted)" }}
         >
@@ -432,12 +472,18 @@ const STORY_BEATS: StoryBeat[] = [
     content: (
       <div className="text-center">
         <h2
+          data-split="chars"
+          data-split-mask="words"
+          data-split-stagger="0.04"
           className="text-[clamp(2rem,6vw,5rem)] font-extralight tracking-[0.3em]"
           style={{ color: "var(--text-primary)" }}
         >
           IVANN
         </h2>
         <h2
+          data-split="chars"
+          data-split-mask="words"
+          data-split-stagger="0.04"
           className="text-[clamp(2rem,6vw,5rem)] font-extralight tracking-[0.3em]"
           style={{ color: "var(--aura-gold)" }}
         >
@@ -447,6 +493,7 @@ const STORY_BEATS: StoryBeat[] = [
           {["YouTube", "Instagram", "Spotify"].map((platform) => (
             <span
               key={platform}
+              data-stagger
               className="text-[0.6rem] tracking-[0.2em] uppercase"
               style={{ color: "var(--text-muted)" }}
             >
@@ -455,6 +502,8 @@ const STORY_BEATS: StoryBeat[] = [
           ))}
         </div>
         <p
+          data-split="chars"
+          data-split-stagger="0.02"
           className="text-[0.55rem] tracking-[0.3em] uppercase mt-6"
           style={{ color: "var(--text-muted)" }}
         >
@@ -478,48 +527,154 @@ const POSITION_CLASSES: Record<string, string> = {
   "top-left": "flex items-start justify-start pl-8 md:pl-16 pt-20 md:pt-24",
 };
 
-// Animation classes
-function getAnimationStyle(
-  animation: string,
-  progress: number
-): React.CSSProperties {
-  const opacity = progress < 0.15 ? progress / 0.15 : progress > 0.85 ? (1 - progress) / 0.15 : 1;
+// ---------------------------------------------------------------------------
+// AnimatedBeat — GSAP SplitText entrance + CSS exit
+// ---------------------------------------------------------------------------
 
-  const base: React.CSSProperties = {
-    opacity: Math.max(0, Math.min(1, opacity)),
-    transition: "opacity 0.3s ease",
-  };
-
-  if (progress < 0.15) {
-    const entry = progress / 0.15;
-    switch (animation) {
-      case "slide-left":
-        return { ...base, transform: `translateX(${(1 - entry) * -40}px)` };
-      case "slide-right":
-        return { ...base, transform: `translateX(${(1 - entry) * 40}px)` };
-      case "slide-up":
-        return { ...base, transform: `translateY(${(1 - entry) * 30}px)` };
-      default:
-        return base;
-    }
-  }
-
-  if (progress > 0.85) {
-    const exit = (1 - progress) / 0.15;
-    switch (animation) {
-      case "slide-left":
-        return { ...base, transform: `translateX(${(1 - exit) * 40}px)` };
-      case "slide-right":
-        return { ...base, transform: `translateX(${(1 - exit) * -40}px)` };
-      case "slide-up":
-        return { ...base, transform: `translateY(${(1 - exit) * -20}px)` };
-      default:
-        return base;
-    }
-  }
-
-  return base;
+interface AnimatedBeatProps {
+  beat: StoryBeat;
+  progress: number;
 }
+
+function AnimatedBeat({ beat, progress }: AnimatedBeatProps) {
+  const ref = useRef<HTMLDivElement>(null);
+
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+
+    const mm = gsap.matchMedia();
+
+    mm.add("(prefers-reduced-motion: no-preference)", () => {
+      const splitTargets = el.querySelectorAll<HTMLElement>("[data-split]");
+      const staggerTargets = el.querySelectorAll<HTMLElement>("[data-stagger]");
+      const isDesktop = window.innerWidth >= 768;
+
+      if (splitTargets.length > 0) {
+        // SplitText per-char/word reveals with timeline for sequential targets
+        const tl = gsap.timeline();
+
+        splitTargets.forEach((target, i) => {
+          const splitType = target.dataset.split || "chars";
+          const mask = target.dataset.splitMask as
+            | "words"
+            | "lines"
+            | "chars"
+            | undefined;
+          const stagger = parseFloat(
+            target.dataset.splitStagger || "0.03"
+          );
+
+          // Build SplitText config
+          const type = mask ? `${mask},${splitType}` : splitType;
+          const split = SplitText.create(target, {
+            type,
+            ...(mask ? { mask } : {}),
+          });
+
+          const elements = split.chars.length
+            ? split.chars
+            : split.words.length
+              ? split.words
+              : split.lines;
+
+          if (mask) {
+            // Masked reveal — chars slide up from behind word overflow
+            tl.from(
+              elements,
+              {
+                yPercent: 100,
+                stagger,
+                duration: isDesktop ? 0.8 : 0.5,
+                ease: "power3.out",
+              },
+              i === 0 ? 0 : ">-0.3"
+            );
+          } else {
+            // Fade + blur reveal
+            tl.from(
+              elements,
+              {
+                opacity: 0,
+                y: isDesktop ? 12 : 8,
+                ...(isDesktop ? { filter: "blur(4px)" } : {}),
+                stagger,
+                duration: isDesktop ? 0.6 : 0.4,
+                ease: "power2.out",
+              },
+              i === 0 ? 0 : ">-0.3"
+            );
+          }
+        });
+      } else if (staggerTargets.length > 0) {
+        // Compound elements — stagger children
+        const fromVars: gsap.TweenVars = { opacity: 0 };
+        switch (beat.animation) {
+          case "slide-left":
+            fromVars.x = -30;
+            break;
+          case "slide-right":
+            fromVars.x = 30;
+            break;
+          case "slide-up":
+            fromVars.y = 25;
+            break;
+        }
+
+        gsap.from(staggerTargets, {
+          ...fromVars,
+          stagger: 0.08,
+          duration: 0.5,
+          ease: "power2.out",
+        });
+      } else {
+        // Fallback — animate content container
+        const fromVars: gsap.TweenVars = { opacity: 0 };
+        switch (beat.animation) {
+          case "slide-left":
+            fromVars.x = -30;
+            break;
+          case "slide-right":
+            fromVars.x = 30;
+            break;
+          case "slide-up":
+            fromVars.y = 25;
+            break;
+        }
+
+        gsap.from(el.children[0] || el, {
+          ...fromVars,
+          duration: 0.6,
+          ease: "power2.out",
+        });
+      }
+    });
+
+    return () => mm.revert();
+  }, [beat.animation]);
+
+  // Exit: CSS opacity fade (works with and without reduced motion)
+  const exitOpacity =
+    progress > 0.85 ? (1 - progress) / 0.15 : 1;
+
+  return (
+    <div
+      ref={ref}
+      className={`absolute inset-0 ${POSITION_CLASSES[beat.position] || POSITION_CLASSES.center}`}
+      style={{
+        opacity: Math.max(0, Math.min(1, exitOpacity)),
+        mixBlendMode:
+          (beat.blendMode as React.CSSProperties["mixBlendMode"]) || "normal",
+      }}
+    >
+      {beat.content}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// ScrollStoryOverlay
+// ---------------------------------------------------------------------------
 
 interface ScrollStoryOverlayProps {
   currentFrame: number;
@@ -530,7 +685,8 @@ export default function ScrollStoryOverlay({
 }: ScrollStoryOverlayProps) {
   const visibleBeats = useMemo(() => {
     return STORY_BEATS.filter(
-      (beat) => currentFrame >= beat.frameStart && currentFrame <= beat.frameEnd
+      (beat) =>
+        currentFrame >= beat.frameStart && currentFrame <= beat.frameEnd
     ).map((beat) => {
       const range = beat.frameEnd - beat.frameStart;
       return {
@@ -543,16 +699,11 @@ export default function ScrollStoryOverlay({
   return (
     <div className="absolute inset-0 z-20 pointer-events-none">
       {visibleBeats.map((beat, i) => (
-        <div
+        <AnimatedBeat
           key={`${beat.frameStart}-${i}`}
-          className={`absolute inset-0 ${POSITION_CLASSES[beat.position] || POSITION_CLASSES.center}`}
-          style={{
-            ...getAnimationStyle(beat.animation, beat.progress),
-            mixBlendMode: (beat.blendMode as React.CSSProperties["mixBlendMode"]) || "normal",
-          }}
-        >
-          {beat.content}
-        </div>
+          beat={beat}
+          progress={beat.progress}
+        />
       ))}
     </div>
   );

@@ -228,7 +228,7 @@ export default function ScrollVideoPlayer({
   }, [ready]);
 
   // ---------------------------------------------------------------------------
-  // GSAP ScrollTrigger — scrub:1.5 = 1.5s smooth catch-up = vinyl feel
+  // GSAP ScrollTrigger via matchMedia — responsive scrub + reduced-motion
   // ---------------------------------------------------------------------------
   useEffect(() => {
     if (!ready) return;
@@ -236,41 +236,57 @@ export default function ScrollVideoPlayer({
     const container = containerRef.current;
     if (!video || !container) return;
 
-    const ctx = gsap.context(() => {
-      ScrollTrigger.create({
-        trigger: container,
-        start: "top top",
-        end: "bottom bottom",
-        scrub: 1.5,
-        onUpdate: (self) => {
-          progressRef.current = self.progress;
-          const targetTime = self.progress * durationRef.current;
-          const safeTime = clampToBuffered(video, targetTime);
-          currentTimeRef.current = safeTime;
+    const mm = gsap.matchMedia();
 
-          // Throttle seeks — browser can't decode faster than ~30ms
-          if (Math.abs(video.currentTime - safeTime) > 0.03) {
-            video.currentTime = safeTime;
-          }
+    mm.add(
+      {
+        standard: "(prefers-reduced-motion: no-preference)",
+        reduced: "(prefers-reduced-motion: reduce)",
+      },
+      (context) => {
+        const { reduced } = context.conditions!;
+        const isDesktop = window.innerWidth >= 768;
 
-          // Frame change reporting (3fps overlay system)
-          const frameIndex = Math.floor(safeTime * 3);
-          if (frameIndex !== lastFrameIndexRef.current) {
-            const dir =
-              frameIndex > lastFrameIndexRef.current ? "forward" : "backward";
-            lastFrameIndexRef.current = frameIndex;
-            onFrameChangeRef.current?.(frameIndex, dir);
-          }
+        ScrollTrigger.create({
+          trigger: container,
+          start: "top top",
+          end: "bottom bottom",
+          // reduced-motion: instant sync (no smooth interpolation)
+          // mobile: 2s catch-up (gentler for touch)
+          // desktop: 1.5s catch-up (vinyl feel)
+          scrub: reduced ? true : isDesktop ? 1.5 : 2,
+          onUpdate: (self) => {
+            progressRef.current = self.progress;
+            const targetTime = self.progress * durationRef.current;
+            const safeTime = clampToBuffered(video, targetTime);
+            currentTimeRef.current = safeTime;
 
-          // Audio impulse from scroll velocity
-          if (Math.abs(self.getVelocity()) > 50) {
-            momentumRef.current?.addImpulse();
-          }
-        },
-      });
-    }, container);
+            // Throttle seeks — browser can't decode faster than ~30ms
+            if (Math.abs(video.currentTime - safeTime) > 0.03) {
+              video.currentTime = safeTime;
+            }
 
-    return () => ctx.revert();
+            // Frame change reporting (3fps overlay system)
+            const frameIndex = Math.floor(safeTime * 3);
+            if (frameIndex !== lastFrameIndexRef.current) {
+              const dir =
+                frameIndex > lastFrameIndexRef.current
+                  ? "forward"
+                  : "backward";
+              lastFrameIndexRef.current = frameIndex;
+              onFrameChangeRef.current?.(frameIndex, dir);
+            }
+
+            // Audio impulse from scroll velocity (skip for reduced-motion)
+            if (!reduced && Math.abs(self.getVelocity()) > 50) {
+              momentumRef.current?.addImpulse();
+            }
+          },
+        });
+      }
+    );
+
+    return () => mm.revert();
   }, [ready, clampToBuffered]);
 
   // ---------------------------------------------------------------------------
