@@ -74,6 +74,13 @@ export class AudioMomentum {
     return this.energy;
   }
 
+  /** Mute or unmute the audio element without stopping physics. */
+  setMuted(muted: boolean): void {
+    if (this.audio) {
+      this.audio.muted = muted;
+    }
+  }
+
   /** Tear everything down: stop loop, release audio resources. */
   destroy(): void {
     this.running = false;

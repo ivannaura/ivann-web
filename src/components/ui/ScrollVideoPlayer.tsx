@@ -5,7 +5,6 @@ import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 import { AudioMomentum } from "@/lib/audio-momentum";
 import { initCinemaGL, type CinemaGL } from "@/lib/cinema-gl";
-import { initParticlesGL, type ParticlesGL } from "@/lib/particles-gl";
 
 if (typeof window !== "undefined") {
   gsap.registerPlugin(ScrollTrigger);
@@ -27,6 +26,8 @@ interface ScrollVideoPlayerProps {
   onEnergyChange?: (energy: number) => void;
   /** Called if video fails to load */
   onError?: () => void;
+  /** Whether audio should be muted (user toggle) */
+  audioMuted?: boolean;
   /** Overlay content to render on top of video */
   children?: React.ReactNode;
 }
@@ -52,14 +53,13 @@ export default function ScrollVideoPlayer({
   onFrameChange,
   onEnergyChange,
   onError,
+  audioMuted = false,
   children,
 }: ScrollVideoPlayerProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const particleCanvasRef = useRef<HTMLCanvasElement>(null);
   const cinemaRef = useRef<CinemaGL | null>(null);
-  const particlesRef = useRef<ParticlesGL | null>(null);
   const [ready, setReady] = useState(false);
   const [bufferProgress, setBufferProgress] = useState(0);
   const [hasGL, setHasGL] = useState(true);
@@ -160,7 +160,8 @@ export default function ScrollVideoPlayer({
   }, []);
 
   // ---------------------------------------------------------------------------
-  // WebGL cinema canvas — post-processing shaders
+  // Unified WebGL2 cinema canvas — video post-processing + particles
+  // Single context, shared video texture, luminance-reactive particles
   // ---------------------------------------------------------------------------
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -174,39 +175,12 @@ export default function ScrollVideoPlayer({
     }
     cinemaRef.current = cinema;
 
-    // Size canvas to video dimensions — CSS object-fit:cover handles the rest
-    const setCanvasSize = () => {
-      if (video.videoWidth && video.videoHeight) {
-        cinema.resize(video.videoWidth, video.videoHeight);
-      }
-    };
-    setCanvasSize();
-    video.addEventListener("loadedmetadata", setCanvasSize);
-
-    return () => {
-      video.removeEventListener("loadedmetadata", setCanvasSize);
-      cinema.destroy();
-      cinemaRef.current = null;
-    };
-  }, []);
-
-  // ---------------------------------------------------------------------------
-  // Particle system — floating light motes that respond to energy
-  // ---------------------------------------------------------------------------
-  useEffect(() => {
-    const canvas = particleCanvasRef.current;
-    if (!canvas || !hasGL) return;
-
-    const particles = initParticlesGL(canvas);
-    if (!particles) return;
-    particlesRef.current = particles;
-
-    // Size to viewport
+    // Size canvas to viewport with DPR capping
     const resize = () => {
       const dpr = Math.min(window.devicePixelRatio, 2);
-      particles.resize(
-        canvas.clientWidth * dpr,
-        canvas.clientHeight * dpr
+      cinema.resize(
+        Math.round(canvas.clientWidth * dpr),
+        Math.round(canvas.clientHeight * dpr)
       );
     };
     resize();
@@ -216,13 +190,13 @@ export default function ScrollVideoPlayer({
 
     return () => {
       ro.disconnect();
-      particles.destroy();
-      particlesRef.current = null;
+      cinema.destroy();
+      cinemaRef.current = null;
     };
-  }, [hasGL]);
+  }, []);
 
   // ---------------------------------------------------------------------------
-  // Render loop — cinema canvas + particles + energy tracking
+  // Render loop — cinema + particles + energy tracking
   // ---------------------------------------------------------------------------
   useEffect(() => {
     if (!ready) return;
@@ -239,17 +213,11 @@ export default function ScrollVideoPlayer({
         onEnergyChangeRef.current?.(e);
       }
 
-      // Cinema canvas — video + post-processing with narrative mood
+      // Unified cinema render — video post-processing + particles
       const video = videoRef.current;
       const cinema = cinemaRef.current;
       if (video && cinema) {
         cinema.render(video, now, e, progressRef.current);
-      }
-
-      // Particle system — floating motes
-      const particles = particlesRef.current;
-      if (particles) {
-        particles.render(now, e);
       }
 
       renderRafRef.current = requestAnimationFrame(tick);
@@ -260,8 +228,7 @@ export default function ScrollVideoPlayer({
   }, [ready]);
 
   // ---------------------------------------------------------------------------
-  // GSAP ScrollTrigger — replaces manual vinyl inertia
-  // scrub:1.5 = 1.5s smooth catch-up = vinyl feel, battle-tested
+  // GSAP ScrollTrigger — scrub:1.5 = 1.5s smooth catch-up = vinyl feel
   // ---------------------------------------------------------------------------
   useEffect(() => {
     if (!ready) return;
@@ -317,11 +284,19 @@ export default function ScrollVideoPlayer({
     momentum.setVideoTimeGetter(() => currentTimeRef.current);
     momentumRef.current = momentum;
 
+    // Apply initial mute state
+    momentum.setMuted(audioMuted);
+
     return () => {
       momentum.destroy();
       momentumRef.current = null;
     };
   }, [ready, audioSrc]);
+
+  // Sync mute state to AudioMomentum when user toggles
+  useEffect(() => {
+    momentumRef.current?.setMuted(audioMuted);
+  }, [audioMuted]);
 
   // ---------------------------------------------------------------------------
   // Render
@@ -349,20 +324,11 @@ export default function ScrollVideoPlayer({
           }}
         />
 
-        {/* WebGL cinema canvas — post-processed video output */}
+        {/* Unified WebGL2 canvas — post-processed video + luminance-reactive particles */}
         {hasGL && (
           <canvas
             ref={canvasRef}
             className="absolute inset-0 w-full h-full object-cover"
-            style={{ opacity: ready ? 1 : 0 }}
-          />
-        )}
-
-        {/* Particle canvas — floating light motes, transparent overlay */}
-        {hasGL && (
-          <canvas
-            ref={particleCanvasRef}
-            className="absolute inset-0 w-full h-full pointer-events-none z-10"
             style={{ opacity: ready ? 1 : 0 }}
           />
         )}

@@ -78,22 +78,6 @@ body { scrollbar-width: none; }
   animation: fade-in-up 0.8s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
-/* Magnetic button hover */
-.magnetic-btn {
-  position: relative;
-  transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
-}
-
-/* Image reveal */
-.img-reveal {
-  animation: img-clip-reveal 1.2s cubic-bezier(0.16, 1, 0.3, 1) 0.3s both;
-}
-
-@keyframes img-clip-reveal {
-  from { clip-path: inset(100% 0 0 0); }
-  to { clip-path: inset(0 0 0 0); }
-}
-
 /* Horizontal line animation */
 .line-grow {
   transform-origin: left;
@@ -103,26 +87,6 @@ body { scrollbar-width: none; }
 @keyframes line-scale {
   from { transform: scaleX(0); }
   to { transform: scaleX(1); }
-}
-
-/* Smooth gradient overlays */
-.gradient-fade-b {
-  background: linear-gradient(to bottom, transparent 0%, var(--bg-void) 100%);
-}
-
-.gradient-fade-t {
-  background: linear-gradient(to top, transparent 0%, var(--bg-void) 100%);
-}
-
-/* Glow effects */
-.glow-gold {
-  box-shadow: 0 0 40px rgba(201, 168, 76, 0.15),
-              0 0 80px rgba(201, 168, 76, 0.05);
-}
-
-.glow-blue {
-  box-shadow: 0 0 40px rgba(26, 45, 90, 0.3),
-              0 0 80px rgba(46, 91, 255, 0.1);
 }
 
 /* Custom cursor styles */
@@ -152,17 +116,6 @@ body { scrollbar-width: none; }
               opacity 0.3s ease-out;
 }
 
-/* Keyframes */
-@keyframes float {
-  0%, 100% { transform: translateY(0px); }
-  50% { transform: translateY(-10px); }
-}
-
-@keyframes pulse-glow {
-  0%, 100% { opacity: 0.4; }
-  50% { opacity: 0.8; }
-}
-
 @keyframes fade-in-up {
   from {
     opacity: 0;
@@ -171,6 +124,26 @@ body { scrollbar-width: none; }
   to {
     opacity: 1;
     transform: translateY(0);
+  }
+}
+
+/* Native <dialog> reset for mobile menu */
+dialog::backdrop {
+  background: transparent;
+}
+dialog[open] {
+  display: flex;
+}
+
+/* Reduced motion — disable all decorative animations for a11y (WCAG 2.3.3) */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+  .cursor-dot, .cursor-ring {
+    display: none;
   }
 }
 

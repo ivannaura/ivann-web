@@ -21,8 +21,8 @@ export default function Home() {
   const [currentFrame, setCurrentFrame] = useState(0);
   const [energy, setEnergy] = useState(0);
   const [videoSrc, setVideoSrc] = useState(VIDEO_SRC);
+  const [soundMuted, setSoundMuted] = useState(false);
 
-  // Frame changes drive the overlay system
   const handleFrameChange = useCallback(
     (frameIndex: number, _direction: "forward" | "backward") => {
       setCurrentFrame(frameIndex);
@@ -30,26 +30,33 @@ export default function Home() {
     []
   );
 
-  // Fallback if graded video doesn't exist yet
   const handleVideoError = useCallback(() => {
     if (videoSrc === VIDEO_SRC) {
       setVideoSrc(VIDEO_FALLBACK);
     }
   }, [videoSrc]);
 
+  const handleSoundToggle = useCallback(() => {
+    setSoundMuted((prev) => !prev);
+  }, []);
+
   return (
     <>
       <CustomCursor />
-      <Navigation />
+      <Navigation
+        audioActive={energy > 0.05}
+        soundMuted={soundMuted}
+        onSoundToggle={handleSoundToggle}
+      />
       <PianoIndicator energy={energy} />
 
       <main>
-        {/* Scroll-driven cinematic video experience */}
         <ScrollVideoPlayer
           key={videoSrc}
           videoSrc={videoSrc}
           audioSrc={AUDIO_SRC}
           scrollHeight={1200}
+          audioMuted={soundMuted}
           onFrameChange={handleFrameChange}
           onEnergyChange={setEnergy}
           onError={handleVideoError}
@@ -57,7 +64,6 @@ export default function Home() {
           <ScrollStoryOverlay currentFrame={currentFrame} />
         </ScrollVideoPlayer>
 
-        {/* Contact form after the cinematic experience */}
         <Contact />
       </main>
 

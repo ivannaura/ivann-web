@@ -1,12 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useUIStore } from "@/stores/useUIStore";
 
 export default function Preloader() {
   const [progress, setProgress] = useState(0);
   const [hidden, setHidden] = useState(false);
-  const setLoaded = useUIStore((s) => s.setLoaded);
 
   useEffect(() => {
     let frame: number;
@@ -24,20 +22,16 @@ export default function Preloader() {
       if (p < 1) {
         frame = requestAnimationFrame(animate);
       } else {
-        // Fade out then hide
         dismissTimer = setTimeout(() => {
           setHidden(true);
-          setLoaded(true);
         }, 500);
       }
     };
 
     frame = requestAnimationFrame(animate);
 
-    // Safety fallback — always dismiss after 4s
     const fallback = setTimeout(() => {
       setHidden(true);
-      setLoaded(true);
     }, 4000);
 
     return () => {
@@ -45,7 +39,7 @@ export default function Preloader() {
       clearTimeout(dismissTimer);
       clearTimeout(fallback);
     };
-  }, [setLoaded]);
+  }, []);
 
   if (hidden) return null;
 

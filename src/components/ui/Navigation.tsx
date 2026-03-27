@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { useUIStore } from "@/stores/useUIStore";
 
 const NAV_ITEMS = [
@@ -8,12 +8,26 @@ const NAV_ITEMS = [
   { label: "Contacto", href: "#contacto", num: "02" },
 ];
 
-export default function Navigation() {
+interface NavigationProps {
+  /** Whether audio is currently active (energy > threshold) */
+  audioActive?: boolean;
+  /** Called when user toggles sound on/off */
+  onSoundToggle?: () => void;
+  /** Whether sound is muted */
+  soundMuted?: boolean;
+}
+
+export default function Navigation({
+  audioActive = false,
+  onSoundToggle,
+  soundMuted = true,
+}: NavigationProps) {
   const [scrolled, setScrolled] = useState(false);
   const [scrollProgress, setScrollProgress] = useState(0);
   const [activeSection, setActiveSection] = useState(0);
   const [logoHovered, setLogoHovered] = useState(false);
-  // Pre-compute random offsets for logo bars to avoid Math.random() in render
+  const dialogRef = useRef<HTMLDialogElement>(null);
+  const hamburgerRef = useRef<HTMLButtonElement>(null);
   const logoBarOffsets = useMemo(() => [0.4, 0.7, 1, 0.7, 0.4].map(() => 1 + Math.random() * 0.3), []);
   const menuOpen = useUIStore((s) => s.menuOpen);
   const toggleMenu = useUIStore((s) => s.toggleMenu);
@@ -25,11 +39,9 @@ export default function Navigation() {
       const y = window.scrollY;
       setScrolled(y > 80);
 
-      // Progress bar
       const docHeight = document.documentElement.scrollHeight - window.innerHeight;
       setScrollProgress(docHeight > 0 ? y / docHeight : 0);
 
-      // Active section detection
       const sections = NAV_ITEMS.map((item) =>
         document.querySelector(item.href)
       );
@@ -45,7 +57,6 @@ export default function Navigation() {
           }
         }
       }
-      // #top has no DOM element — treat scroll near top as section 0
       if (!found && y < window.innerHeight * 0.3) {
         setActiveSection(0);
       }
@@ -54,7 +65,34 @@ export default function Navigation() {
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
 
-  const handleClick = (href: string) => {
+  // Native <dialog> management — showModal/close with focus return
+  useEffect(() => {
+    const dialog = dialogRef.current;
+    if (!dialog) return;
+
+    if (menuOpen) {
+      if (!dialog.open) dialog.showModal();
+    } else {
+      if (dialog.open) dialog.close();
+    }
+  }, [menuOpen]);
+
+  // Close on Escape (native dialog handles this, but sync store)
+  useEffect(() => {
+    const dialog = dialogRef.current;
+    if (!dialog) return;
+
+    const onClose = () => {
+      setMenuOpen(false);
+      // Return focus to hamburger button
+      hamburgerRef.current?.focus();
+    };
+
+    dialog.addEventListener("close", onClose);
+    return () => dialog.removeEventListener("close", onClose);
+  }, [setMenuOpen]);
+
+  const handleClick = useCallback((href: string) => {
     setMenuOpen(false);
     if (href === "#top") {
       window.scrollTo({ top: 0, behavior: "smooth" });
@@ -62,7 +100,7 @@ export default function Navigation() {
       const el = document.querySelector(href);
       if (el) el.scrollIntoView({ behavior: "smooth" });
     }
-  };
+  }, [setMenuOpen]);
 
   return (
     <>
@@ -110,7 +148,6 @@ export default function Navigation() {
               setLogoHovered(false);
             }}
           >
-            {/* Logo mark — abstract piano key */}
             <div
               className="w-5 h-5 mr-2 relative overflow-hidden transition-all duration-500"
               style={{
@@ -176,7 +213,6 @@ export default function Navigation() {
                 onMouseEnter={() => setCursorVariant("hover")}
                 onMouseLeave={() => setCursorVariant("default")}
               >
-                {/* Number */}
                 <span
                   className="absolute -top-1 left-3 text-[8px] font-mono transition-all duration-300"
                   style={{
@@ -189,7 +225,6 @@ export default function Navigation() {
                 >
                   {item.num}
                 </span>
-                {/* Label */}
                 <span
                   className="text-[11px] tracking-[0.18em] uppercase transition-all duration-300"
                   style={{
@@ -201,7 +236,6 @@ export default function Navigation() {
                 >
                   {item.label}
                 </span>
-                {/* Active indicator dot */}
                 <span
                   className="absolute -bottom-0.5 left-1/2 -translate-x-1/2 w-1 h-1 rounded-full transition-all duration-500"
                   style={{
@@ -216,37 +250,55 @@ export default function Navigation() {
               </a>
             ))}
 
-            {/* Divider */}
             <div
               className="w-px h-4 mx-3"
               style={{ background: "var(--bg-subtle)" }}
             />
 
-            {/* Sound toggle placeholder — disabled until wired */}
+            {/* Sound toggle — wired to AudioMomentum */}
             <button
-              disabled
-              className="w-8 h-8 flex items-center justify-center rounded-full transition-all duration-300 hover:bg-white/5 disabled:opacity-30 disabled:cursor-not-allowed"
-              aria-label="Toggle sound"
+              onClick={onSoundToggle}
+              className="w-8 h-8 flex items-center justify-center rounded-full transition-all duration-300 hover:bg-white/5"
+              aria-label={soundMuted ? "Activar sonido" : "Silenciar sonido"}
               onMouseEnter={() => setCursorVariant("hover")}
               onMouseLeave={() => setCursorVariant("default")}
             >
-              <svg
-                width="14"
-                height="14"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="var(--text-muted)"
-                strokeWidth="1.5"
-              >
-                <path d="M11 5L6 9H2v6h4l5 4V5z" />
-                <path d="M15.54 8.46a5 5 0 010 7.07" />
-                <path d="M19.07 4.93a10 10 0 010 14.14" />
-              </svg>
+              {soundMuted ? (
+                // Muted icon
+                <svg
+                  width="14"
+                  height="14"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="var(--text-muted)"
+                  strokeWidth="1.5"
+                >
+                  <path d="M11 5L6 9H2v6h4l5 4V5z" />
+                  <line x1="23" y1="9" x2="17" y2="15" />
+                  <line x1="17" y1="9" x2="23" y2="15" />
+                </svg>
+              ) : (
+                // Active icon — gold when audio is playing
+                <svg
+                  width="14"
+                  height="14"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke={audioActive ? "var(--aura-gold)" : "var(--text-muted)"}
+                  strokeWidth="1.5"
+                  className="transition-colors duration-300"
+                >
+                  <path d="M11 5L6 9H2v6h4l5 4V5z" />
+                  <path d="M15.54 8.46a5 5 0 010 7.07" />
+                  <path d="M19.07 4.93a10 10 0 010 14.14" />
+                </svg>
+              )}
             </button>
           </div>
 
-          {/* Mobile hamburger — refined */}
+          {/* Mobile hamburger */}
           <button
+            ref={hamburgerRef}
             className="md:hidden relative z-[1001] w-10 h-10 flex flex-col items-center justify-center gap-[5px] rounded-full transition-all duration-300 hover:bg-white/5"
             onClick={toggleMenu}
             aria-label="Menu"
@@ -282,13 +334,10 @@ export default function Navigation() {
         </div>
       </nav>
 
-      {/* Mobile menu overlay — cinematic */}
-      <div
-        role="dialog"
-        aria-modal={menuOpen}
-        className={`fixed inset-0 z-[999] md:hidden transition-all duration-700 ${
-          menuOpen ? "opacity-100 visible" : "opacity-0 invisible pointer-events-none"
-        }`}
+      {/* Mobile menu — native <dialog> for automatic focus trap + Escape + inert background */}
+      <dialog
+        ref={dialogRef}
+        className="fixed inset-0 z-[999] md:hidden w-full h-full max-w-full max-h-full m-0 p-0 border-none"
         style={{ background: "var(--bg-void)" }}
       >
         <div className="flex flex-col items-start justify-center h-full px-12 gap-2">
@@ -300,12 +349,7 @@ export default function Navigation() {
                 e.preventDefault();
                 handleClick(item.href);
               }}
-              className="group flex items-baseline gap-4 py-3 transition-all duration-500"
-              style={{
-                transitionDelay: menuOpen ? `${i * 60 + 200}ms` : "0ms",
-                opacity: menuOpen ? 1 : 0,
-                transform: menuOpen ? "translateX(0)" : "translateX(-30px)",
-              }}
+              className="group flex items-baseline gap-4 py-3"
             >
               <span
                 className="text-xs font-mono"
@@ -322,14 +366,7 @@ export default function Navigation() {
             </a>
           ))}
 
-          {/* Social links in mobile menu */}
-          <div
-            className="mt-12 flex gap-6 transition-all duration-500"
-            style={{
-              transitionDelay: menuOpen ? "600ms" : "0ms",
-              opacity: menuOpen ? 1 : 0,
-            }}
-          >
+          <div className="mt-12 flex gap-6">
             {["IG", "SP", "YT", "TK"].map((s) => (
               <a
                 key={s}
@@ -342,7 +379,7 @@ export default function Navigation() {
             ))}
           </div>
         </div>
-      </div>
+      </dialog>
 
       {/* Side section indicators — desktop only */}
       <div
@@ -356,14 +393,12 @@ export default function Navigation() {
             className="group flex items-center gap-3"
             aria-label={item.label}
           >
-            {/* Label on hover */}
             <span
               className="text-[9px] tracking-[0.2em] uppercase opacity-0 group-hover:opacity-100 transition-all duration-300 translate-x-2 group-hover:translate-x-0"
               style={{ color: "var(--text-muted)" }}
             >
               {item.label}
             </span>
-            {/* Dot */}
             <div
               className="w-[6px] h-[6px] rounded-full transition-all duration-500"
               style={{

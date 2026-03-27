@@ -14,7 +14,10 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
+const SITE_URL = "https://ivannaura.com";
+
 export const metadata: Metadata = {
+  metadataBase: new URL(SITE_URL),
   title: "IVANN AURA — Live Experience",
   description:
     "No es un concierto. Es un viaje. IVANN AURA fusiona piano, tecnología y espectáculo en una experiencia inmersiva.",
@@ -25,14 +28,72 @@ export const metadata: Metadata = {
     "show inmersivo",
     "música",
     "espectáculo",
+    "Medellín",
+    "Colombia",
+    "concierto",
+    "flamenco",
   ],
+  authors: [{ name: "IVANN AURA" }],
+  creator: "IVANN AURA",
   openGraph: {
     title: "IVANN AURA — Live Experience",
     description:
       "No es un concierto. Es un viaje. Piano, tecnología y espectáculo fusionados.",
     type: "website",
     locale: "es_CO",
+    url: SITE_URL,
+    siteName: "IVANN AURA",
+    images: [
+      {
+        url: "/og-image.jpg",
+        width: 1200,
+        height: 630,
+        alt: "IVANN AURA — Live Experience",
+      },
+    ],
   },
+  twitter: {
+    card: "summary_large_image",
+    title: "IVANN AURA — Live Experience",
+    description:
+      "No es un concierto. Es un viaje. Piano, tecnología y espectáculo fusionados.",
+    images: ["/og-image.jpg"],
+  },
+  robots: {
+    index: true,
+    follow: true,
+  },
+  alternates: {
+    canonical: SITE_URL,
+  },
+};
+
+// JSON-LD structured data for SEO
+const jsonLd = {
+  "@context": "https://schema.org",
+  "@type": "MusicEvent",
+  name: "IVANN AURA — Live Experience",
+  description:
+    "Show inmersivo que fusiona piano clásico con tecnología, espectáculo visual, danza y arte aéreo.",
+  performer: {
+    "@type": "Person",
+    name: "IVANN AURA",
+    alternateName: "Ivan Darío Arias",
+    jobTitle: "Pianista y Compositor",
+    birthPlace: {
+      "@type": "Place",
+      name: "Medellín, Colombia",
+    },
+    url: SITE_URL,
+  },
+  organizer: {
+    "@type": "Person",
+    name: "IVANN AURA",
+    url: SITE_URL,
+  },
+  url: SITE_URL,
+  image: `${SITE_URL}/og-image.jpg`,
+  eventAttendanceMode: "https://schema.org/OfflineEventAttendanceMode",
 };
 
 export default function RootLayout({
@@ -42,6 +103,20 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="es" className={`${geist.variable} ${geistMono.variable} antialiased`}>
+      <head>
+        {/* Video preload — start downloading before React hydrates */}
+        <link
+          rel="preload"
+          href="/videos/flamenco-graded.mp4"
+          as="video"
+          type="video/mp4"
+        />
+        {/* JSON-LD structured data */}
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+        />
+      </head>
       <body className="min-h-screen grain">
         <Preloader />
         <SmoothScroll>{children}</SmoothScroll>
