@@ -11,7 +11,9 @@ Awwwards-quality immersive website for IVANN AURA, a Colombian pianist and live 
 - **Next.js 16.2.1** (App Router, Turbopack)
 - **React 19.2.4** + TypeScript
 - **Tailwind CSS v4** (with `@theme inline` custom properties)
-- **Lenis** for smooth scrolling (intercepts `window.scrollTo`)
+- **GSAP + ScrollTrigger** for scroll-driven video orchestration (`scrub: 1.5`)
+- **Lenis** for smooth scrolling (bridged to GSAP via `useLenis → ScrollTrigger.update`)
+- **WebGL** for cinematic post-processing (vignette, chromatic aberration, film grain, bloom)
 - **Zustand** for UI state (cursor, menu)
 
 ## Architecture
@@ -22,7 +24,8 @@ page.tsx
  ├── Navigation            (fixed nav, scroll progress, mobile menu)
  ├── PianoIndicator        (energy-driven equalizer, bottom-left)
  │
- ├── ScrollVideoPlayer     (scroll → vinyl inertia → video.currentTime)
+ ├── ScrollVideoPlayer     (GSAP ScrollTrigger → video.currentTime + WebGL canvas)
+ │    ├── CinemaGL         (WebGL shaders: vignette, chromatic aberration, grain, bloom)
  │    ├── AudioMomentum    (physics engine: impulse → energy → playbackRate)
  │    └── ScrollStoryOverlay (20+ frame-synced story beats over video)
  │
@@ -34,15 +37,16 @@ page.tsx
 
 | Component | File | Purpose |
 |-----------|------|---------|
-| `ScrollVideoPlayer` | `ui/ScrollVideoPlayer.tsx` | Scroll-driven video with vinyl inertia + AudioMomentum |
-| `AudioMomentum` | `lib/audio-momentum.ts` | Physics engine: energy/friction → playbackRate + volume |
+| `ScrollVideoPlayer` | `ui/ScrollVideoPlayer.tsx` | GSAP ScrollTrigger + WebGL canvas + AudioMomentum |
+| `CinemaGL` | `lib/cinema-gl.ts` | WebGL post-processing: vignette, chromatic aberration, grain, bloom |
+| `AudioMomentum` | `lib/audio-momentum.ts` | Physics engine: energy/friction → playbackRate + volume + visibility pause |
 | `ScrollStoryOverlay` | `ui/ScrollStoryOverlay.tsx` | 20+ story beats with fade/slide/typewriter animations |
 | `usePianoScroll` | `hooks/usePianoScroll.ts` | Letter keys (a-z) / click → smooth scroll forward |
 | `PianoIndicator` | `ui/PianoIndicator.tsx` | Energy-driven equalizer (gold when energy > 0.3) |
 | `Navigation` | `ui/Navigation.tsx` | Fixed nav, scroll progress bar, mobile hamburger |
 | `CustomCursor` | `ui/CustomCursor.tsx` | Animated dot + ring cursor (desktop only) |
 | `Preloader` | `ui/Preloader.tsx` | Branded loading screen (1.8s ease-out) |
-| `SmoothScroll` | `providers/SmoothScroll.tsx` | Lenis wrapper (lerp 0.1, duration 1.2s) |
+| `SmoothScroll` | `providers/SmoothScroll.tsx` | Lenis + GSAP bridge (lerp 0.1, duration 1.2s) |
 
 ### Deleted (previously dead code)
 
@@ -68,15 +72,27 @@ User scroll/key/click → addImpulse(0.2)
 
 Constants: `IMPULSE=0.2`, `FRICTION=0.985`, `MIN_RATE=0.25`, `MAX_RATE=1.0`, `MAX_VOLUME=0.7`, `PLAY_THRESHOLD=0.05`, `STOP_THRESHOLD=0.02`, `DRIFT_THRESHOLD=3.0s`
 
-## Vinyl Inertia (Scroll → Video)
+## Scroll → Video Pipeline (GSAP ScrollTrigger)
 
-Scroll does NOT directly set `video.currentTime`. Instead:
+GSAP ScrollTrigger replaces the previous manual vinyl inertia system. The entire scroll-to-video pipeline:
 
-1. Scroll sets `scrollTargetRef` (the desired video time)
-2. A rAF loop applies exponential ease (`EASE_FACTOR = 0.1`) toward the target, capped at `MAX_SCRUB_SPEED = 3.0` video-seconds per real-second
-3. Seeks are clamped to the contiguous buffered range
+1. Lenis smooth-scrolls the page, fires `ScrollTrigger.update()` via bridge
+2. ScrollTrigger (`scrub: 1.5`) maps scroll progress (0-1) to video timeline
+3. `scrub: 1.5` = GSAP takes 1.5s to catch up → smooth vinyl feel (replaces custom rAF + ease + speed cap)
+4. `onUpdate` clamps to buffered range, sets `video.currentTime`, reports frame changes
+5. Scroll velocity > 50px/s triggers `AudioMomentum.addImpulse()`
+6. A rAF render loop uploads video frames to WebGL canvas with post-processing shaders
 
-The exponential ease means the video moves fast when far from target and slows as it approaches — settling quickly after scroll stops. The speed cap prevents jarring jumps during aggressive scrolling.
+## WebGL Cinema (Post-Processing)
+
+`cinema-gl.ts` renders video through GPU fragment shaders:
+
+- **Chromatic aberration**: RGB channel offset at edges, amplified by scroll energy
+- **Vignette**: Edge darkening to focus the viewer's eye
+- **Film grain**: Animated noise for organic, non-digital texture
+- **Soft bloom**: Glow on highlights for dreamy quality
+
+Falls back to raw `<video>` element if WebGL is unavailable. Canvas uses `object-fit: cover` at video resolution.
 
 ## Design Tokens (CSS Custom Properties)
 

@@ -1,7 +1,14 @@
 "use client";
 
 import { useEffect, useRef, useState, useCallback } from "react";
+import gsap from "gsap";
+import { ScrollTrigger } from "gsap/ScrollTrigger";
 import { AudioMomentum } from "@/lib/audio-momentum";
+import { initCinemaGL, type CinemaGL } from "@/lib/cinema-gl";
+
+if (typeof window !== "undefined") {
+  gsap.registerPlugin(ScrollTrigger);
+}
 
 interface ScrollVideoPlayerProps {
   /** Path to the video file */
@@ -29,7 +36,6 @@ interface ScrollVideoPlayerProps {
  */
 function getBufferProgress(video: HTMLVideoElement): number {
   if (!video.duration || !video.buffered.length) return 0;
-  // Find the contiguous buffered range starting near 0
   for (let i = 0; i < video.buffered.length; i++) {
     if (video.buffered.start(i) <= 0.5) {
       return video.buffered.end(i) / video.duration;
@@ -49,31 +55,40 @@ export default function ScrollVideoPlayer({
 }: ScrollVideoPlayerProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const cinemaRef = useRef<CinemaGL | null>(null);
   const [ready, setReady] = useState(false);
   const [bufferProgress, setBufferProgress] = useState(0);
+  const [hasGL, setHasGL] = useState(true);
 
   // Tracking refs
   const currentTimeRef = useRef(0);
   const lastFrameIndexRef = useRef(0);
   const durationRef = useRef(0);
-  const lastScrollYRef = useRef(0);
-  const rafRef = useRef<number>(0);
+  const energyRef = useRef(0);
+  const renderRafRef = useRef<number>(0);
   const momentumRef = useRef<AudioMomentum | null>(null);
-
-  // Vinyl inertia: scroll sets a target, video glides toward it at max speed
-  const scrollTargetRef = useRef(0);
-  const scrubRafRef = useRef<number>(0);
-  const lastTickRef = useRef(0);
-
-  // Vinyl inertia tuning
-  const MAX_SCRUB_SPEED = 3.0;   // max video-seconds per real-second (speed cap)
-  const EASE_FACTOR = 0.1;       // lerp factor per frame — 0.1 = smooth ease, 0.2 = snappy
-
-  // Convert video time to 3fps frame index (overlay compatibility)
-  const timeToFrame = useCallback((time: number) => Math.floor(time * 3), []);
-
-  // Ref to prevent double-init
   const readyRef = useRef(false);
+
+  // Stable callback refs (avoid stale closures in rAF / GSAP callbacks)
+  const onFrameChangeRef = useRef(onFrameChange);
+  onFrameChangeRef.current = onFrameChange;
+  const onEnergyChangeRef = useRef(onEnergyChange);
+  onEnergyChangeRef.current = onEnergyChange;
+
+  // Clamp time to the furthest contiguous buffered position
+  const clampToBuffered = useCallback(
+    (video: HTMLVideoElement, time: number): number => {
+      if (!video.buffered.length) return 0;
+      for (let i = 0; i < video.buffered.length; i++) {
+        if (video.buffered.start(i) <= 0.5) {
+          return Math.min(time, video.buffered.end(i) - 0.1);
+        }
+      }
+      return 0;
+    },
+    []
+  );
 
   const markReady = useCallback(() => {
     const video = videoRef.current;
@@ -83,7 +98,9 @@ export default function ScrollVideoPlayer({
     setReady(true);
   }, []);
 
-  // Track buffer progress and mark ready when enough is buffered
+  // ---------------------------------------------------------------------------
+  // Buffer tracking — start at 15% (all-keyframe = any position is seekable)
+  // ---------------------------------------------------------------------------
   useEffect(() => {
     const video = videoRef.current;
     if (!video) return;
@@ -92,15 +109,9 @@ export default function ScrollVideoPlayer({
       if (readyRef.current) return;
       const progress = getBufferProgress(video);
       setBufferProgress(progress);
-
-      // With all-keyframe encoding, any buffered position is instantly seekable.
-      // Start at 15% so the user can begin scrolling while the rest loads.
-      if (progress >= 0.15 && video.duration) {
-        markReady();
-      }
+      if (progress >= 0.15 && video.duration) markReady();
     };
 
-    // Check if already fully loaded (local dev / cache hit)
     if (video.readyState >= 4) {
       setBufferProgress(1);
       markReady();
@@ -114,10 +125,7 @@ export default function ScrollVideoPlayer({
 
     video.addEventListener("progress", checkBuffer);
     video.addEventListener("canplaythrough", onCanPlayThrough);
-    // Also check on loadedmetadata in case readyState jumps
     video.addEventListener("loadedmetadata", checkBuffer);
-
-    // Initial check
     checkBuffer();
 
     return () => {
@@ -127,69 +135,116 @@ export default function ScrollVideoPlayer({
     };
   }, [markReady]);
 
-  // Clamp time to the furthest contiguous buffered position
-  const clampToBuffered = useCallback((video: HTMLVideoElement, time: number): number => {
-    if (!video.buffered.length) return 0;
-    for (let i = 0; i < video.buffered.length; i++) {
-      if (video.buffered.start(i) <= 0.5) {
-        return Math.min(time, video.buffered.end(i) - 0.1);
-      }
+  // ---------------------------------------------------------------------------
+  // WebGL cinema canvas — post-processing shaders
+  // ---------------------------------------------------------------------------
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    const video = videoRef.current;
+    if (!canvas || !video) return;
+
+    const cinema = initCinemaGL(canvas);
+    if (!cinema) {
+      setHasGL(false);
+      return;
     }
-    return 0;
+    cinemaRef.current = cinema;
+
+    // Size canvas to video dimensions — CSS object-fit:cover handles the rest
+    const setCanvasSize = () => {
+      if (video.videoWidth && video.videoHeight) {
+        cinema.resize(video.videoWidth, video.videoHeight);
+      }
+    };
+    setCanvasSize();
+    video.addEventListener("loadedmetadata", setCanvasSize);
+
+    return () => {
+      video.removeEventListener("loadedmetadata", setCanvasSize);
+      cinema.destroy();
+      cinemaRef.current = null;
+    };
   }, []);
 
-  // Vinyl inertia loop: glides currentTime toward scrollTarget at capped speed
+  // ---------------------------------------------------------------------------
+  // Render loop — draws video to WebGL canvas + energy tracking
+  // ---------------------------------------------------------------------------
   useEffect(() => {
     if (!ready) return;
 
-    const video = videoRef.current;
-    if (!video) return;
-
-    lastTickRef.current = performance.now();
-
-    const tick = (now: number) => {
-      const dt = Math.min((now - lastTickRef.current) / 1000, 0.05); // cap dt at 50ms
-      lastTickRef.current = now;
-
-      const target = scrollTargetRef.current;
-      const current = currentTimeRef.current;
-      const delta = target - current;
-
-      if (Math.abs(delta) > 0.01) {
-        // Exponential ease toward target (fast when far, slows near target)
-        // then cap at MAX_SCRUB_SPEED so it never jumps too fast
-        const eased = delta * EASE_FACTOR;
-        const maxStep = MAX_SCRUB_SPEED * dt;
-        const step = Math.max(-maxStep, Math.min(maxStep, eased));
-        const newTime = current + step;
-
-        // Clamp to buffered range and apply to video
-        const safeTime = clampToBuffered(video, newTime);
-        currentTimeRef.current = safeTime;
-        if (Math.abs(video.currentTime - safeTime) > 0.03) {
-          video.currentTime = safeTime;
-        }
-
-        // Report frame change
-        const frameIndex = timeToFrame(newTime);
-        if (frameIndex !== lastFrameIndexRef.current) {
-          const direction =
-            frameIndex > lastFrameIndexRef.current ? "forward" : "backward";
-          lastFrameIndexRef.current = frameIndex;
-          onFrameChange?.(frameIndex, direction);
-        }
+    let lastEnergy = -1;
+    const tick = () => {
+      // Energy tracking
+      const e = momentumRef.current?.getEnergy() ?? 0;
+      energyRef.current = e;
+      if (Math.abs(e - lastEnergy) > 0.01) {
+        lastEnergy = e;
+        onEnergyChangeRef.current?.(e);
       }
 
-      scrubRafRef.current = requestAnimationFrame(tick);
+      // WebGL render
+      const video = videoRef.current;
+      const cinema = cinemaRef.current;
+      if (video && cinema) {
+        cinema.render(video, performance.now() / 1000, e);
+      }
+
+      renderRafRef.current = requestAnimationFrame(tick);
     };
 
-    scrubRafRef.current = requestAnimationFrame(tick);
-    return () => {
-      cancelAnimationFrame(scrubRafRef.current);
-    };
-  }, [ready, clampToBuffered, timeToFrame, onFrameChange]);
+    renderRafRef.current = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(renderRafRef.current);
+  }, [ready]);
 
-  // Initialize AudioMomentum when ready and audioSrc available
+  // ---------------------------------------------------------------------------
+  // GSAP ScrollTrigger — replaces manual vinyl inertia
+  // scrub:1.5 = 1.5s smooth catch-up = vinyl feel, battle-tested
+  // ---------------------------------------------------------------------------
+  useEffect(() => {
+    if (!ready) return;
+    const video = videoRef.current;
+    const container = containerRef.current;
+    if (!video || !container) return;
+
+    const ctx = gsap.context(() => {
+      ScrollTrigger.create({
+        trigger: container,
+        start: "top top",
+        end: "bottom bottom",
+        scrub: 1.5,
+        onUpdate: (self) => {
+          const targetTime = self.progress * durationRef.current;
+          const safeTime = clampToBuffered(video, targetTime);
+          currentTimeRef.current = safeTime;
+
+          // Throttle seeks — browser can't decode faster than ~30ms
+          if (Math.abs(video.currentTime - safeTime) > 0.03) {
+            video.currentTime = safeTime;
+          }
+
+          // Frame change reporting (3fps overlay system)
+          const frameIndex = Math.floor(safeTime * 3);
+          if (frameIndex !== lastFrameIndexRef.current) {
+            const dir =
+              frameIndex > lastFrameIndexRef.current ? "forward" : "backward";
+            lastFrameIndexRef.current = frameIndex;
+            onFrameChangeRef.current?.(frameIndex, dir);
+          }
+
+          // Audio impulse from scroll velocity
+          if (Math.abs(self.getVelocity()) > 50) {
+            momentumRef.current?.addImpulse();
+          }
+        },
+      });
+    }, container);
+
+    return () => ctx.revert();
+  }, [ready, clampToBuffered]);
+
+  // ---------------------------------------------------------------------------
+  // AudioMomentum — physics-driven audio tied to scroll energy
+  // ---------------------------------------------------------------------------
   useEffect(() => {
     if (!ready || !audioSrc) return;
 
@@ -204,60 +259,9 @@ export default function ScrollVideoPlayer({
     };
   }, [ready, audioSrc]);
 
-  // Scroll-driven target update (vinyl loop handles the actual seeking)
-  useEffect(() => {
-    const container = containerRef.current;
-    if (!container || !ready) return;
-
-    const onScroll = () => {
-      const rect = container.getBoundingClientRect();
-      const scrollableHeight = container.offsetHeight - window.innerHeight;
-      if (scrollableHeight <= 0) return;
-
-      const scrolled = -rect.top;
-      const progress = Math.max(0, Math.min(1, scrolled / scrollableHeight));
-      const targetTime = progress * durationRef.current;
-
-      // Set target — the vinyl inertia loop will glide toward it
-      scrollTargetRef.current = Math.max(
-        0,
-        Math.min(targetTime, durationRef.current)
-      );
-
-      // Audio impulse in both scroll directions
-      const currentY = window.scrollY;
-      if (currentY !== lastScrollYRef.current) {
-        momentumRef.current?.addImpulse();
-      }
-      lastScrollYRef.current = currentY;
-    };
-
-    window.addEventListener("scroll", onScroll, { passive: true });
-    return () => {
-      window.removeEventListener("scroll", onScroll);
-    };
-  }, [ready]);
-
-  // Energy reporting loop
-  useEffect(() => {
-    if (!ready) return;
-
-    let lastEnergy = -1;
-    const tick = () => {
-      const e = momentumRef.current?.getEnergy() ?? 0;
-      if (Math.abs(e - lastEnergy) > 0.01) {
-        lastEnergy = e;
-        onEnergyChange?.(e);
-      }
-      rafRef.current = requestAnimationFrame(tick);
-    };
-
-    rafRef.current = requestAnimationFrame(tick);
-    return () => {
-      cancelAnimationFrame(rafRef.current);
-    };
-  }, [ready, onEnergyChange]);
-
+  // ---------------------------------------------------------------------------
+  // Render
+  // ---------------------------------------------------------------------------
   return (
     <div
       ref={containerRef}
@@ -266,6 +270,7 @@ export default function ScrollVideoPlayer({
       className="relative"
     >
       <div className="sticky top-0 w-full h-screen overflow-hidden">
+        {/* Hidden video element — source for WebGL texture + buffer tracking */}
         <video
           ref={videoRef}
           src={videoSrc}
@@ -274,10 +279,22 @@ export default function ScrollVideoPlayer({
           preload="auto"
           onError={onError}
           className="absolute inset-0 w-full h-full object-cover"
-          style={{ background: "var(--bg-void)" }}
+          style={{
+            background: "var(--bg-void)",
+            opacity: hasGL && ready ? 0 : 1,
+          }}
         />
 
-        {/* Loading state with real progress */}
+        {/* WebGL cinema canvas — post-processed video output */}
+        {hasGL && (
+          <canvas
+            ref={canvasRef}
+            className="absolute inset-0 w-full h-full object-cover"
+            style={{ opacity: ready ? 1 : 0 }}
+          />
+        )}
+
+        {/* Loading state with real buffer progress */}
         {!ready && (
           <div className="absolute inset-0 flex flex-col items-center justify-center z-10">
             <div className="w-24 h-[1px] relative overflow-hidden bg-white/10">
@@ -294,10 +311,8 @@ export default function ScrollVideoPlayer({
           </div>
         )}
 
-        {/* Overlay content */}
-        <div className="absolute inset-0 z-20">
-          {children}
-        </div>
+        {/* Overlay content (story beats) */}
+        <div className="absolute inset-0 z-20">{children}</div>
       </div>
     </div>
   );

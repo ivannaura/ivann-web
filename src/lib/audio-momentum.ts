@@ -39,6 +39,7 @@ export class AudioMomentum {
   private wasPlaying: boolean = false;
   private playPending: boolean = false;
   private videoTimeGetter: (() => number) | null = null;
+  private hiddenAt: number = 0;
 
   // ---- Public API ---------------------------------------------------------
 
@@ -51,6 +52,9 @@ export class AudioMomentum {
     // Disable pitch correction so playbackRate changes sound natural.
     // preservesPitch is baseline since Dec 2023 — no vendor prefixes needed.
     (this.audio as any).preservesPitch = false;
+
+    // Pause physics when tab is hidden, resume on return
+    document.addEventListener('visibilitychange', this.onVisibilityChange);
 
     this.startLoop();
   }
@@ -73,6 +77,7 @@ export class AudioMomentum {
   /** Tear everything down: stop loop, release audio resources. */
   destroy(): void {
     this.running = false;
+    document.removeEventListener('visibilitychange', this.onVisibilityChange);
 
     if (this.rafId) {
       cancelAnimationFrame(this.rafId);
@@ -92,6 +97,25 @@ export class AudioMomentum {
   }
 
   // ---- Private ------------------------------------------------------------
+
+  /** Pause loop and audio when tab goes to background. */
+  private onVisibilityChange = (): void => {
+    if (document.hidden) {
+      this.hiddenAt = performance.now();
+      if (this.wasPlaying && this.audio) {
+        this.audio.pause();
+        this.wasPlaying = false;
+      }
+      this.running = false;
+      cancelAnimationFrame(this.rafId);
+    } else {
+      // Decay energy for elapsed time while hidden
+      const elapsed = (performance.now() - this.hiddenAt) / 16.67;
+      this.energy *= Math.pow(FRICTION, elapsed);
+      if (this.energy < 0.001) this.energy = 0;
+      this.startLoop();
+    }
+  };
 
   /** Start the requestAnimationFrame loop (guards against double-start). */
   private startLoop(): void {
