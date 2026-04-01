@@ -39,13 +39,14 @@ page.tsx
 |-----------|------|---------|
 | `ScrollVideoPlayer` | `ui/ScrollVideoPlayer.tsx` | GSAP ScrollTrigger + unified WebGL2 canvas + AudioMomentum |
 | `CinemaGL` | `lib/cinema-gl.ts` | Unified WebGL2: video post-processing + luminance-reactive particles (single context) |
-| `AudioMomentum` | `lib/audio-momentum.ts` | Physics engine: energy/friction → playbackRate + volume + mute + visibility pause |
+| `AudioMomentum` | `lib/audio-momentum.ts` | Physics engine + AnalyserNode: energy/friction → playbackRate + frequency bands (bass/mids/highs) |
 | `ScrollStoryOverlay` | `ui/ScrollStoryOverlay.tsx` | 20+ story beats with GSAP SplitText per-char/word reveals |
 | `usePianoScroll` | `hooks/usePianoScroll.ts` | Letter keys (a-z) / click → smooth scroll forward |
 | `PianoIndicator` | `ui/PianoIndicator.tsx` | Energy-driven equalizer (gold when energy > 0.3) |
 | `Navigation` | `ui/Navigation.tsx` | Fixed nav, scroll progress, native `<dialog>` mobile menu, sound toggle |
 | `CustomCursor` | `ui/CustomCursor.tsx` | Animated dot + ring cursor (desktop only) |
-| `Preloader` | `ui/Preloader.tsx` | Branded loading screen (1.8s ease-out) |
+| `MicroSounds` | `lib/micro-sounds.ts` | Web Audio oscillator system: hover notes, click keys, scroll whoosh |
+| `Preloader` | `ui/Preloader.tsx` | Cinematic preloader: SplitText reveal + animated progress + scale exit |
 | `SmoothScroll` | `providers/SmoothScroll.tsx` | Lenis + GSAP single RAF loop (lerp 0.08, autoRaf false) |
 
 ### Deleted (previously dead code)
@@ -74,6 +75,15 @@ User scroll/key/click → addImpulse(0.2)
 Constants: `IMPULSE=0.2`, `FRICTION=0.985`, `MIN_RATE=0.25`, `MAX_RATE=1.0`, `MAX_VOLUME=0.7`, `PLAY_THRESHOLD=0.05`, `STOP_THRESHOLD=0.02`, `DRIFT_THRESHOLD=3.0s`
 
 Energy half-life: FRICTION=0.985 → ~46 frames ≈ 766ms at 60fps.
+
+### Frequency Analysis (AnalyserNode)
+
+AudioMomentum creates `AudioContext → MediaElementSource → AnalyserNode → destination`. `fftSize=256` → 128 bins. Bands averaged + smoothed (EMA 0.8):
+- **Bass** (bins 0-10, ~0-1720Hz): Piano body, low notes
+- **Mids** (bins 10-50, ~1720-8600Hz): Melody, main frequencies
+- **Highs** (bins 50-128, ~8600Hz+): Harmonics, shimmer, applause
+
+Bands available via `getFrequencyBands()` → `{ bass, mids, highs }` (all 0-1). Fed to cinema-gl uniforms even when muted (visual reactivity independent of audibility).
 
 ## Scroll → Video Pipeline (GSAP ScrollTrigger + matchMedia)
 
@@ -109,23 +119,43 @@ Energy half-life: FRICTION=0.985 → ~46 frames ≈ 766ms at 60fps.
 
 `cinema-gl.ts` renders video through a single WebGL2 context with two shader programs:
 
+**Reactive uniforms** fed to shaders each frame:
+| Uniform | Source | Shader Effect |
+|---------|--------|---------------|
+| `u_energy` | AudioMomentum scroll momentum | Base intensity for all effects |
+| `u_bass` | AnalyserNode (bins 0-10) | Vignette breathing, particle size pulse |
+| `u_mids` | AnalyserNode (bins 10-50) | Chromatic aberration boost |
+| `u_highs` | AnalyserNode (bins 50-128) | Bloom intensity, particle glow |
+| `u_mouse` | mousemove on sticky viewport | Directional CA offset, cursor spotlight, particle attraction |
+| `u_velocity` | ScrollTrigger.getVelocity() normalized | Directional chromatic smear on fast scroll |
+| `u_progress` | ScrollTrigger progress (0-1) | Narrative mood (smooth interpolation between acts) |
+
 **Pass 1 — Video post-processing** (fullscreen quad):
-- **Chromatic aberration**: RGB channel offset at edges, amplified by scroll energy and narrative mood
-- **Vignette**: Edge darkening, tighter during intense acts
+- **Chromatic aberration**: Radial from center + directional from cursor + velocity boost
+- **Vignette**: Edge darkening with bass-reactive breathing
+- **Cursor spotlight**: Subtle brightening near mouse position
 - **Film grain**: Animated noise for organic texture
-- **Soft bloom**: Glow on highlights, lower threshold at peak acts
+- **Soft bloom**: Glow on highlights, boosted by highs frequency band
 
 **Pass 2 — Luminance-reactive particles** (250 GL_POINTS, additive blending):
-- Particles sample the video texture for luminance at their position
-- Brighter video areas → larger, more visible particles
-- Luminance gradient nudges particles toward bright areas (pianist's hands, stage lights)
+- Particles sample video texture for luminance at their position
+- Luminance gradient nudges toward bright areas + cursor attraction with distance falloff
+- Size pulses with bass, glow intensifies with highs
 - Colors shift from warm white (#FFFDE8) to gold (#E8C85A) with energy
-- Speed: `0.05 + energy * 0.95` (VISION "Regla de Oro" — tied to scroll)
 
-**Dynamic narrative mood** via `u_progress` uniform — all effects scale per act:
+**Dynamic narrative mood** — smooth Hermite interpolation between act boundaries (no step functions):
 Despertar (0.5) → Entrada (0.6) → Danza (0.8) → Espectáculo (0.9) → Fuego (1.1) → Clímax (1.2) → Resolución (0.8) → Cierre (0.5)
 
 Falls back to raw `<video>` element if WebGL2 unavailable. Canvas sized to viewport with DPR capping.
+
+## Micro-Interaction Sounds
+
+`micro-sounds.ts` — Zero-download Web Audio oscillator system:
+- `playHover()`: Random C major pentatonic note (sine, 150ms decay, vol 0.025)
+- `playClick()`: C4 + octave harmonic (300ms, vol 0.04)
+- `playWhoosh()`: Sawtooth sweep 400→80Hz through lowpass filter (150ms)
+- Throttled: whoosh max 1/sec, hover debounced by browser event rate
+- Respects `soundMuted` (wired from Navigation + ScrollVideoPlayer) and `prefers-reduced-motion`
 
 ## Design Tokens (CSS Custom Properties)
 
