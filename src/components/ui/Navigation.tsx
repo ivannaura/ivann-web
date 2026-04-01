@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { useUIStore } from "@/stores/useUIStore";
+import { playHover, playClick, setMicroSoundsMuted } from "@/lib/micro-sounds";
 
 const NAV_ITEMS = [
   { label: "Inicio", href: "#top", num: "01" },
@@ -92,7 +93,13 @@ export default function Navigation({
     return () => dialog.removeEventListener("close", onClose);
   }, [setMenuOpen]);
 
+  // Sync micro-sounds mute with sound toggle
+  useEffect(() => {
+    setMicroSoundsMuted(soundMuted);
+  }, [soundMuted]);
+
   const handleClick = useCallback((href: string) => {
+    playClick();
     setMenuOpen(false);
     if (href === "#top") {
       window.scrollTo({ top: 0, behavior: "smooth" });
@@ -210,7 +217,7 @@ export default function Navigation({
                   handleClick(item.href);
                 }}
                 className="relative px-4 py-2 group transition-all duration-300"
-                onMouseEnter={() => setCursorVariant("hover")}
+                onMouseEnter={() => { setCursorVariant("hover"); playHover(); }}
                 onMouseLeave={() => setCursorVariant("default")}
               >
                 <span

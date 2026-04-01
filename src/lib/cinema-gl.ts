@@ -3,10 +3,16 @@
 // Single context rendering pipeline:
 //   Pass 1: Video post-processing (vignette, chromatic aberration, grain, bloom)
 //   Pass 2: Luminance-reactive particles (additive blending, energy-responsive)
-// Effects vary dynamically per narrative act (u_progress).
-// Particles sample the video texture for luminance — they glow brighter
-// near bright video areas and drift toward light sources.
+//
+// Reactive uniforms:
+//   u_bass / u_mids / u_highs — real-time frequency bands from AnalyserNode
+//   u_mouse — cursor position (NDC) for interactive lens effects
+//   u_velocity — scroll velocity (0-1) for motion-driven distortion
+//   u_energy — accumulated scroll momentum (0-1)
+//   u_progress — narrative position (0-1) for dynamic mood per act
 // ---------------------------------------------------------------------------
+
+import type { FrequencyBands } from './audio-momentum';
 
 // ---------------------------------------------------------------------------
 // Shaders — Cinema (video post-processing)
@@ -27,48 +33,71 @@ uniform sampler2D u_tex;
 uniform float u_time;
 uniform float u_energy;
 uniform float u_progress;
+uniform float u_bass;
+uniform float u_mids;
+uniform float u_highs;
+uniform vec2 u_mouse;   // NDC (0-1), default 0.5,0.5
+uniform float u_velocity; // normalized scroll velocity 0-1
 out vec4 fragColor;
 
 float hash(vec2 p) {
   return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453);
 }
 
+// Smooth narrative mood — interpolates between act intensities
+// Acts: Despertar(0.5) Entrada(0.6) Danza(0.8) Espectáculo(0.9)
+//       Fuego(1.1) Clímax(1.2) Resolución(0.8) Cierre(0.5)
+float getMood(float progress) {
+  float moods[9] = float[9](0.5, 0.5, 0.6, 0.8, 0.9, 1.1, 1.2, 0.8, 0.5);
+  float t = clamp(progress, 0.0, 1.0) * 8.0;
+  int i = int(floor(t));
+  int j = min(i + 1, 8);
+  float f = fract(t);
+  // Smooth interpolation between acts
+  float s = f * f * (3.0 - 2.0 * f);
+  return mix(moods[i], moods[j], s);
+}
+
 void main() {
   vec2 uv = v_uv;
-  float d = length(uv - 0.5);
+  float mood = getMood(u_progress);
 
-  // --- Narrative mood ---
-  float act = u_progress * 8.0;
-  float mood;
-  if (act < 1.0) mood = 0.5;
-  else if (act < 2.0) mood = 0.6;
-  else if (act < 3.0) mood = 0.8;
-  else if (act < 4.0) mood = 0.9;
-  else if (act < 5.0) mood = 1.1;
-  else if (act < 6.0) mood = 1.2;
-  else if (act < 7.0) mood = 0.8;
-  else mood = 0.5;
+  // Distance from center and from cursor
+  float dCenter = length(uv - 0.5);
+  vec2 cursorOffset = uv - u_mouse;
+  float dCursor = length(cursorOffset);
 
   // --- Chromatic aberration ---
-  float ca = d * 0.002 * (1.0 + u_energy * 3.0) * mood;
+  // Base: radial from center, boosted by energy + mids + scroll velocity
+  // Cursor: slight directional offset toward cursor
+  float caBase = dCenter * 0.002 * (1.0 + u_energy * 3.0 + u_mids * 2.0) * mood;
+  float caVelocity = u_velocity * 0.003 * mood;
+  // Directional CA from cursor — subtle, max at edges
+  vec2 caDir = normalize(cursorOffset + 0.001) * dCursor * 0.001 * u_energy;
   vec3 c;
-  c.r = texture(u_tex, uv + vec2(ca, 0.0)).r;
+  c.r = texture(u_tex, uv + vec2(caBase + caVelocity, caVelocity * 0.3) + caDir).r;
   c.g = texture(u_tex, uv).g;
-  c.b = texture(u_tex, uv - vec2(ca, 0.0)).b;
+  c.b = texture(u_tex, uv - vec2(caBase + caVelocity, caVelocity * 0.3) - caDir).b;
 
-  // --- Vignette ---
-  float vigEdge = 0.7 - mood * 0.1;
-  float vigCenter = 0.3 - mood * 0.05;
-  c *= mix(0.2 + (1.0 - mood) * 0.15, 1.0, smoothstep(vigEdge, vigCenter, d));
+  // --- Vignette with bass pulse ---
+  // Bass makes vignette "breathe" — opens slightly on low hits
+  float bassPulse = u_bass * 0.08;
+  float vigEdge = 0.7 - mood * 0.1 + bassPulse;
+  float vigCenter = 0.3 - mood * 0.05 + bassPulse;
+  c *= mix(0.2 + (1.0 - mood) * 0.15, 1.0, smoothstep(vigEdge, vigCenter, dCenter));
+
+  // --- Cursor spotlight — very subtle brightening near cursor ---
+  float spotlight = smoothstep(0.4, 0.0, dCursor) * 0.06 * u_energy;
+  c += spotlight;
 
   // --- Film grain ---
   float grainAmt = (0.04 + mood * 0.025);
   c += hash(uv * 800.0 + fract(u_time)) * grainAmt * 2.0 - grainAmt;
 
-  // --- Soft bloom ---
-  float bloomThresh = 0.7 - mood * 0.1;
+  // --- Soft bloom boosted by highs ---
+  float bloomThresh = 0.7 - mood * 0.1 - u_highs * 0.15;
   float lum = dot(c, vec3(0.2126, 0.7152, 0.0722));
-  c += max(0.0, lum - bloomThresh) * (0.3 + mood * 0.15);
+  c += max(0.0, lum - bloomThresh) * (0.3 + mood * 0.15 + u_highs * 0.2);
 
   fragColor = vec4(c, 1.0);
 }`;
@@ -84,6 +113,9 @@ in float a_size;
 uniform vec2 u_res;
 uniform sampler2D u_videoTex;
 uniform float u_energy;
+uniform float u_bass;
+uniform float u_highs;
+uniform vec2 u_mouse; // pixel coords
 
 out float v_alpha;
 out float v_lum;
@@ -105,16 +137,22 @@ void main() {
   float lumL = luminance(texture(u_videoTex, clamp(uv - vec2(dx, 0.0), 0.0, 1.0)).rgb);
   float lumU = luminance(texture(u_videoTex, clamp(uv - vec2(0.0, dy), 0.0, 1.0)).rgb);
   float lumD = luminance(texture(u_videoTex, clamp(uv + vec2(0.0, dy), 0.0, 1.0)).rgb);
-  vec2 grad = vec2(lumR - lumL, lumD - lumU);
-  vec2 nudge = grad * u_energy * 25.0;
+  vec2 lumGrad = vec2(lumR - lumL, lumD - lumU);
+  vec2 nudge = lumGrad * u_energy * 25.0;
+
+  // Cursor attraction — particles drift gently toward cursor
+  vec2 toCursor = u_mouse - a_pos;
+  float cursorDist = length(toCursor);
+  float cursorPull = smoothstep(300.0, 0.0, cursorDist) * u_energy * 15.0;
+  nudge += normalize(toCursor + 0.001) * cursorPull;
 
   vec2 finalPos = a_pos + nudge;
   vec2 ndc = (finalPos / u_res) * 2.0 - 1.0;
   ndc.y *= -1.0;
   gl_Position = vec4(ndc, 0.0, 1.0);
 
-  // Particles over bright areas are larger and more visible
-  gl_PointSize = a_size * (1.0 + lum * u_energy * 2.0);
+  // Size: base + luminance boost + bass pulse
+  gl_PointSize = a_size * (1.0 + lum * u_energy * 2.0 + u_bass * 1.5);
 
   v_alpha = a_alpha * (0.6 + lum * 0.5);
   v_lum = lum;
@@ -127,14 +165,15 @@ in float v_lum;
 uniform vec3 u_colorLow;
 uniform vec3 u_colorHigh;
 uniform float u_energy;
+uniform float u_highs;
 out vec4 fragColor;
 
 void main() {
   float d = length(gl_PointCoord - 0.5) * 2.0;
   float circle = smoothstep(1.0, 0.2, d);
   vec3 color = mix(u_colorLow, u_colorHigh, u_energy);
-  // Particles near bright video areas trend whiter/hotter
-  color = mix(color, vec3(1.0, 0.98, 0.95), v_lum * u_energy * 0.4);
+  // Bright video areas → whiter/hotter, boosted by highs
+  color = mix(color, vec3(1.0, 0.98, 0.95), v_lum * u_energy * 0.4 + u_highs * 0.2);
   fragColor = vec4(color, circle * v_alpha);
 }`;
 
@@ -168,9 +207,20 @@ function spawnParticle(w: number, h: number): Particle {
 // Public API
 // ---------------------------------------------------------------------------
 
+export interface CinemaGLParams {
+  video: HTMLVideoElement;
+  time: number;
+  energy: number;
+  progress: number;
+  bands: FrequencyBands;
+  mouseX: number;   // pixel coords on canvas
+  mouseY: number;
+  velocity: number;  // normalized 0-1
+}
+
 export interface CinemaGL {
-  /** Draw one frame: video post-processing + particles. */
-  render(video: HTMLVideoElement, time: number, energy: number, progress: number): void;
+  /** Draw one frame with all reactive parameters. */
+  render(params: CinemaGLParams): void;
   /** Update canvas resolution (call on resize). */
   resize(w: number, h: number): void;
   /** Release all GL resources. */
@@ -212,13 +262,18 @@ export function initCinemaGL(canvas: HTMLCanvasElement): CinemaGL | null {
   gl.vertexAttribPointer(cinemaAPos, 2, gl.FLOAT, false, 0, 0);
   gl.bindVertexArray(null);
 
-  // Cinema uniforms — explicit texture unit binding (don't rely on default 0)
-  const cUTex = gl.getUniformLocation(cinemaProg, "u_tex");
+  // Cinema uniforms
   gl.useProgram(cinemaProg);
+  const cUTex = gl.getUniformLocation(cinemaProg, "u_tex");
   gl.uniform1i(cUTex, 0);
   const cUTime = gl.getUniformLocation(cinemaProg, "u_time");
   const cUEnergy = gl.getUniformLocation(cinemaProg, "u_energy");
   const cUProgress = gl.getUniformLocation(cinemaProg, "u_progress");
+  const cUBass = gl.getUniformLocation(cinemaProg, "u_bass");
+  const cUMids = gl.getUniformLocation(cinemaProg, "u_mids");
+  const cUHighs = gl.getUniformLocation(cinemaProg, "u_highs");
+  const cUMouse = gl.getUniformLocation(cinemaProg, "u_mouse");
+  const cUVelocity = gl.getUniformLocation(cinemaProg, "u_velocity");
 
   // ---------------------------------------------------------------------------
   // Particle program (luminance-reactive light motes)
@@ -259,13 +314,14 @@ export function initCinemaGL(canvas: HTMLCanvasElement): CinemaGL | null {
   const pUColorHigh = gl.getUniformLocation(particleProg, "u_colorHigh");
   const pUEnergy = gl.getUniformLocation(particleProg, "u_energy");
   const pUVideoTex = gl.getUniformLocation(particleProg, "u_videoTex");
+  const pUBass = gl.getUniformLocation(particleProg, "u_bass");
+  const pUHighs = gl.getUniformLocation(particleProg, "u_highs");
+  const pUMouse = gl.getUniformLocation(particleProg, "u_mouse");
 
   // Set static particle uniforms
   gl.useProgram(particleProg);
-  // --particle-core: #FFFDE8 (warm white dust)
-  gl.uniform3f(pUColorLow, 1.0, 0.992, 0.91);
-  // --aura-gold-bright: #E8C85A (energized gold)
-  gl.uniform3f(pUColorHigh, 0.91, 0.784, 0.353);
+  gl.uniform3f(pUColorLow, 1.0, 0.992, 0.91);   // --particle-core: #FFFDE8
+  gl.uniform3f(pUColorHigh, 0.91, 0.784, 0.353);  // --aura-gold-bright: #E8C85A
 
   // ---------------------------------------------------------------------------
   // Shared video texture
@@ -292,7 +348,8 @@ export function initCinemaGL(canvas: HTMLCanvasElement): CinemaGL | null {
   // Render pipeline
   // ---------------------------------------------------------------------------
   return {
-    render(video, time, energy, progress) {
+    render(params) {
+      const { video, time, energy, progress, bands, mouseX, mouseY, velocity } = params;
       if (video.readyState < 2) return;
 
       // Upload video texture (shared by both programs)
@@ -306,6 +363,11 @@ export function initCinemaGL(canvas: HTMLCanvasElement): CinemaGL | null {
       gl.uniform1f(cUTime, time);
       gl.uniform1f(cUEnergy, energy);
       gl.uniform1f(cUProgress, progress);
+      gl.uniform1f(cUBass, bands.bass);
+      gl.uniform1f(cUMids, bands.mids);
+      gl.uniform1f(cUHighs, bands.highs);
+      gl.uniform2f(cUMouse, mouseX / w, 1.0 - mouseY / h); // NDC 0-1, flip Y
+      gl.uniform1f(cUVelocity, velocity);
       gl.bindVertexArray(cinemaVAO);
       gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
 
@@ -355,7 +417,10 @@ export function initCinemaGL(canvas: HTMLCanvasElement): CinemaGL | null {
       gl.useProgram(particleProg);
       gl.uniform2f(pURes, w, h);
       gl.uniform1f(pUEnergy, energy);
-      gl.uniform1i(pUVideoTex, 0); // texture unit 0
+      gl.uniform1f(pUBass, bands.bass);
+      gl.uniform1f(pUHighs, bands.highs);
+      gl.uniform2f(pUMouse, mouseX, mouseY); // pixel coords for particles
+      gl.uniform1i(pUVideoTex, 0);
 
       gl.bindBuffer(gl.ARRAY_BUFFER, particleBuf);
       gl.bufferData(gl.ARRAY_BUFFER, particleData, gl.DYNAMIC_DRAW);

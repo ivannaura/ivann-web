@@ -5,37 +5,26 @@ import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 import { AudioMomentum } from "@/lib/audio-momentum";
 import { initCinemaGL, type CinemaGL } from "@/lib/cinema-gl";
+import { playWhoosh, setMicroSoundsMuted } from "@/lib/micro-sounds";
 
 if (typeof window !== "undefined") {
   gsap.registerPlugin(ScrollTrigger);
 }
 
 interface ScrollVideoPlayerProps {
-  /** Path to the video file */
   videoSrc: string;
-  /** Path to the separate audio file for momentum-driven playback */
   audioSrc: string;
-  /** Height of the scroll area (in vh units) — more height = slower scrub */
   scrollHeight?: number;
-  /** Callback when the equivalent frame changes (3fps frame index for overlay compat) */
   onFrameChange?: (
     frameIndex: number,
     direction: "forward" | "backward"
   ) => void;
-  /** Callback reporting current energy level (0-1) for UI indicators */
   onEnergyChange?: (energy: number) => void;
-  /** Called if video fails to load */
   onError?: () => void;
-  /** Whether audio should be muted (user toggle) */
   audioMuted?: boolean;
-  /** Overlay content to render on top of video */
   children?: React.ReactNode;
 }
 
-/**
- * Returns the fraction (0-1) of the video that is buffered from the start.
- * Only counts contiguous buffer from time 0.
- */
 function getBufferProgress(video: HTMLVideoElement): number {
   if (!video.duration || !video.buffered.length) return 0;
   for (let i = 0; i < video.buffered.length; i++) {
@@ -74,13 +63,20 @@ export default function ScrollVideoPlayer({
   const momentumRef = useRef<AudioMomentum | null>(null);
   const readyRef = useRef(false);
 
-  // Stable callback refs (avoid stale closures in rAF / GSAP callbacks)
+  // Mouse tracking for cursor → WebGL interaction
+  const mouseRef = useRef({ x: 0.5, y: 0.5 }); // normalized 0-1 of canvas
+
+  // Scroll velocity tracking (smoothed for shader)
+  const velocityRef = useRef(0);
+  const smoothVelocityRef = useRef(0);
+  const lastWhooshRef = useRef(0); // throttle whoosh sounds
+
+  // Stable callback refs
   const onFrameChangeRef = useRef(onFrameChange);
   onFrameChangeRef.current = onFrameChange;
   const onEnergyChangeRef = useRef(onEnergyChange);
   onEnergyChangeRef.current = onEnergyChange;
 
-  // Clamp time to the furthest contiguous buffered position
   const clampToBuffered = useCallback(
     (video: HTMLVideoElement, time: number): number => {
       if (!video.buffered.length) return 0;
@@ -103,7 +99,7 @@ export default function ScrollVideoPlayer({
   }, []);
 
   // ---------------------------------------------------------------------------
-  // Buffer tracking — start at 15% (all-keyframe = any position is seekable)
+  // Buffer tracking
   // ---------------------------------------------------------------------------
   useEffect(() => {
     const video = videoRef.current;
@@ -140,8 +136,7 @@ export default function ScrollVideoPlayer({
   }, [markReady]);
 
   // ---------------------------------------------------------------------------
-  // iOS fix: Safari on cellular ignores preload="auto" until user gesture.
-  // A brief play+pause on first touch unlocks buffering (muted autoplay allowed).
+  // iOS touch unlock
   // ---------------------------------------------------------------------------
   useEffect(() => {
     const video = videoRef.current;
@@ -149,8 +144,12 @@ export default function ScrollVideoPlayer({
 
     const unlock = () => {
       if (video.readyState < 2) {
-        video.play()
-          .then(() => { video.pause(); video.currentTime = 0; })
+        video
+          .play()
+          .then(() => {
+            video.pause();
+            video.currentTime = 0;
+          })
           .catch(() => {});
       }
     };
@@ -160,8 +159,29 @@ export default function ScrollVideoPlayer({
   }, []);
 
   // ---------------------------------------------------------------------------
-  // Unified WebGL2 cinema canvas — video post-processing + particles
-  // Single context, shared video texture, luminance-reactive particles
+  // Mouse tracking — updates ref on mousemove over sticky viewport
+  // ---------------------------------------------------------------------------
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    const onMove = (e: MouseEvent) => {
+      const rect = canvas.getBoundingClientRect();
+      const dpr = Math.min(window.devicePixelRatio, 2);
+      mouseRef.current.x = (e.clientX - rect.left) * dpr;
+      mouseRef.current.y = (e.clientY - rect.top) * dpr;
+    };
+
+    // Track on the parent sticky div, not just canvas (overlay blocks pointer)
+    const sticky = canvas.parentElement;
+    if (sticky) {
+      sticky.addEventListener("mousemove", onMove, { passive: true });
+      return () => sticky.removeEventListener("mousemove", onMove);
+    }
+  }, []);
+
+  // ---------------------------------------------------------------------------
+  // WebGL2 cinema canvas
   // ---------------------------------------------------------------------------
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -175,7 +195,6 @@ export default function ScrollVideoPlayer({
     }
     cinemaRef.current = cinema;
 
-    // Size canvas to viewport with DPR capping
     const resize = () => {
       const dpr = Math.min(window.devicePixelRatio, 2);
       cinema.resize(
@@ -196,28 +215,49 @@ export default function ScrollVideoPlayer({
   }, []);
 
   // ---------------------------------------------------------------------------
-  // Render loop — cinema + particles + energy tracking
+  // Render loop — cinema + particles + energy + frequency bands + mouse + velocity
   // ---------------------------------------------------------------------------
   useEffect(() => {
     if (!ready) return;
 
     let lastEnergy = -1;
+    const defaultBands = { bass: 0, mids: 0, highs: 0 };
+
     const tick = () => {
       const now = performance.now() / 1000;
 
       // Energy tracking
-      const e = momentumRef.current?.getEnergy() ?? 0;
+      const momentum = momentumRef.current;
+      const e = momentum?.getEnergy() ?? 0;
       energyRef.current = e;
       if (Math.abs(e - lastEnergy) > 0.01) {
         lastEnergy = e;
         onEnergyChangeRef.current?.(e);
       }
 
-      // Unified cinema render — video post-processing + particles
+      // Frequency bands from AnalyserNode
+      const bands = momentum?.getFrequencyBands() ?? defaultBands;
+
+      // Smooth velocity decay (exponential toward 0 when not scrolling)
+      smoothVelocityRef.current +=
+        (velocityRef.current - smoothVelocityRef.current) * 0.15;
+      // Decay raw velocity toward 0 each frame (cleared on scroll)
+      velocityRef.current *= 0.92;
+
+      // Unified cinema render
       const video = videoRef.current;
       const cinema = cinemaRef.current;
       if (video && cinema) {
-        cinema.render(video, now, e, progressRef.current);
+        cinema.render({
+          video,
+          time: now,
+          energy: e,
+          progress: progressRef.current,
+          bands,
+          mouseX: mouseRef.current.x,
+          mouseY: mouseRef.current.y,
+          velocity: smoothVelocityRef.current,
+        });
       }
 
       renderRafRef.current = requestAnimationFrame(tick);
@@ -228,7 +268,7 @@ export default function ScrollVideoPlayer({
   }, [ready]);
 
   // ---------------------------------------------------------------------------
-  // GSAP ScrollTrigger via matchMedia — responsive scrub + reduced-motion
+  // GSAP ScrollTrigger via matchMedia
   // ---------------------------------------------------------------------------
   useEffect(() => {
     if (!ready) return;
@@ -251,9 +291,6 @@ export default function ScrollVideoPlayer({
           trigger: container,
           start: "top top",
           end: "bottom bottom",
-          // reduced-motion: instant sync (no smooth interpolation)
-          // mobile: 2s catch-up (gentler for touch)
-          // desktop: 1.5s catch-up (vinyl feel)
           scrub: reduced ? true : isDesktop ? 1.5 : 2,
           onUpdate: (self) => {
             progressRef.current = self.progress;
@@ -261,12 +298,11 @@ export default function ScrollVideoPlayer({
             const safeTime = clampToBuffered(video, targetTime);
             currentTimeRef.current = safeTime;
 
-            // Throttle seeks — browser can't decode faster than ~30ms
             if (Math.abs(video.currentTime - safeTime) > 0.03) {
               video.currentTime = safeTime;
             }
 
-            // Frame change reporting (3fps overlay system)
+            // Frame change reporting (3fps)
             const frameIndex = Math.floor(safeTime * 3);
             if (frameIndex !== lastFrameIndexRef.current) {
               const dir =
@@ -277,9 +313,22 @@ export default function ScrollVideoPlayer({
               onFrameChangeRef.current?.(frameIndex, dir);
             }
 
-            // Audio impulse from scroll velocity (skip for reduced-motion)
-            if (!reduced && Math.abs(self.getVelocity()) > 50) {
-              momentumRef.current?.addImpulse();
+            // Scroll velocity → shader + audio impulse
+            const rawVelocity = Math.abs(self.getVelocity());
+            if (!reduced) {
+              // Normalize: 0 at rest, 1 at ~2000px/s
+              velocityRef.current = Math.min(1.0, rawVelocity / 2000);
+
+              if (rawVelocity > 50) {
+                momentumRef.current?.addImpulse();
+
+                // Whoosh sound on fast scroll (throttled to 1/sec)
+                const now = performance.now();
+                if (rawVelocity > 800 && now - lastWhooshRef.current > 1000) {
+                  lastWhooshRef.current = now;
+                  playWhoosh();
+                }
+              }
             }
           },
         });
@@ -290,7 +339,7 @@ export default function ScrollVideoPlayer({
   }, [ready, clampToBuffered]);
 
   // ---------------------------------------------------------------------------
-  // AudioMomentum — physics-driven audio tied to scroll energy
+  // AudioMomentum
   // ---------------------------------------------------------------------------
   useEffect(() => {
     if (!ready || !audioSrc) return;
@@ -306,9 +355,9 @@ export default function ScrollVideoPlayer({
     };
   }, [ready, audioSrc]);
 
-  // Sync mute state to AudioMomentum when user toggles
   useEffect(() => {
     momentumRef.current?.setMuted(audioMuted);
+    setMicroSoundsMuted(audioMuted);
   }, [audioMuted]);
 
   // ---------------------------------------------------------------------------
@@ -322,13 +371,13 @@ export default function ScrollVideoPlayer({
       className="relative"
     >
       <div className="sticky top-0 w-full h-screen overflow-hidden">
-        {/* Hidden video element — source for WebGL texture + buffer tracking */}
         <video
           ref={videoRef}
           src={videoSrc}
           muted
           playsInline
           preload="auto"
+          crossOrigin="anonymous"
           onError={onError}
           className="absolute inset-0 w-full h-full object-cover"
           style={{
@@ -337,7 +386,6 @@ export default function ScrollVideoPlayer({
           }}
         />
 
-        {/* Unified WebGL2 canvas — post-processed video + luminance-reactive particles */}
         {hasGL && (
           <canvas
             ref={canvasRef}
@@ -346,7 +394,6 @@ export default function ScrollVideoPlayer({
           />
         )}
 
-        {/* Loading state with real buffer progress */}
         {!ready && (
           <div className="absolute inset-0 flex flex-col items-center justify-center z-10">
             <div className="w-24 h-[1px] relative overflow-hidden bg-white/10">
@@ -363,7 +410,6 @@ export default function ScrollVideoPlayer({
           </div>
         )}
 
-        {/* Overlay content (story beats) */}
         <div className="absolute inset-0 z-20">{children}</div>
       </div>
     </div>

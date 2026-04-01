@@ -1,5 +1,8 @@
 // ---------------------------------------------------------------------------
-// AudioMomentum — physics-driven audio playback tied to user interactions
+// AudioMomentum — physics-driven audio playback + real-time frequency analysis
+// ---------------------------------------------------------------------------
+// Vinyl-style momentum: scroll impulse → energy decay → playbackRate slowdown
+// AnalyserNode: frequency data split into bass/mids/highs for shader reactivity
 // ---------------------------------------------------------------------------
 
 // Physics constants
@@ -12,19 +15,36 @@ const PLAY_THRESHOLD = 0.05;
 const STOP_THRESHOLD = 0.02;
 const DRIFT_THRESHOLD = 3.0;
 
+// Frequency band boundaries (bin indices for fftSize=256 → 128 bins)
+// Sample rate 44100Hz → each bin ≈ 172Hz
+// Bass: 0–10 (~0-1720Hz fundamentals), Mids: 10–50 (~1720-8600Hz), Highs: 50–128 (~8600Hz+)
+const BASS_END = 10;
+const MIDS_END = 50;
+
+// Smoothing for frequency bands (prevents jitter)
+const BAND_SMOOTHING = 0.8;
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
-/** Standard smoothstep — Hermite interpolation clamped to [0, 1]. */
 function smoothstep(edge0: number, edge1: number, x: number): number {
   const t = Math.max(0, Math.min(1, (x - edge0) / (edge1 - edge0)));
   return t * t * (3 - 2 * t);
 }
 
-/** Linear interpolation from a to b by factor t. */
 function lerp(a: number, b: number, t: number): number {
   return a + (b - a) * t;
+}
+
+// ---------------------------------------------------------------------------
+// Public types
+// ---------------------------------------------------------------------------
+
+export interface FrequencyBands {
+  bass: number;   // 0-1: low frequencies (piano body, kick)
+  mids: number;   // 0-1: mid frequencies (melody, voice)
+  highs: number;  // 0-1: high frequencies (harmonics, shimmer)
 }
 
 // ---------------------------------------------------------------------------
@@ -41,6 +61,14 @@ export class AudioMomentum {
   private videoTimeGetter: (() => number) | null = null;
   private hiddenAt: number = 0;
 
+  // Frequency analysis
+  private audioCtx: AudioContext | null = null;
+  private analyser: AnalyserNode | null = null;
+  private sourceNode: MediaElementAudioSourceNode | null = null;
+  private freqData: Uint8Array<ArrayBuffer> | null = null;
+  private bands: FrequencyBands = { bass: 0, mids: 0, highs: 0 };
+  private smoothBands: FrequencyBands = { bass: 0, mids: 0, highs: 0 };
+
   // ---- Public API ---------------------------------------------------------
 
   /** Create the audio element, configure it, and start the physics loop. */
@@ -48,10 +76,14 @@ export class AudioMomentum {
     this.audio = new Audio(audioSrc);
     this.audio.preload = 'auto';
     this.audio.loop = false;
+    this.audio.crossOrigin = 'anonymous';
 
-    // Disable pitch correction so playbackRate changes sound natural.
+    // Disable pitch correction — playbackRate changes produce vinyl slowdown.
     // preservesPitch is baseline since Dec 2023 — no vendor prefixes needed.
     (this.audio as any).preservesPitch = false;
+
+    // Initialize Web Audio API for frequency analysis
+    this.initAnalyser();
 
     // Pause physics when tab is hidden, resume on return
     document.addEventListener('visibilitychange', this.onVisibilityChange);
@@ -74,6 +106,11 @@ export class AudioMomentum {
     return this.energy;
   }
 
+  /** Smoothed frequency bands from real-time audio analysis. */
+  getFrequencyBands(): FrequencyBands {
+    return this.smoothBands;
+  }
+
   /** Mute or unmute the audio element without stopping physics. */
   setMuted(muted: boolean): void {
     if (this.audio) {
@@ -91,6 +128,20 @@ export class AudioMomentum {
       this.rafId = 0;
     }
 
+    // Disconnect Web Audio nodes before releasing audio element
+    if (this.sourceNode) {
+      this.sourceNode.disconnect();
+      this.sourceNode = null;
+    }
+    if (this.analyser) {
+      this.analyser.disconnect();
+      this.analyser = null;
+    }
+    if (this.audioCtx) {
+      this.audioCtx.close().catch(() => {});
+      this.audioCtx = null;
+    }
+
     if (this.audio) {
       this.audio.pause();
       this.audio.src = '';
@@ -101,9 +152,60 @@ export class AudioMomentum {
     this.wasPlaying = false;
     this.playPending = false;
     this.videoTimeGetter = null;
+    this.freqData = null;
+    this.bands = { bass: 0, mids: 0, highs: 0 };
+    this.smoothBands = { bass: 0, mids: 0, highs: 0 };
   }
 
   // ---- Private ------------------------------------------------------------
+
+  /** Set up AudioContext + AnalyserNode for frequency extraction. */
+  private initAnalyser(): void {
+    if (!this.audio) return;
+    try {
+      this.audioCtx = new AudioContext();
+      this.analyser = this.audioCtx.createAnalyser();
+      this.analyser.fftSize = 256;
+      this.analyser.smoothingTimeConstant = 0.8;
+
+      this.sourceNode = this.audioCtx.createMediaElementSource(this.audio);
+      this.sourceNode.connect(this.analyser);
+      this.analyser.connect(this.audioCtx.destination);
+
+      this.freqData = new Uint8Array(this.analyser.frequencyBinCount) as Uint8Array<ArrayBuffer>;
+    } catch {
+      // Web Audio not available — frequency bands stay at 0
+      this.audioCtx = null;
+      this.analyser = null;
+      this.sourceNode = null;
+    }
+  }
+
+  /** Extract bass/mids/highs from frequency data. */
+  private updateFrequencyBands(): void {
+    if (!this.analyser || !this.freqData) return;
+
+    this.analyser.getByteFrequencyData(this.freqData);
+    const bins = this.freqData;
+    const len = bins.length; // 128
+
+    // Average each band, normalize to 0-1
+    let bassSum = 0, midsSum = 0, highsSum = 0;
+    for (let i = 0; i < len; i++) {
+      if (i < BASS_END) bassSum += bins[i];
+      else if (i < MIDS_END) midsSum += bins[i];
+      else highsSum += bins[i];
+    }
+
+    this.bands.bass = bassSum / (BASS_END * 255);
+    this.bands.mids = midsSum / ((MIDS_END - BASS_END) * 255);
+    this.bands.highs = highsSum / ((len - MIDS_END) * 255);
+
+    // Smooth to prevent jitter (exponential moving average)
+    this.smoothBands.bass = lerp(this.bands.bass, this.smoothBands.bass, BAND_SMOOTHING);
+    this.smoothBands.mids = lerp(this.bands.mids, this.smoothBands.mids, BAND_SMOOTHING);
+    this.smoothBands.highs = lerp(this.bands.highs, this.smoothBands.highs, BAND_SMOOTHING);
+  }
 
   /** Pause loop and audio when tab goes to background. */
   private onVisibilityChange = (): void => {
@@ -120,6 +222,12 @@ export class AudioMomentum {
       const elapsed = (performance.now() - this.hiddenAt) / 16.67;
       this.energy *= Math.pow(FRICTION, elapsed);
       if (this.energy < 0.001) this.energy = 0;
+
+      // Resume AudioContext (browsers suspend on hidden tab)
+      if (this.audioCtx?.state === 'suspended') {
+        this.audioCtx.resume().catch(() => {});
+      }
+
       this.startLoop();
     }
   };
@@ -139,11 +247,19 @@ export class AudioMomentum {
     this.energy *= FRICTION;
     if (this.energy < 0.001) this.energy = 0;
 
+    // --- frequency analysis (runs even when muted for visual reactivity) ---
+    this.updateFrequencyBands();
+
     // --- derived values ---
     const rate = lerp(MIN_RATE, MAX_RATE, this.energy);
     const volume = smoothstep(0, 0.15, this.energy) * MAX_VOLUME;
 
     if (this.audio) {
+      // Resume AudioContext on first user interaction (autoplay policy)
+      if (this.audioCtx?.state === 'suspended' && this.energy > 0) {
+        this.audioCtx.resume().catch(() => {});
+      }
+
       // --- start playing ---
       if (this.energy >= PLAY_THRESHOLD && !this.wasPlaying && !this.playPending) {
         this.syncToVideo();
