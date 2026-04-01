@@ -378,14 +378,21 @@ export default function Navigation({
           ))}
 
           <div className="mt-12 flex gap-6">
-            {["IG", "SP", "YT", "TK"].map((s) => (
+            {[
+              { label: "IG", url: "https://www.instagram.com/ivannaura" },
+              { label: "SP", url: "https://open.spotify.com/artist/ivannaura" },
+              { label: "YT", url: "https://www.youtube.com/@ivannaura" },
+              { label: "TK", url: "https://www.tiktok.com/@ivannaura" },
+            ].map((s) => (
               <a
-                key={s}
-                href="#"
+                key={s.label}
+                href={s.url}
+                target="_blank"
+                rel="noopener noreferrer"
                 className="text-[10px] tracking-[0.2em] transition-colors duration-300 hover:text-[var(--aura-gold)]"
                 style={{ color: "var(--text-muted)" }}
               >
-                {s}
+                {s.label}
               </a>
             ))}
           </div>

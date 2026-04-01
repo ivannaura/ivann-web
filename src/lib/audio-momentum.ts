@@ -178,6 +178,10 @@ export class AudioMomentum {
       this.freqData = new Uint8Array(this.analyser.frequencyBinCount) as Uint8Array<ArrayBuffer>;
     } catch {
       // Web Audio not available — frequency bands stay at 0
+      // Release the acquired context ref to keep refCount balanced
+      if (this.audioCtx) {
+        releaseAudioContext();
+      }
       this.audioCtx = null;
       this.analyser = null;
       this.sourceNode = null;
@@ -256,8 +260,8 @@ export class AudioMomentum {
     const volume = smoothstep(0, 0.15, this.energy) * MAX_VOLUME;
 
     if (this.audio) {
-      // Resume shared AudioContext on first user interaction (autoplay policy)
-      if (this.energy > 0) {
+      // Resume shared AudioContext once on first user interaction (autoplay policy)
+      if (this.energy > 0 && this.audioCtx?.state === 'suspended') {
         resumeAudioContext();
       }
 

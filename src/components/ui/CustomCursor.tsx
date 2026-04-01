@@ -20,6 +20,10 @@ export default function CustomCursor() {
     let ringY = -100;
     let visible = false;
 
+    // Set initial off-screen position imperatively (avoids React re-render overwriting transform)
+    if (dotRef.current) dotRef.current.style.transform = "translate(-100px, -100px)";
+    if (ringRef.current) ringRef.current.style.transform = "translate(-100px, -100px)";
+
     const onMouseMove = (e: MouseEvent) => {
       mouseX = e.clientX;
       mouseY = e.clientY;
@@ -83,7 +87,6 @@ export default function CustomCursor() {
         ref={dotRef}
         className="cursor-dot hidden md:block"
         style={{
-          transform: "translate(-100px, -100px)",
           ...(isHover ? { scale: "2" } : {}),
           opacity: isHidden ? 0 : 1,
         }}
@@ -92,7 +95,6 @@ export default function CustomCursor() {
         ref={ringRef}
         className="cursor-ring hidden md:block"
         style={{
-          transform: "translate(-100px, -100px)",
           width: isHover ? "60px" : "40px",
           height: isHover ? "60px" : "40px",
           opacity: isHidden ? 0 : 0.3,
