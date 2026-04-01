@@ -9,25 +9,43 @@ export default function CustomCursor() {
   const cursorVariant = useUIStore((s) => s.cursorVariant);
 
   useEffect(() => {
-    // Only show custom cursor on desktop
     const isMobile = window.matchMedia("(pointer: coarse)").matches;
     if (isMobile) return;
 
     document.body.style.cursor = "none";
 
-    let mouseX = 0;
-    let mouseY = 0;
-    let ringX = 0;
-    let ringY = 0;
+    let mouseX = -100;
+    let mouseY = -100;
+    let ringX = -100;
+    let ringY = -100;
+    let visible = false;
 
     const onMouseMove = (e: MouseEvent) => {
       mouseX = e.clientX;
       mouseY = e.clientY;
 
-      if (dotRef.current) {
-        dotRef.current.style.left = `${mouseX - 4}px`;
-        dotRef.current.style.top = `${mouseY - 4}px`;
+      if (!visible) {
+        visible = true;
+        if (dotRef.current) dotRef.current.style.opacity = "";
+        if (ringRef.current) ringRef.current.style.opacity = "";
       }
+
+      // GPU-composited transform instead of left/top
+      if (dotRef.current) {
+        dotRef.current.style.transform = `translate(${mouseX - 4}px, ${mouseY - 4}px)`;
+      }
+    };
+
+    const onMouseLeave = () => {
+      visible = false;
+      if (dotRef.current) dotRef.current.style.opacity = "0";
+      if (ringRef.current) ringRef.current.style.opacity = "0";
+    };
+
+    const onMouseEnter = () => {
+      visible = true;
+      if (dotRef.current) dotRef.current.style.opacity = "";
+      if (ringRef.current) ringRef.current.style.opacity = "";
     };
 
     let frameId = 0;
@@ -36,18 +54,21 @@ export default function CustomCursor() {
       ringY += (mouseY - ringY) * 0.12;
 
       if (ringRef.current) {
-        ringRef.current.style.left = `${ringX - 20}px`;
-        ringRef.current.style.top = `${ringY - 20}px`;
+        ringRef.current.style.transform = `translate(${ringX - 20}px, ${ringY - 20}px)`;
       }
 
       frameId = requestAnimationFrame(animateRing);
     };
 
     window.addEventListener("mousemove", onMouseMove);
+    document.documentElement.addEventListener("mouseleave", onMouseLeave);
+    document.documentElement.addEventListener("mouseenter", onMouseEnter);
     frameId = requestAnimationFrame(animateRing);
 
     return () => {
       window.removeEventListener("mousemove", onMouseMove);
+      document.documentElement.removeEventListener("mouseleave", onMouseLeave);
+      document.documentElement.removeEventListener("mouseenter", onMouseEnter);
       cancelAnimationFrame(frameId);
       document.body.style.cursor = "";
     };
@@ -62,7 +83,8 @@ export default function CustomCursor() {
         ref={dotRef}
         className="cursor-dot hidden md:block"
         style={{
-          transform: isHover ? "scale(2)" : "scale(1)",
+          transform: "translate(-100px, -100px)",
+          ...(isHover ? { scale: "2" } : {}),
           opacity: isHidden ? 0 : 1,
         }}
       />
@@ -70,10 +92,9 @@ export default function CustomCursor() {
         ref={ringRef}
         className="cursor-ring hidden md:block"
         style={{
+          transform: "translate(-100px, -100px)",
           width: isHover ? "60px" : "40px",
           height: isHover ? "60px" : "40px",
-          marginLeft: isHover ? "-10px" : "0",
-          marginTop: isHover ? "-10px" : "0",
           opacity: isHidden ? 0 : 0.3,
           borderColor: isHover
             ? "rgba(201, 168, 76, 0.5)"

@@ -1,7 +1,30 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import gsap from "gsap";
+import { ScrollTrigger } from "gsap/ScrollTrigger";
+import { SplitText } from "gsap/SplitText";
 import { useUIStore } from "@/stores/useUIStore";
+import { playHover } from "@/lib/micro-sounds";
+
+if (typeof window !== "undefined") {
+  gsap.registerPlugin(ScrollTrigger, SplitText);
+}
+
+const EVENT_TYPES = [
+  { value: "corporativo", label: "Evento Corporativo" },
+  { value: "festival", label: "Festival" },
+  { value: "privado", label: "Evento Privado" },
+  { value: "colaboracion", label: "Colaboración" },
+  { value: "otro", label: "Otro" },
+];
+
+const SOCIAL_LINKS = [
+  { name: "Instagram", url: "https://www.instagram.com/ivannaura" },
+  { name: "Spotify", url: "https://open.spotify.com/artist/ivannaura" },
+  { name: "YouTube", url: "https://www.youtube.com/@ivannaura" },
+  { name: "TikTok", url: "https://www.tiktok.com/@ivannaura" },
+];
 
 export default function Contact() {
   const sectionRef = useRef<HTMLElement>(null);
@@ -13,37 +36,99 @@ export default function Contact() {
     message: "",
   });
   const [submitted, setSubmitted] = useState(false);
+  const [errors, setErrors] = useState<Record<string, string>>({});
 
+  // GSAP ScrollTrigger entrance — replaces IntersectionObserver + reveal-up CSS
   useEffect(() => {
     const section = sectionRef.current;
     if (!section) return;
 
-    const observer = new IntersectionObserver(
-      (entries) => {
-        entries.forEach((entry) => {
-          if (entry.isIntersecting) {
-            const reveals = section.querySelectorAll(".reveal-up");
-            reveals.forEach((el, i) => {
-              setTimeout(() => el.classList.add("active"), i * 150);
-            });
-          }
-        });
-      },
-      { threshold: 0.1 }
-    );
+    const ctx = gsap.context(() => {
+      const mm = gsap.matchMedia();
 
-    observer.observe(section);
-    return () => observer.disconnect();
+      mm.add("(prefers-reduced-motion: no-preference)", () => {
+        // Animate all reveal targets with stagger
+        const targets = section.querySelectorAll<HTMLElement>("[data-reveal]");
+        gsap.from(targets, {
+          y: 30,
+          opacity: 0,
+          stagger: 0.1,
+          duration: 0.8,
+          ease: "power3.out",
+          scrollTrigger: {
+            trigger: section,
+            start: "top 80%",
+            once: true,
+          },
+        });
+
+        // SplitText on the heading
+        const heading = section.querySelector<HTMLElement>("[data-split-heading]");
+        if (heading) {
+          const split = SplitText.create(heading, { type: "words,chars", mask: "words" });
+          gsap.from(split.chars, {
+            yPercent: 100,
+            stagger: 0.03,
+            duration: 0.8,
+            ease: "power3.out",
+            scrollTrigger: {
+              trigger: heading,
+              start: "top 85%",
+              once: true,
+            },
+          });
+        }
+
+        // Horizontal line animation
+        const line = section.querySelector<HTMLElement>("[data-line]");
+        if (line) {
+          gsap.from(line, {
+            scaleX: 0,
+            transformOrigin: "left",
+            duration: 1.2,
+            ease: "power2.inOut",
+            scrollTrigger: {
+              trigger: line,
+              start: "top 90%",
+              once: true,
+            },
+          });
+        }
+      });
+    }, section);
+
+    return () => ctx.revert();
   }, []);
+
+  const validate = (): boolean => {
+    const e: Record<string, string> = {};
+    if (!formState.name.trim()) e.name = "Nombre requerido";
+    if (!formState.email.trim()) {
+      e.email = "Email requerido";
+    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formState.email)) {
+      e.email = "Email inválido";
+    }
+    if (!formState.message.trim()) e.message = "Mensaje requerido";
+    setErrors(e);
+    return Object.keys(e).length === 0;
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    // TODO: integrate with backend
+    if (!validate()) return;
+
+    // Build mailto with form data as body
+    const typeLabel = EVENT_TYPES.find((t) => t.value === formState.type)?.label ?? formState.type;
+    const subject = encodeURIComponent(`Consulta: ${typeLabel} — ${formState.name}`);
+    const body = encodeURIComponent(
+      `Nombre: ${formState.name}\nEmail: ${formState.email}\nTipo: ${typeLabel}\n\n${formState.message}`
+    );
+    window.open(`mailto:booking@ivannaura.com?subject=${subject}&body=${body}`, "_self");
     setSubmitted(true);
   };
 
-  const inputClass =
-    "w-full bg-transparent border-b py-3 text-sm font-light focus:outline-none transition-colors duration-300";
+  const inputBase =
+    "w-full bg-transparent border-b py-3 text-sm font-light transition-colors duration-300 focus:outline-none border-[var(--bg-subtle)] focus:border-[var(--aura-gold-dim)] text-[var(--text-primary)] placeholder:text-[var(--text-muted)]";
 
   return (
     <section
@@ -63,7 +148,7 @@ export default function Contact() {
 
       <div className="max-w-[1200px] mx-auto relative z-10">
         {/* Section label */}
-        <div className="reveal-up mb-16 md:mb-24">
+        <div data-reveal className="mb-16 md:mb-24">
           <span
             className="text-[10px] tracking-[0.4em] uppercase"
             style={{ color: "var(--text-muted)" }}
@@ -71,7 +156,8 @@ export default function Contact() {
             04 — Contacto
           </span>
           <div
-            className="line-grow mt-4 w-full h-px"
+            data-line
+            className="mt-4 w-full h-px"
             style={{ background: "var(--bg-subtle)" }}
           />
         </div>
@@ -80,18 +166,20 @@ export default function Contact() {
           {/* Left column */}
           <div className="md:col-span-5">
             <h2
-              className="reveal-up text-[clamp(2rem,5vw,3.5rem)] font-extralight leading-[1.1] mb-8"
+              data-split-heading
+              data-reveal
+              className="text-[clamp(2rem,5vw,3.5rem)] font-extralight leading-[1.1] mb-8"
               style={{ color: "var(--text-primary)" }}
             >
-              Hagamos algo
-              <br />
+              Hagamos algo{" "}
               <span style={{ color: "var(--aura-gold)" }}>
                 extraordinario
               </span>
             </h2>
 
             <p
-              className="reveal-up text-base font-light leading-relaxed mb-12"
+              data-reveal
+              className="text-base font-light leading-relaxed mb-12"
               style={{ color: "var(--text-secondary)" }}
             >
               Shows corporativos, festivales, eventos privados, colaboraciones.
@@ -99,7 +187,7 @@ export default function Contact() {
             </p>
 
             {/* Contact info */}
-            <div className="reveal-up flex flex-col gap-6">
+            <div data-reveal className="flex flex-col gap-6">
               <div>
                 <span
                   className="text-[10px] tracking-[0.3em] uppercase block mb-2"
@@ -111,7 +199,7 @@ export default function Contact() {
                   href="mailto:booking@ivannaura.com"
                   className="text-sm transition-colors duration-300 hover:text-[var(--aura-gold)]"
                   style={{ color: "var(--text-secondary)" }}
-                  onMouseEnter={() => setCursorVariant("hover")}
+                  onMouseEnter={() => { setCursorVariant("hover"); playHover(); }}
                   onMouseLeave={() => setCursorVariant("default")}
                 >
                   booking@ivannaura.com
@@ -126,18 +214,15 @@ export default function Contact() {
                   Redes
                 </span>
                 <div className="flex gap-6">
-                  {[
-                    { name: "Instagram", url: "#" },
-                    { name: "Spotify", url: "#" },
-                    { name: "YouTube", url: "#" },
-                    { name: "TikTok", url: "#" },
-                  ].map((social) => (
+                  {SOCIAL_LINKS.map((social) => (
                     <a
                       key={social.name}
                       href={social.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
                       className="text-xs tracking-[0.15em] uppercase transition-colors duration-300 hover:text-[var(--aura-gold)]"
                       style={{ color: "var(--text-muted)" }}
-                      onMouseEnter={() => setCursorVariant("hover")}
+                      onMouseEnter={() => { setCursorVariant("hover"); playHover(); }}
                       onMouseLeave={() => setCursorVariant("default")}
                     >
                       {social.name}
@@ -152,7 +237,7 @@ export default function Contact() {
           <div className="md:col-span-1" />
           <div className="md:col-span-6">
             {submitted ? (
-              <div className="reveal-up flex flex-col items-center justify-center h-full text-center py-20">
+              <div data-reveal className="flex flex-col items-center justify-center h-full text-center py-20">
                 <div
                   className="w-16 h-16 rounded-full flex items-center justify-center mb-6"
                   style={{ border: "1px solid var(--aura-gold-dim)" }}
@@ -163,18 +248,24 @@ export default function Contact() {
                   className="text-xl font-light mb-3"
                   style={{ color: "var(--text-primary)" }}
                 >
-                  Mensaje enviado
+                  Abriendo tu correo...
                 </h3>
                 <p
                   className="text-sm"
                   style={{ color: "var(--text-secondary)" }}
                 >
-                  Te responderemos pronto.
+                  Si no se abrió, escríbenos directamente a{" "}
+                  <a
+                    href="mailto:booking@ivannaura.com"
+                    className="underline hover:text-[var(--aura-gold)]"
+                  >
+                    booking@ivannaura.com
+                  </a>
                 </p>
               </div>
             ) : (
-              <form onSubmit={handleSubmit} className="flex flex-col gap-8">
-                <div className="reveal-up">
+              <form onSubmit={handleSubmit} className="flex flex-col gap-8" noValidate>
+                <div data-reveal>
                   <label
                     htmlFor="contact-name"
                     className="text-[10px] tracking-[0.3em] uppercase block mb-2"
@@ -190,21 +281,17 @@ export default function Contact() {
                     onChange={(e) =>
                       setFormState((s) => ({ ...s, name: e.target.value }))
                     }
-                    className={inputClass}
-                    style={{
-                      color: "var(--text-primary)",
-                      borderColor: "var(--bg-subtle)",
-                    }}
-                    onFocus={(e) =>
-                      (e.target.style.borderColor = "var(--aura-gold-dim)")
-                    }
-                    onBlur={(e) =>
-                      (e.target.style.borderColor = "var(--bg-subtle)")
-                    }
+                    className={inputBase}
+                    aria-invalid={!!errors.name}
                   />
+                  {errors.name && (
+                    <p className="text-[10px] mt-1" style={{ color: "var(--crimson)" }}>
+                      {errors.name}
+                    </p>
+                  )}
                 </div>
 
-                <div className="reveal-up">
+                <div data-reveal>
                   <label
                     htmlFor="contact-email"
                     className="text-[10px] tracking-[0.3em] uppercase block mb-2"
@@ -220,21 +307,17 @@ export default function Contact() {
                     onChange={(e) =>
                       setFormState((s) => ({ ...s, email: e.target.value }))
                     }
-                    className={inputClass}
-                    style={{
-                      color: "var(--text-primary)",
-                      borderColor: "var(--bg-subtle)",
-                    }}
-                    onFocus={(e) =>
-                      (e.target.style.borderColor = "var(--aura-gold-dim)")
-                    }
-                    onBlur={(e) =>
-                      (e.target.style.borderColor = "var(--bg-subtle)")
-                    }
+                    className={inputBase}
+                    aria-invalid={!!errors.email}
                   />
+                  {errors.email && (
+                    <p className="text-[10px] mt-1" style={{ color: "var(--crimson)" }}>
+                      {errors.email}
+                    </p>
+                  )}
                 </div>
 
-                <div className="reveal-up">
+                <div data-reveal>
                   <label
                     htmlFor="contact-type"
                     className="text-[10px] tracking-[0.3em] uppercase block mb-2"
@@ -248,32 +331,27 @@ export default function Contact() {
                     onChange={(e) =>
                       setFormState((s) => ({ ...s, type: e.target.value }))
                     }
-                    className={`${inputClass} appearance-none`}
+                    className={`${inputBase} appearance-none`}
                     style={{
-                      color: "var(--text-primary)",
-                      borderColor: "var(--bg-subtle)",
                       background: "transparent",
                     }}
                   >
-                    <option value="corporativo" style={{ background: "var(--bg-surface)" }}>
-                      Evento Corporativo
-                    </option>
-                    <option value="festival" style={{ background: "var(--bg-surface)" }}>
-                      Festival
-                    </option>
-                    <option value="privado" style={{ background: "var(--bg-surface)" }}>
-                      Evento Privado
-                    </option>
-                    <option value="colaboracion" style={{ background: "var(--bg-surface)" }}>
-                      Colaboración
-                    </option>
-                    <option value="otro" style={{ background: "var(--bg-surface)" }}>
-                      Otro
-                    </option>
+                    {EVENT_TYPES.map((t) => (
+                      <option
+                        key={t.value}
+                        value={t.value}
+                        style={{
+                          background: "var(--bg-surface)",
+                          color: "var(--text-primary)",
+                        }}
+                      >
+                        {t.label}
+                      </option>
+                    ))}
                   </select>
                 </div>
 
-                <div className="reveal-up">
+                <div data-reveal>
                   <label
                     htmlFor="contact-message"
                     className="text-[10px] tracking-[0.3em] uppercase block mb-2"
@@ -289,24 +367,20 @@ export default function Contact() {
                     onChange={(e) =>
                       setFormState((s) => ({ ...s, message: e.target.value }))
                     }
-                    className={`${inputClass} resize-none`}
-                    style={{
-                      color: "var(--text-primary)",
-                      borderColor: "var(--bg-subtle)",
-                    }}
-                    onFocus={(e) =>
-                      (e.target.style.borderColor = "var(--aura-gold-dim)")
-                    }
-                    onBlur={(e) =>
-                      (e.target.style.borderColor = "var(--bg-subtle)")
-                    }
+                    className={`${inputBase} resize-none`}
+                    aria-invalid={!!errors.message}
                   />
+                  {errors.message && (
+                    <p className="text-[10px] mt-1" style={{ color: "var(--crimson)" }}>
+                      {errors.message}
+                    </p>
+                  )}
                 </div>
 
-                <div className="reveal-up">
+                <div data-reveal>
                   <button
                     type="submit"
-                    className="px-10 py-4 text-xs tracking-[0.3em] uppercase transition-all duration-500 rounded-sm hover:bg-[var(--aura-gold)] hover:text-[var(--bg-void)]"
+                    className="magnetic-btn px-10 py-4 text-xs tracking-[0.3em] uppercase transition-all duration-500 rounded-sm hover:bg-[var(--aura-gold)] hover:text-[var(--bg-void)]"
                     style={{
                       border: "1px solid var(--aura-gold-dim)",
                       color: "var(--aura-gold)",

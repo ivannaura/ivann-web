@@ -46,9 +46,9 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
-/* Hide scrollbar but keep functionality */
-body::-webkit-scrollbar { width: 0; }
-body { scrollbar-width: none; }
+/* Hide scrollbar but keep functionality — must be on html for Lenis */
+html::-webkit-scrollbar { width: 0; }
+html { scrollbar-width: none; }
 
 /* Selection */
 ::selection {
@@ -56,49 +56,21 @@ body { scrollbar-width: none; }
   color: var(--bg-void);
 }
 
-/* Grain overlay */
-.grain::after {
-  content: "";
-  position: fixed;
-  inset: 0;
-  z-index: 9999;
-  pointer-events: none;
-  opacity: 0.035;
-  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
-  background-repeat: repeat;
-  background-size: 256px 256px;
-}
+/* Grain overlay removed — shader handles film grain in cinema-gl.ts */
 
-/* Section reveals — gated by IntersectionObserver adding .active */
-.reveal-up {
-  opacity: 0;
-  transform: translateY(30px);
-}
-.reveal-up.active {
-  animation: fade-in-up 0.8s cubic-bezier(0.16, 1, 0.3, 1) both;
-}
-
-/* Horizontal line animation */
-.line-grow {
-  transform-origin: left;
-  animation: line-scale 1.2s cubic-bezier(0.16, 1, 0.3, 1) 0.2s both;
-}
-
-@keyframes line-scale {
-  from { transform: scaleX(0); }
-  to { transform: scaleX(1); }
-}
-
-/* Custom cursor styles */
+/* Custom cursor styles — will-change: transform for GPU compositing */
 .cursor-dot {
   width: 8px;
   height: 8px;
   background: var(--aura-gold);
   border-radius: 50%;
   position: fixed;
+  top: 0;
+  left: 0;
   pointer-events: none;
   z-index: 99999;
   mix-blend-mode: difference;
+  will-change: transform;
   transition: transform 0.15s ease-out, opacity 0.15s ease-out;
 }
 
@@ -108,23 +80,20 @@ body { scrollbar-width: none; }
   border: 1px solid rgba(201, 168, 76, 0.3);
   border-radius: 50%;
   position: fixed;
+  top: 0;
+  left: 0;
   pointer-events: none;
   z-index: 99998;
+  will-change: transform;
   transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1),
               width 0.3s cubic-bezier(0.16, 1, 0.3, 1),
               height 0.3s cubic-bezier(0.16, 1, 0.3, 1),
               opacity 0.3s ease-out;
 }
 
-@keyframes fade-in-up {
-  from {
-    opacity: 0;
-    transform: translateY(30px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+/* Magnetic button — spring-back transition for Awwwards-style hover */
+.magnetic-btn {
+  transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 /* Native <dialog> reset for mobile menu */

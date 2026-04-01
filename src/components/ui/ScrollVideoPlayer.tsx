@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
-import { AudioMomentum } from "@/lib/audio-momentum";
+import { AudioMomentum, type FrequencyBands } from "@/lib/audio-momentum";
 import { initCinemaGL, type CinemaGL } from "@/lib/cinema-gl";
 import { playWhoosh, setMicroSoundsMuted } from "@/lib/micro-sounds";
 
@@ -20,6 +20,7 @@ interface ScrollVideoPlayerProps {
     direction: "forward" | "backward"
   ) => void;
   onEnergyChange?: (energy: number) => void;
+  onBandsChange?: (bands: FrequencyBands) => void;
   onError?: () => void;
   audioMuted?: boolean;
   children?: React.ReactNode;
@@ -41,6 +42,7 @@ export default function ScrollVideoPlayer({
   scrollHeight = 800,
   onFrameChange,
   onEnergyChange,
+  onBandsChange,
   onError,
   audioMuted = false,
   children,
@@ -76,6 +78,8 @@ export default function ScrollVideoPlayer({
   onFrameChangeRef.current = onFrameChange;
   const onEnergyChangeRef = useRef(onEnergyChange);
   onEnergyChangeRef.current = onEnergyChange;
+  const onBandsChangeRef = useRef(onBandsChange);
+  onBandsChangeRef.current = onBandsChange;
 
   const clampToBuffered = useCallback(
     (video: HTMLVideoElement, time: number): number => {
@@ -235,8 +239,9 @@ export default function ScrollVideoPlayer({
         onEnergyChangeRef.current?.(e);
       }
 
-      // Frequency bands from AnalyserNode
+      // Frequency bands from AnalyserNode — also forwarded to page
       const bands = momentum?.getFrequencyBands() ?? defaultBands;
+      onBandsChangeRef.current?.(bands);
 
       // Smooth velocity decay (exponential toward 0 when not scrolling)
       smoothVelocityRef.current +=

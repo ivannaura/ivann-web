@@ -4,7 +4,7 @@ import { create } from "zustand";
 
 interface UIState {
   menuOpen: boolean;
-  cursorVariant: "default" | "hover" | "text" | "hidden";
+  cursorVariant: "default" | "hover" | "hidden";
   toggleMenu: () => void;
   setMenuOpen: (open: boolean) => void;
   setCursorVariant: (variant: UIState["cursorVariant"]) => void;

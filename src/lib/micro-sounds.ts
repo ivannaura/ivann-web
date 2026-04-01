@@ -2,8 +2,10 @@
 // MicroSounds — lightweight audio feedback using Web Audio API oscillators
 // ---------------------------------------------------------------------------
 // No audio files needed. Each sound is a parametric oscillator with envelope.
-// Respects user mute preference. Lazy-creates AudioContext on first call.
+// Respects user mute preference. Uses shared AudioContext (iOS Safari limit).
 // ---------------------------------------------------------------------------
+
+import { acquireAudioContext, releaseAudioContext } from './shared-audio-context';
 
 let ctx: AudioContext | null = null;
 let muted = false;
@@ -17,14 +19,7 @@ if (typeof window !== 'undefined') {
 function getCtx(): AudioContext | null {
   if (reducedMotion || muted) return null;
   if (!ctx) {
-    try {
-      ctx = new AudioContext();
-    } catch {
-      return null;
-    }
-  }
-  if (ctx.state === 'suspended') {
-    ctx.resume().catch(() => {});
+    ctx = acquireAudioContext();
   }
   return ctx;
 }
@@ -109,10 +104,10 @@ export function playWhoosh(): void {
   osc.stop(now + 0.2);
 }
 
-/** Clean up AudioContext on destroy. */
+/** Release shared AudioContext reference. */
 export function destroyMicroSounds(): void {
   if (ctx) {
-    ctx.close().catch(() => {});
+    releaseAudioContext();
     ctx = null;
   }
 }

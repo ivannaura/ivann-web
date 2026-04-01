@@ -36,6 +36,9 @@ export default function Navigation({
   const setCursorVariant = useUIStore((s) => s.setCursorVariant);
 
   useEffect(() => {
+    // Cache section elements once — no querySelector per scroll frame
+    let sectionEls: (Element | null)[] | null = null;
+
     const onScroll = () => {
       const y = window.scrollY;
       setScrolled(y > 80);
@@ -43,12 +46,13 @@ export default function Navigation({
       const docHeight = document.documentElement.scrollHeight - window.innerHeight;
       setScrollProgress(docHeight > 0 ? y / docHeight : 0);
 
-      const sections = NAV_ITEMS.map((item) =>
-        document.querySelector(item.href)
-      );
+      if (!sectionEls) {
+        sectionEls = NAV_ITEMS.map((item) => document.querySelector(item.href));
+      }
+
       let found = false;
-      for (let i = sections.length - 1; i >= 0; i--) {
-        const section = sections[i];
+      for (let i = sectionEls.length - 1; i >= 0; i--) {
+        const section = sectionEls[i];
         if (section) {
           const rect = section.getBoundingClientRect();
           if (rect.top <= window.innerHeight * 0.4) {

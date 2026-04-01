@@ -5,6 +5,8 @@
 // AnalyserNode: frequency data split into bass/mids/highs for shader reactivity
 // ---------------------------------------------------------------------------
 
+import { acquireAudioContext, releaseAudioContext, resumeAudioContext } from './shared-audio-context';
+
 // Physics constants
 const IMPULSE = 0.2;
 const FRICTION = 0.985;
@@ -21,8 +23,8 @@ const DRIFT_THRESHOLD = 3.0;
 const BASS_END = 10;
 const MIDS_END = 50;
 
-// Smoothing for frequency bands (prevents jitter)
-const BAND_SMOOTHING = 0.8;
+// EMA alpha for frequency bands — lower = smoother (less jitter)
+const BAND_ALPHA = 0.2;
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -138,7 +140,7 @@ export class AudioMomentum {
       this.analyser = null;
     }
     if (this.audioCtx) {
-      this.audioCtx.close().catch(() => {});
+      releaseAudioContext();
       this.audioCtx = null;
     }
 
@@ -163,7 +165,8 @@ export class AudioMomentum {
   private initAnalyser(): void {
     if (!this.audio) return;
     try {
-      this.audioCtx = new AudioContext();
+      this.audioCtx = acquireAudioContext();
+      if (!this.audioCtx) return;
       this.analyser = this.audioCtx.createAnalyser();
       this.analyser.fftSize = 256;
       this.analyser.smoothingTimeConstant = 0.8;
@@ -201,10 +204,10 @@ export class AudioMomentum {
     this.bands.mids = midsSum / ((MIDS_END - BASS_END) * 255);
     this.bands.highs = highsSum / ((len - MIDS_END) * 255);
 
-    // Smooth to prevent jitter (exponential moving average)
-    this.smoothBands.bass = lerp(this.bands.bass, this.smoothBands.bass, BAND_SMOOTHING);
-    this.smoothBands.mids = lerp(this.bands.mids, this.smoothBands.mids, BAND_SMOOTHING);
-    this.smoothBands.highs = lerp(this.bands.highs, this.smoothBands.highs, BAND_SMOOTHING);
+    // EMA smoothing: smoothed = lerp(smoothed, raw, alpha)
+    this.smoothBands.bass = lerp(this.smoothBands.bass, this.bands.bass, BAND_ALPHA);
+    this.smoothBands.mids = lerp(this.smoothBands.mids, this.bands.mids, BAND_ALPHA);
+    this.smoothBands.highs = lerp(this.smoothBands.highs, this.bands.highs, BAND_ALPHA);
   }
 
   /** Pause loop and audio when tab goes to background. */
@@ -223,10 +226,8 @@ export class AudioMomentum {
       this.energy *= Math.pow(FRICTION, elapsed);
       if (this.energy < 0.001) this.energy = 0;
 
-      // Resume AudioContext (browsers suspend on hidden tab)
-      if (this.audioCtx?.state === 'suspended') {
-        this.audioCtx.resume().catch(() => {});
-      }
+      // Resume shared AudioContext (browsers suspend on hidden tab)
+      resumeAudioContext();
 
       this.startLoop();
     }
@@ -255,9 +256,9 @@ export class AudioMomentum {
     const volume = smoothstep(0, 0.15, this.energy) * MAX_VOLUME;
 
     if (this.audio) {
-      // Resume AudioContext on first user interaction (autoplay policy)
-      if (this.audioCtx?.state === 'suspended' && this.energy > 0) {
-        this.audioCtx.resume().catch(() => {});
+      // Resume shared AudioContext on first user interaction (autoplay policy)
+      if (this.energy > 0) {
+        resumeAudioContext();
       }
 
       // --- start playing ---

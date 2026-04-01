@@ -11,12 +11,12 @@ The video is not "played" — it is **scrubbed** by scroll position. This create
 ```
 User scrolls
     ↓
-Lenis smooth scroll (lerp 0.1, duration 1.2s)
+Lenis smooth scroll (lerp 0.08, autoRaf: false)
     ↓
-useLenis → ScrollTrigger.update()      (LenisGSAPBridge)
+GSAP ticker drives lenis.raf(time * 1000)  (single RAF loop)
     ↓
-GSAP ScrollTrigger (scrub: 1.5)
-  progress = scroll position 0-1       (smooth 1.5s catch-up)
+gsap.matchMedia() → ScrollTrigger (scrub: 1.5 desktop / 2 mobile / true reduced-motion)
+  progress = scroll position 0-1
     ↓
 targetTime = progress * videoDuration
 safeTime = clampToBuffered(targetTime)
@@ -24,9 +24,12 @@ video.currentTime = safeTime
     ↓
 frameIndex = Math.floor(safeTime * 3) → ScrollStoryOverlay
     ↓
+onEnergyChange → energyRef (60fps) → displayEnergy (10fps via setInterval)
+onBandsChange → bandsRef (60fps) → displayBands (10fps)
+    ↓
 Cinema rAF loop:
-  cinema.render(video, time, energy, progress)  → WebGL post-processing
-  particles.render(time, energy)                → floating light motes
+  cinema.render({ video, time, energy, progress, bands, mouseX, mouseY, velocity })
+  → WebGL post-processing + luminance-reactive particles
 ```
 
 ### Why GSAP ScrollTrigger instead of manual inertia?
@@ -129,6 +132,19 @@ if abs(audio.currentTime - videoTime) > 3.0 seconds:
 
 `FRICTION = 0.985` per frame. At 60fps: half-life ≈ 46 frames ≈ 766ms. This means energy drops to 50% about 0.77 seconds after the last impulse. The decay is fast enough to feel responsive but slow enough for the audio to fade naturally rather than cutting.
 
+### Shared AudioContext
+
+AudioMomentum and MicroSounds share one `AudioContext` via `shared-audio-context.ts`. This is critical because iOS Safari limits pages to 4 AudioContexts total. The module uses ref counting: `acquireAudioContext()` increments, `releaseAudioContext()` decrements. The context only closes when the last consumer releases.
+
+### Frequency Analysis
+
+`AnalyserNode` with `fftSize=256` → 128 frequency bins. Bands:
+- Bass (bins 0-10): drives vignette breathing, particle size pulse
+- Mids (bins 10-50): drives chromatic aberration boost
+- Highs (bins 50-128): drives bloom intensity, particle glow
+
+EMA smoothing with `BAND_ALPHA=0.2`: `smooth = lerp(smooth, raw, 0.2)`. Convention: `lerp(old, new, alpha)`.
+
 ### Visibility API integration
 
 When the tab goes hidden (`document.hidden`), AudioMomentum:
@@ -142,7 +158,7 @@ When the tab goes hidden (`document.hidden`), AudioMomentum:
 
 ### Dynamic Narrative Mood
 
-The cinema shader uses a `u_progress` uniform (0-1 from scroll position) to vary effect intensity across 8 narrative acts:
+The cinema shader uses a `u_progress` uniform (0-1 from scroll position) to vary effect intensity across 8 narrative acts via smooth Hermite interpolation:
 
 | Act | Name | Mood | Effect |
 |-----|------|------|--------|
@@ -155,11 +171,15 @@ The cinema shader uses a `u_progress` uniform (0-1 from scroll position) to vary
 | 7 | Resolución | 0.8 | Calming back down |
 | 8 | Cierre | 0.5 | Peaceful — back to gentle |
 
-All four effects (chromatic aberration, vignette, grain, bloom) scale with `mood`:
-- **Chromatic aberration**: `d * 0.002 * (1 + energy * 3) * mood` — edge offset
-- **Vignette**: tighter edges during intense acts
-- **Film grain**: more grain during transitions
-- **Bloom**: lower threshold at peak = more glow
+All effects scale with `mood`:
+- **Chromatic aberration**: `d * 0.002 * (1 + energy * 3 + mids * 2) * mood` + directional from cursor + velocity smear
+- **Vignette**: tighter edges during intense acts, with bass-reactive breathing
+- **Film grain**: `0.04 + mood * 0.025` — the only grain on the page (CSS overlay removed)
+- **Bloom**: lower threshold at peak = more glow, boosted by highs
+
+### Particle Buffer Strategy
+
+Particles use pre-allocated `DYNAMIC_DRAW` buffer. Updated per frame with `bufferSubData` (avoids reallocation overhead of `bufferData` every frame). 250 particles × 4 floats (x, y, alpha, size) = 4KB per frame.
 
 ### Graceful degradation
 
@@ -167,7 +187,7 @@ All four effects (chromatic aberration, vignette, grain, bloom) scale with `mood
 
 ---
 
-## Particle System (ParticlesGL)
+## Particle System
 
 250 GL_POINTS with additive blending (`gl.blendFunc(SRC_ALPHA, ONE)`) creating glowing light motes.
 
@@ -246,9 +266,29 @@ Design tokens are CSS custom properties defined in `globals.css`:
 
 Use them in components with `var(--aura-gold)` or Tailwind classes.
 
-### Grain overlay
+### Film Grain
 
-A subtle film grain texture is applied via `::after` pseudo-element at `z-index: 9999`. This adds cinematic texture to the dark backgrounds.
+Grain is **shader-only** — the `cinema-gl.ts` fragment shader renders animated noise. The old CSS `.grain::after` pseudo-element was removed to avoid duplicate grain effects. No `grain` class on `<body>`.
+
+### Scrollbar
+
+Scrollbar is hidden on `html` (not `body`) for Lenis compatibility:
+```css
+html::-webkit-scrollbar { width: 0; }
+html { scrollbar-width: none; }
+```
+
+### Section Animations
+
+All section entrance animations use GSAP ScrollTrigger with `data-reveal` attributes:
+```tsx
+<div data-reveal>...</div>  // GSAP targets these
+```
+The old CSS `.reveal-up` / `.reveal-up.active` IntersectionObserver system was removed.
+
+### Magnetic Buttons
+
+Add `className="magnetic-btn"` to any button element for Awwwards-style hover where the button subtly follows the cursor. CSS `transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1)` provides the spring-back. Handled globally by `MagneticButtons` provider. Desktop only, respects `prefers-reduced-motion`.
 
 ### Letterbox (2.39:1)
 
@@ -259,15 +299,44 @@ The video is cropped to 2.39:1 anamorphic aspect ratio to:
 
 ---
 
+## Contact Form
+
+Uses `mailto:` with pre-filled subject and body (zero-backend approach):
+```typescript
+window.open(`mailto:booking@ivannaura.com?subject=${subject}&body=${body}`, "_self");
+```
+
+Client-side validation: name required, email format check, message required. Error messages in Spanish using `--crimson` color.
+
+Input styling: Tailwind `focus:border-[var(--aura-gold-dim)]` classes (no inline `onFocus`/`onBlur` style mutations).
+
+---
+
 ## State Management
 
 Zustand store (`useUIStore`) manages ephemeral UI state:
 
 | State | Purpose | Used by |
 |-------|---------|---------|
-| `isLoaded` | Preloader completion flag | Preloader |
 | `menuOpen` | Mobile menu toggle | Navigation |
-| `cursorVariant` | Cursor style (default/hover/text/hidden) | CustomCursor, all components |
+| `cursorVariant` | Cursor style: `"default" | "hover" | "hidden"` | CustomCursor, all components |
+
+### Energy + Frequency Bands Flow
+
+Energy and frequency bands flow from `ScrollVideoPlayer` to display components via a throttled pattern:
+
+```
+ScrollVideoPlayer render loop (60fps)
+  → onEnergyChange(e) → energyRef.current = e  (zero-cost ref write)
+  → onBandsChange(b)  → bandsRef.current = b
+      ↓
+setInterval(100ms) reads refs → setDisplayEnergy(), setDisplayBands()
+      ↓
+PianoIndicator receives { energy, bands } as props (10fps re-renders)
+Navigation receives { audioActive: energy > 0.05 } (10fps)
+```
+
+This reduces React re-renders from 60/s to 10/s — a 6x improvement.
 
 ---
 
@@ -291,15 +360,23 @@ useEffect(() => {
 
 ### Passive scroll listeners
 
-All scroll event listeners use `{ passive: true }` since we never call `preventDefault()`:
-
-```typescript
-window.addEventListener("scroll", onScroll, { passive: true });
-```
+All scroll event listeners use `{ passive: true }` since we never call `preventDefault()`.
 
 ### Avoid React state in hot paths
 
-The rAF loops and scroll handlers use refs (`useRef`) instead of state (`useState`) to avoid triggering React re-renders on every frame. State is only used for values that need to trigger UI updates (like `ready`, `bufferProgress`).
+The rAF loops and scroll handlers use refs (`useRef`) instead of state (`useState`) to avoid triggering React re-renders on every frame. State is only used for values that need to trigger UI updates, and even then throttled to ~10fps via `setInterval`.
+
+### CustomCursor: transform compositing
+
+The cursor uses `transform: translate()` instead of `left`/`top` for GPU-composited positioning. Combined with `will-change: transform` in CSS, the cursor elements get their own compositor layers, making 60fps animation essentially free (no layout recalculation).
+
+### querySelector caching
+
+Navigation caches `document.querySelector()` results on first scroll event instead of querying the DOM every frame. The cached elements array is reset only when the effect re-runs.
+
+### WebGL buffer strategy
+
+Particle buffer uses `bufferData` once (pre-allocation) + `bufferSubData` per frame (update). This avoids WebGL reallocation overhead compared to calling `bufferData` with new data every frame.
 
 ---
 
@@ -308,28 +385,31 @@ The rAF loops and scroll handlers use refs (`useRef`) instead of state (`useStat
 ```
 src/
   app/
-    layout.tsx         Root layout (fonts, smooth scroll, preloader)
-    page.tsx           Home page (orchestrates all components)
-    globals.css        Design tokens, animations, utility classes
+    layout.tsx         Root layout (fonts, preloader, magnetic buttons, smooth scroll)
+    page.tsx           Home page (orchestrates all components, energy throttle)
+    globals.css        Design tokens, cursor styles, magnetic-btn, reduced-motion
   components/
     providers/
-      SmoothScroll.tsx Lenis wrapper
+      SmoothScroll.tsx    Lenis wrapper (typed LenisRef)
+      MagneticButtons.tsx Global magnetic button hover effect
     ui/
-      ScrollVideoPlayer.tsx   Core scroll-video engine
-      ScrollStoryOverlay.tsx  Frame-synced narrative beats
-      Navigation.tsx          Fixed nav + progress bar
-      CustomCursor.tsx        Animated cursor
-      PianoIndicator.tsx      Audio energy visualizer
-      Preloader.tsx           Loading screen
-      Footer.tsx              Footer with branding
+      ScrollVideoPlayer.tsx   Core scroll-video engine + onBandsChange
+      ScrollStoryOverlay.tsx  Frame-synced narrative beats (stable keys)
+      Navigation.tsx          Fixed nav + progress bar (cached querySelector)
+      CustomCursor.tsx        GPU-composited transform cursor + viewport events
+      PianoIndicator.tsx      Frequency-reactive equalizer (bass/mids/highs)
+      Preloader.tsx           Cinematic loading screen
+      Footer.tsx              GSAP SplitText entrance + real social links
     sections/
-      Contact.tsx             Booking form
+      Contact.tsx             GSAP ScrollTrigger entrance + mailto: form + validation
   hooks/
-    usePianoScroll.ts  Keyboard/click → scroll (a-z keys only)
+    usePianoScroll.ts  Keyboard/click → scroll (a-z keys, reduced-motion aware)
   lib/
-    audio-momentum.ts  Physics-driven audio engine
-    cinema-gl.ts       WebGL post-processing (vignette, CA, grain, bloom)
-    particles-gl.ts    WebGL particle system (250 light motes)
+    audio-momentum.ts      Physics-driven audio + AnalyserNode (shared AudioContext)
+    cinema-gl.ts           WebGL post-processing + particles (bufferSubData)
+    micro-sounds.ts        Web Audio oscillators (shared AudioContext)
+    shared-audio-context.ts Ref-counted singleton AudioContext
   stores/
-    useUIStore.ts      Global UI state (Zustand)
+    useUIStore.ts      Global UI state: cursor variant + menu (Zustand)
+vercel.json            Cache headers for videos/audio (immutable, 1 year)
 ```

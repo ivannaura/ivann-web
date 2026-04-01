@@ -1,6 +1,6 @@
 "use client";
 
-import { ReactLenis } from "lenis/react";
+import { ReactLenis, type LenisRef } from "lenis/react";
 import { useEffect, useRef, type ReactNode } from "react";
 import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
@@ -20,7 +20,7 @@ interface SmoothScrollProps {
 }
 
 export default function SmoothScroll({ children }: SmoothScrollProps) {
-  const lenisRef = useRef<any>(null);
+  const lenisRef = useRef<LenisRef>(null);
 
   useEffect(() => {
     // Disable GSAP's lag smoothing — Lenis handles frame timing

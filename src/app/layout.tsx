@@ -3,6 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import SmoothScroll from "@/components/providers/SmoothScroll";
 import Preloader from "@/components/ui/Preloader";
+import MagneticButtons from "@/components/providers/MagneticButtons";
 
 const geist = Geist({
   variable: "--font-geist-sans",
@@ -68,32 +69,41 @@ export const metadata: Metadata = {
   },
 };
 
-// JSON-LD structured data for SEO
+// JSON-LD structured data — MusicGroup + Person (no MusicEvent without startDate)
 const jsonLd = {
   "@context": "https://schema.org",
-  "@type": "MusicEvent",
-  name: "IVANN AURA — Live Experience",
-  description:
-    "Show inmersivo que fusiona piano clásico con tecnología, espectáculo visual, danza y arte aéreo.",
-  performer: {
-    "@type": "Person",
-    name: "IVANN AURA",
-    alternateName: "Ivan Darío Arias",
-    jobTitle: "Pianista y Compositor",
-    birthPlace: {
-      "@type": "Place",
-      name: "Medellín, Colombia",
+  "@graph": [
+    {
+      "@type": "MusicGroup",
+      name: "IVANN AURA",
+      url: SITE_URL,
+      image: `${SITE_URL}/og-image.jpg`,
+      description:
+        "Show inmersivo que fusiona piano clásico con tecnología, espectáculo visual, danza y arte aéreo.",
+      genre: ["Classical", "Flamenco", "Immersive Experience"],
+      member: {
+        "@type": "Person",
+        name: "IVANN AURA",
+        alternateName: "Ivan Darío Arias",
+        jobTitle: "Pianista y Compositor",
+        birthPlace: {
+          "@type": "Place",
+          name: "Medellín, Colombia",
+        },
+      },
+      sameAs: [
+        "https://www.instagram.com/ivannaura",
+        "https://open.spotify.com/artist/ivannaura",
+        "https://www.youtube.com/@ivannaura",
+        "https://www.tiktok.com/@ivannaura",
+      ],
     },
-    url: SITE_URL,
-  },
-  organizer: {
-    "@type": "Person",
-    name: "IVANN AURA",
-    url: SITE_URL,
-  },
-  url: SITE_URL,
-  image: `${SITE_URL}/og-image.jpg`,
-  eventAttendanceMode: "https://schema.org/OfflineEventAttendanceMode",
+    {
+      "@type": "WebSite",
+      name: "IVANN AURA",
+      url: SITE_URL,
+    },
+  ],
 };
 
 export default function RootLayout({
@@ -104,6 +114,8 @@ export default function RootLayout({
   return (
     <html lang="es" className={`${geist.variable} ${geistMono.variable} antialiased`}>
       <head>
+        {/* Theme color for Android Chrome toolbar */}
+        <meta name="theme-color" content="#050508" />
         {/* Video preload — start downloading before React hydrates */}
         <link
           rel="preload"
@@ -111,14 +123,22 @@ export default function RootLayout({
           as="video"
           type="video/mp4"
         />
+        {/* Audio preload hint */}
+        <link
+          rel="preload"
+          href="/audio/flamenco.m4a"
+          as="audio"
+          type="audio/mp4"
+        />
         {/* JSON-LD structured data */}
         <script
           type="application/ld+json"
           dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
         />
       </head>
-      <body className="min-h-screen grain">
+      <body className="min-h-screen">
         <Preloader />
+        <MagneticButtons />
         <SmoothScroll>{children}</SmoothScroll>
       </body>
     </html>

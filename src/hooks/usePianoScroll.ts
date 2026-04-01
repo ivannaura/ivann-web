@@ -19,6 +19,8 @@ export function usePianoScroll(options: UsePianoScrollOptions = {}) {
 
   useEffect(() => {
     if (!enabled) return;
+    // Respect prefers-reduced-motion — no keyboard-triggered scroll
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.ctrlKey || e.metaKey || e.altKey) return;
       // Only trigger on letter keys (a-z) to respect WCAG 2.1.4
@@ -36,6 +38,7 @@ export function usePianoScroll(options: UsePianoScrollOptions = {}) {
 
   useEffect(() => {
     if (!enabled) return;
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
     const onClick = (e: MouseEvent) => {
       const target = e.target as HTMLElement;
       if (target.closest("a, button, input, textarea, select, [role='button']")) return;

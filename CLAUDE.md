@@ -19,41 +19,53 @@ Awwwards-quality immersive website for IVANN AURA, a Colombian pianist and live 
 ## Architecture
 
 ```
-page.tsx
- ├── CustomCursor          (dot + ring following mouse, desktop only)
- ├── Navigation            (fixed nav, scroll progress, mobile <dialog>, sound toggle)
- ├── PianoIndicator        (energy-driven equalizer, bottom-left)
- │
- ├── ScrollVideoPlayer     (GSAP ScrollTrigger → video.currentTime + unified WebGL2 canvas)
- │    ├── CinemaGL         (unified renderer: video shaders + luminance-reactive particles)
- │    ├── AudioMomentum    (physics engine: impulse → energy → playbackRate + mute toggle)
- │    └── ScrollStoryOverlay (20+ frame-synced story beats over video)
- │
- ├── Contact               (booking form + social links)
- └── Footer                (branding, socials, quote)
+layout.tsx
+ ├── Preloader             (cinematic SplitText entrance + animated progress)
+ ├── MagneticButtons       (global .magnetic-btn hover effect provider)
+ └── SmoothScroll          (Lenis + GSAP single RAF loop)
+      └── page.tsx
+           ├── CustomCursor          (transform-based dot + ring, desktop only, viewport-aware)
+           ├── Navigation            (fixed nav, scroll progress, mobile <dialog>, sound toggle)
+           ├── PianoIndicator        (frequency-reactive equalizer: bass/mids/highs)
+           │
+           ├── ScrollVideoPlayer     (GSAP ScrollTrigger → video.currentTime + unified WebGL2 canvas)
+           │    ├── CinemaGL         (unified renderer: video shaders + luminance-reactive particles)
+           │    ├── AudioMomentum    (physics engine + AnalyserNode: shared AudioContext)
+           │    └── ScrollStoryOverlay (20+ frame-synced story beats over video)
+           │
+           ├── Contact               (GSAP ScrollTrigger entrance, mailto: form, validation)
+           └── Footer                (GSAP SplitText entrance, real social links, micro-sounds)
 ```
 
 ### Key Components
 
 | Component | File | Purpose |
 |-----------|------|---------|
-| `ScrollVideoPlayer` | `ui/ScrollVideoPlayer.tsx` | GSAP ScrollTrigger + unified WebGL2 canvas + AudioMomentum |
-| `CinemaGL` | `lib/cinema-gl.ts` | Unified WebGL2: video post-processing + luminance-reactive particles (single context) |
-| `AudioMomentum` | `lib/audio-momentum.ts` | Physics engine + AnalyserNode: energy/friction → playbackRate + frequency bands (bass/mids/highs) |
+| `ScrollVideoPlayer` | `ui/ScrollVideoPlayer.tsx` | GSAP ScrollTrigger + unified WebGL2 canvas + AudioMomentum + onBandsChange |
+| `CinemaGL` | `lib/cinema-gl.ts` | Unified WebGL2: video post-processing + luminance-reactive particles (bufferSubData) |
+| `AudioMomentum` | `lib/audio-momentum.ts` | Physics engine + AnalyserNode: energy/friction → playbackRate + frequency bands |
+| `SharedAudioContext` | `lib/shared-audio-context.ts` | Ref-counted singleton AudioContext (iOS Safari 4-context limit) |
+| `MicroSounds` | `lib/micro-sounds.ts` | Web Audio oscillators: hover/click/whoosh (shared AudioContext) |
 | `ScrollStoryOverlay` | `ui/ScrollStoryOverlay.tsx` | 20+ story beats with GSAP SplitText per-char/word reveals |
-| `usePianoScroll` | `hooks/usePianoScroll.ts` | Letter keys (a-z) / click → smooth scroll forward |
-| `PianoIndicator` | `ui/PianoIndicator.tsx` | Energy-driven equalizer (gold when energy > 0.3) |
-| `Navigation` | `ui/Navigation.tsx` | Fixed nav, scroll progress, native `<dialog>` mobile menu, sound toggle |
-| `CustomCursor` | `ui/CustomCursor.tsx` | Animated dot + ring cursor (desktop only) |
-| `MicroSounds` | `lib/micro-sounds.ts` | Web Audio oscillator system: hover notes, click keys, scroll whoosh |
+| `usePianoScroll` | `hooks/usePianoScroll.ts` | Letter keys (a-z) / click → scroll (respects prefers-reduced-motion) |
+| `PianoIndicator` | `ui/PianoIndicator.tsx` | Frequency-reactive equalizer: bass→center, mids→mid, highs→outer bars |
+| `Navigation` | `ui/Navigation.tsx` | Fixed nav, scroll progress, native `<dialog>`, cached querySelector |
+| `CustomCursor` | `ui/CustomCursor.tsx` | GPU-composited transform cursor + viewport mouseleave/mouseenter |
+| `MagneticButtons` | `providers/MagneticButtons.tsx` | Global `.magnetic-btn` hover effect (desktop, reduced-motion aware) |
 | `Preloader` | `ui/Preloader.tsx` | Cinematic preloader: SplitText reveal + animated progress + scale exit |
-| `SmoothScroll` | `providers/SmoothScroll.tsx` | Lenis + GSAP single RAF loop (lerp 0.08, autoRaf false) |
+| `SmoothScroll` | `providers/SmoothScroll.tsx` | Lenis + GSAP single RAF loop (lerp 0.08, autoRaf false, typed LenisRef) |
+| `Contact` | `sections/Contact.tsx` | GSAP ScrollTrigger entrance + SplitText heading + mailto: form + validation |
+| `Footer` | `ui/Footer.tsx` | GSAP SplitText entrance + real social links + micro-sounds |
 
 ### Deleted (previously dead code)
 
 - `ScrollFramePlayer.tsx`, `Hero.tsx`, `Experience.tsx`, `Music.tsx`, `LiveShow.tsx` — removed in audit cleanup
 - `particles-gl.ts` — merged into `cinema-gl.ts` (single WebGL2 context)
 - `frames/all/` — 49MB obsolete frame sequence (gitignored)
+- CSS `.grain::after` overlay — removed (shader handles film grain)
+- CSS `.reveal-up` animation system — removed (GSAP ScrollTrigger replaces)
+- CSS `@keyframes fade-in-up` — removed (unused after reveal-up removal)
+- CSS `.line-grow` animation — removed (GSAP handles Contact line animation)
 
 ## Audio Momentum System
 
@@ -76,14 +88,20 @@ Constants: `IMPULSE=0.2`, `FRICTION=0.985`, `MIN_RATE=0.25`, `MAX_RATE=1.0`, `MA
 
 Energy half-life: FRICTION=0.985 → ~46 frames ≈ 766ms at 60fps.
 
+### Shared AudioContext
+
+Both AudioMomentum and MicroSounds share a single AudioContext via `shared-audio-context.ts`. Ref-counted: `acquireAudioContext()` / `releaseAudioContext()`. iOS Safari limits to 4 AudioContexts — sharing ensures we never exceed.
+
 ### Frequency Analysis (AnalyserNode)
 
-AudioMomentum creates `AudioContext → MediaElementSource → AnalyserNode → destination`. `fftSize=256` → 128 bins. Bands averaged + smoothed (EMA 0.8):
+AudioMomentum connects `MediaElementSource → AnalyserNode → destination` on the shared context. `fftSize=256` → 128 bins. Bands averaged + EMA smoothed (`BAND_ALPHA=0.2`):
 - **Bass** (bins 0-10, ~0-1720Hz): Piano body, low notes
 - **Mids** (bins 10-50, ~1720-8600Hz): Melody, main frequencies
 - **Highs** (bins 50-128, ~8600Hz+): Harmonics, shimmer, applause
 
-Bands available via `getFrequencyBands()` → `{ bass, mids, highs }` (all 0-1). Fed to cinema-gl uniforms even when muted (visual reactivity independent of audibility).
+Bands available via `getFrequencyBands()` → `{ bass, mids, highs }` (all 0-1). Fed to:
+- CinemaGL shader uniforms (even when muted for visual reactivity)
+- PianoIndicator bars (via `onBandsChange` callback → throttled 10fps state)
 
 ## Scroll → Video Pipeline (GSAP ScrollTrigger + matchMedia)
 
@@ -114,6 +132,7 @@ Bands available via `getFrequencyBands()` → `{ bass, mids, highs }` (all 0-1).
 - Timeline with `">-0.3"` overlap for cascading multi-target reveals
 - Desktop: blur filter + longer durations; Mobile: no blur + snappier timing
 - Exit: CSS opacity fade (progress > 0.85), works regardless of motion preference
+- Stable keys: `${beat.frameStart}-${beat.frameEnd}` (not array index)
 
 ## Unified WebGL2 Cinema
 
@@ -134,10 +153,11 @@ Bands available via `getFrequencyBands()` → `{ bass, mids, highs }` (all 0-1).
 - **Chromatic aberration**: Radial from center + directional from cursor + velocity boost
 - **Vignette**: Edge darkening with bass-reactive breathing
 - **Cursor spotlight**: Subtle brightening near mouse position
-- **Film grain**: Animated noise for organic texture
+- **Film grain**: Animated noise for organic texture (replaces removed CSS grain overlay)
 - **Soft bloom**: Glow on highlights, boosted by highs frequency band
 
-**Pass 2 — Luminance-reactive particles** (250 GL_POINTS, additive blending):
+**Pass 2 — Luminance-reactive particles** (250 GL_POINTS, additive blending, `bufferSubData`):
+- Pre-allocated DYNAMIC_DRAW buffer, updated per frame with `bufferSubData` (no reallocation)
 - Particles sample video texture for luminance at their position
 - Luminance gradient nudges toward bright areas + cursor attraction with distance falloff
 - Size pulses with bass, glow intensifies with highs
@@ -150,12 +170,14 @@ Falls back to raw `<video>` element if WebGL2 unavailable. Canvas sized to viewp
 
 ## Micro-Interaction Sounds
 
-`micro-sounds.ts` — Zero-download Web Audio oscillator system:
+`micro-sounds.ts` — Zero-download Web Audio oscillator system (shared AudioContext):
 - `playHover()`: Random C major pentatonic note (sine, 150ms decay, vol 0.025)
 - `playClick()`: C4 + octave harmonic (300ms, vol 0.04)
 - `playWhoosh()`: Sawtooth sweep 400→80Hz through lowpass filter (150ms)
 - Throttled: whoosh max 1/sec, hover debounced by browser event rate
-- Respects `soundMuted` (wired from Navigation + ScrollVideoPlayer) and `prefers-reduced-motion`
+- Used in: Navigation, Contact, Footer (hover/click interactions)
+- `destroyMicroSounds()` called on page unmount to release shared AudioContext ref
+- Respects `soundMuted` and `prefers-reduced-motion`
 
 ## Design Tokens (CSS Custom Properties)
 
@@ -186,13 +208,24 @@ Key flags: `-g 1` (every frame is a keyframe = instant seeking), `-bf 0` (no B-f
 Output: `public/videos/flamenco-graded.mp4` (960x402, 44MB, all-intra H.264)
 Audio: `public/audio/flamenco.m4a` (AAC 128kbps, 3.9MB)
 
-## SEO
+## SEO & Meta
 
 - Complete Open Graph + Twitter Card metadata with OG image
-- JSON-LD structured data (MusicEvent + Person schema)
+- JSON-LD structured data: `@graph` with `MusicGroup` + `Person` + `WebSite` (not MusicEvent — Google requires startDate)
 - `sitemap.xml` and `robots.txt` auto-generated via Next.js App Router
-- Video preload hint in `<head>` for faster LCP
+- `<meta name="theme-color" content="#050508">` for Android Chrome toolbar
+- Video preload hint: `<link rel="preload" href="/videos/flamenco-graded.mp4">`
+- Audio preload hint: `<link rel="preload" href="/audio/flamenco.m4a">`
 - `prefers-reduced-motion` disables all animations
+- `aria-hidden="true"` on PianoIndicator (decorative)
+- `aria-label="Contenido principal"` on `<main>`
+
+## Deployment & Caching
+
+- `vercel.json`: custom cache headers for public assets:
+  - `/videos/*` and `/audio/*`: `max-age=31536000, immutable` (1 year, fingerprinted)
+  - `/og-image.jpg`: `max-age=86400` (1 day)
+- Next.js `headers()` in `next.config.ts` does NOT apply to `public/` folder — must use `vercel.json`
 
 ## Commands
 
@@ -204,7 +237,7 @@ npm run build        # Production build (Turbopack)
 ## Public Assets
 
 - `videos/flamenco-graded.mp4` — **44MB, active** (all-keyframe scroll video)
-- `videos/flamenco-de-esfera.mp4` — 67MB, original source (fallback)
+- `videos/flamenco-de-esfera.mp4` — 67MB, original source (kept in public but NOT used as fallback)
 - `audio/flamenco.m4a` — **3.9MB, active** (momentum-driven audio)
 
 ## Conventions
@@ -215,4 +248,14 @@ npm run build        # Production build (Turbopack)
 - Frame indices use 3fps equivalence: `frameIndex = Math.floor(videoTime * 3)`
 - Story beats in ScrollStoryOverlay use these frame indices for timing
 - Mobile menu uses native `<dialog>` with `showModal()` for WCAG-compliant focus management
+- Cursor variants: `"default" | "hover" | "hidden"` (no `"text"` — removed as unused)
+- CustomCursor uses `transform: translate()` not `left`/`top` (GPU compositing)
+- Scrollbar hidden on `html` element (not `body`) for Lenis compatibility
+- Section entrance animations use GSAP ScrollTrigger + `data-reveal` attributes (not CSS `.reveal-up`)
+- Contact line animation uses GSAP + `data-line` (not CSS `.line-grow`)
+- Magnetic hover: add `className="magnetic-btn"` to any button for Awwwards-style cursor follow
+- Film grain is shader-only (CSS grain overlay removed to avoid duplication)
+- Energy state throttled: `useRef` at 60fps → `useState` at 10fps via `setInterval(100ms)`
+- Social links: real URLs with `target="_blank" rel="noopener noreferrer"`
+- Contact form: `mailto:` with pre-filled subject/body + client-side validation
 - See `docs/CONVENTIONS.md` for full technical conventions

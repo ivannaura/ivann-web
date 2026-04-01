@@ -700,7 +700,7 @@ export default function ScrollStoryOverlay({
     <div className="absolute inset-0 z-20 pointer-events-none">
       {visibleBeats.map((beat, i) => (
         <AnimatedBeat
-          key={`${beat.frameStart}-${i}`}
+          key={`${beat.frameStart}-${beat.frameEnd}`}
           beat={beat}
           progress={beat.progress}
         />

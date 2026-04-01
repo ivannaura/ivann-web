@@ -288,9 +288,11 @@ export function initCinemaGL(canvas: HTMLCanvasElement): CinemaGL | null {
   gl.linkProgram(particleProg);
   if (!gl.getProgramParameter(particleProg, gl.LINK_STATUS)) return null;
 
-  // Particle buffer
+  // Particle buffer — pre-allocate for bufferSubData updates
   const particleBuf = gl.createBuffer()!;
   const particleData = new Float32Array(PARTICLE_COUNT * STRIDE);
+  gl.bindBuffer(gl.ARRAY_BUFFER, particleBuf);
+  gl.bufferData(gl.ARRAY_BUFFER, particleData.byteLength, gl.DYNAMIC_DRAW);
 
   // Particle VAO
   const particleVAO = gl.createVertexArray()!;
@@ -423,7 +425,7 @@ export function initCinemaGL(canvas: HTMLCanvasElement): CinemaGL | null {
       gl.uniform1i(pUVideoTex, 0);
 
       gl.bindBuffer(gl.ARRAY_BUFFER, particleBuf);
-      gl.bufferData(gl.ARRAY_BUFFER, particleData, gl.DYNAMIC_DRAW);
+      gl.bufferSubData(gl.ARRAY_BUFFER, 0, particleData);
       gl.bindVertexArray(particleVAO);
       gl.drawArrays(gl.POINTS, 0, PARTICLE_COUNT);
 

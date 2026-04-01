@@ -1,24 +1,82 @@
 "use client";
 
+import { useEffect, useRef } from "react";
+import gsap from "gsap";
+import { ScrollTrigger } from "gsap/ScrollTrigger";
+import { SplitText } from "gsap/SplitText";
 import { useUIStore } from "@/stores/useUIStore";
+import { playHover, playClick } from "@/lib/micro-sounds";
+
+if (typeof window !== "undefined") {
+  gsap.registerPlugin(ScrollTrigger, SplitText);
+}
 
 const SOCIAL_LINKS = [
-  { name: "Instagram", handle: "@ivannaura", url: "#" },
-  { name: "Spotify", handle: "IVANN AURA", url: "#" },
-  { name: "YouTube", handle: "@ivannaura", url: "#" },
-  { name: "TikTok", handle: "@ivannaura", url: "#" },
+  { name: "Instagram", handle: "@ivannaura", url: "https://www.instagram.com/ivannaura" },
+  { name: "Spotify", handle: "IVANN AURA", url: "https://open.spotify.com/artist/ivannaura" },
+  { name: "YouTube", handle: "@ivannaura", url: "https://www.youtube.com/@ivannaura" },
+  { name: "TikTok", handle: "@ivannaura", url: "https://www.tiktok.com/@ivannaura" },
 ];
 
 export default function Footer() {
   const setCursorVariant = useUIStore((s) => s.setCursorVariant);
+  const footerRef = useRef<HTMLElement>(null);
+
+  // GSAP entrance animation
+  useEffect(() => {
+    const footer = footerRef.current;
+    if (!footer) return;
+
+    const ctx = gsap.context(() => {
+      const mm = gsap.matchMedia();
+
+      mm.add("(prefers-reduced-motion: no-preference)", () => {
+        // Large branding reveal
+        const brand = footer.querySelector<HTMLElement>("[data-brand]");
+        if (brand) {
+          const split = SplitText.create(brand, { type: "chars" });
+          gsap.from(split.chars, {
+            yPercent: 100,
+            opacity: 0,
+            stagger: 0.03,
+            duration: 0.8,
+            ease: "power3.out",
+            scrollTrigger: {
+              trigger: brand,
+              start: "top 90%",
+              once: true,
+            },
+          });
+        }
+
+        // Stagger the grid columns
+        const reveals = footer.querySelectorAll<HTMLElement>("[data-reveal]");
+        gsap.from(reveals, {
+          y: 20,
+          opacity: 0,
+          stagger: 0.08,
+          duration: 0.6,
+          ease: "power2.out",
+          scrollTrigger: {
+            trigger: footer,
+            start: "top 85%",
+            once: true,
+          },
+        });
+      });
+    }, footer);
+
+    return () => ctx.revert();
+  }, []);
 
   const scrollToTop = () => {
-    // Lenis intercepts window.scrollTo — this works correctly with smooth scroll
+    playClick();
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
   return (
     <footer
+      ref={footerRef}
       className="relative overflow-hidden"
       style={{ background: "var(--bg-void)" }}
     >
@@ -38,12 +96,14 @@ export default function Footer() {
           <div className="flex items-end justify-between">
             <div>
               <p
+                data-reveal
                 className="text-xs tracking-[0.3em] uppercase mb-4"
                 style={{ color: "var(--text-muted)" }}
               >
                 La experiencia no termina aquí
               </p>
               <h2
+                data-brand
                 className="text-[clamp(3rem,8vw,7rem)] font-extralight leading-[0.9] tracking-[0.05em]"
                 style={{ color: "var(--text-primary)" }}
               >
@@ -57,11 +117,11 @@ export default function Footer() {
               </h2>
             </div>
 
-            {/* Back to top */}
+            {/* Back to top — magnetic button */}
             <button
               onClick={scrollToTop}
-              className="hidden md:flex flex-col items-center gap-2 group mb-4"
-              onMouseEnter={() => setCursorVariant("hover")}
+              className="hidden md:flex flex-col items-center gap-2 group mb-4 magnetic-btn"
+              onMouseEnter={() => { setCursorVariant("hover"); playHover(); }}
               onMouseLeave={() => setCursorVariant("default")}
             >
               <div
@@ -105,7 +165,7 @@ export default function Footer() {
         {/* Grid: Social + Contact + Quote */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-12 mb-16">
           {/* Social */}
-          <div>
+          <div data-reveal>
             <h3
               className="text-[10px] tracking-[0.4em] uppercase mb-6"
               style={{ color: "var(--text-muted)" }}
@@ -117,8 +177,10 @@ export default function Footer() {
                 <a
                   key={link.name}
                   href={link.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
                   className="group flex items-center justify-between py-1 transition-all duration-300"
-                  onMouseEnter={() => setCursorVariant("hover")}
+                  onMouseEnter={() => { setCursorVariant("hover"); playHover(); }}
                   onMouseLeave={() => setCursorVariant("default")}
                 >
                   <span
@@ -139,7 +201,7 @@ export default function Footer() {
           </div>
 
           {/* Contact */}
-          <div>
+          <div data-reveal>
             <h3
               className="text-[10px] tracking-[0.4em] uppercase mb-6"
               style={{ color: "var(--text-muted)" }}
@@ -150,7 +212,7 @@ export default function Footer() {
               href="mailto:booking@ivannaura.com"
               className="text-sm font-light tracking-wide transition-colors duration-300 hover:text-[var(--aura-gold)] block mb-3"
               style={{ color: "var(--text-secondary)" }}
-              onMouseEnter={() => setCursorVariant("hover")}
+              onMouseEnter={() => { setCursorVariant("hover"); playHover(); }}
               onMouseLeave={() => setCursorVariant("default")}
             >
               booking@ivannaura.com
@@ -166,7 +228,7 @@ export default function Footer() {
           </div>
 
           {/* Quote */}
-          <div className="flex flex-col justify-between">
+          <div data-reveal className="flex flex-col justify-between">
             <blockquote
               className="text-sm font-light italic leading-relaxed"
               style={{ color: "var(--text-secondary)" }}
