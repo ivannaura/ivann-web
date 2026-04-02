@@ -78,7 +78,6 @@ export class AudioMomentum {
     this.audio = new Audio(audioSrc);
     this.audio.preload = 'auto';
     this.audio.loop = false;
-    this.audio.crossOrigin = 'anonymous';
 
     // Disable pitch correction — playbackRate changes produce vinyl slowdown.
     // preservesPitch is baseline since Dec 2023 — no vendor prefixes needed.

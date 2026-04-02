@@ -382,7 +382,6 @@ export default function ScrollVideoPlayer({
           muted
           playsInline
           preload="auto"
-          crossOrigin="anonymous"
           onError={onError}
           className="absolute inset-0 w-full h-full object-cover"
           style={{
