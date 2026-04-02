@@ -375,7 +375,7 @@ export default function ScrollVideoPlayer({
       style={{ height: `${scrollHeight}vh` }}
       className="relative"
     >
-      <div className="sticky top-0 w-full h-screen overflow-hidden">
+      <div className="sticky top-0 w-full h-dvh overflow-hidden">
         <video
           ref={videoRef}
           src={videoSrc}

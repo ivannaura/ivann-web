@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import SmoothScroll from "@/components/providers/SmoothScroll";
@@ -16,6 +16,15 @@ const geistMono = Geist_Mono({
 });
 
 const SITE_URL = "https://ivannaura.com";
+
+// Viewport — cover mode for iPhone notch, no zoom for immersive experience
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
+  viewportFit: "cover",
+};
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
@@ -116,29 +125,18 @@ export default function RootLayout({
       <head>
         {/* Theme color for Android Chrome toolbar */}
         <meta name="theme-color" content="#050508" />
-        {/* Video preload — must match crossOrigin="anonymous" on <video> element */}
-        <link
-          rel="preload"
-          href="/videos/flamenco-graded.mp4"
-          as="video"
-          type="video/mp4"
-          crossOrigin="anonymous"
-        />
-        {/* Audio preload hint */}
-        <link
-          rel="preload"
-          href="/audio/flamenco.m4a"
-          as="audio"
-          type="audio/mp4"
-          crossOrigin="anonymous"
-        />
+        {/*
+          Preload hints removed — <link rel="preload" as="video"> is unreliable
+          across browsers and was blocking the <video> element from loading.
+          The video's own preload="auto" handles progressive download.
+        */}
         {/* JSON-LD structured data */}
         <script
           type="application/ld+json"
           dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
         />
       </head>
-      <body className="min-h-screen">
+      <body className="min-h-dvh">
         <Preloader />
         <MagneticButtons />
         <SmoothScroll>{children}</SmoothScroll>
