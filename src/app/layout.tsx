@@ -116,12 +116,13 @@ export default function RootLayout({
       <head>
         {/* Theme color for Android Chrome toolbar */}
         <meta name="theme-color" content="#050508" />
-        {/* Video preload — start downloading before React hydrates */}
+        {/* Video preload — must match crossOrigin="anonymous" on <video> element */}
         <link
           rel="preload"
           href="/videos/flamenco-graded.mp4"
           as="video"
           type="video/mp4"
+          crossOrigin="anonymous"
         />
         {/* Audio preload hint */}
         <link
@@ -129,6 +130,7 @@ export default function RootLayout({
           href="/audio/flamenco.m4a"
           as="audio"
           type="audio/mp4"
+          crossOrigin="anonymous"
         />
         {/* JSON-LD structured data */}
         <script
