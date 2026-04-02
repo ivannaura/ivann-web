@@ -233,20 +233,29 @@ export function initCinemaGL(canvas: HTMLCanvasElement): CinemaGL | null {
     antialias: false,
     premultipliedAlpha: false,
   });
-  if (!gl) return null;
+  if (!gl) {
+    console.warn("CinemaGL: WebGL2 context creation failed");
+    return null;
+  }
 
   // ---------------------------------------------------------------------------
   // Cinema program (video post-processing)
   // ---------------------------------------------------------------------------
   const cinemaVS = compile(gl, gl.VERTEX_SHADER, CINEMA_VERT);
   const cinemaFS = compile(gl, gl.FRAGMENT_SHADER, CINEMA_FRAG);
-  if (!cinemaVS || !cinemaFS) return null;
+  if (!cinemaVS || !cinemaFS) {
+    console.warn("CinemaGL: cinema shader compilation failed");
+    return null;
+  }
 
   const cinemaProg = gl.createProgram()!;
   gl.attachShader(cinemaProg, cinemaVS);
   gl.attachShader(cinemaProg, cinemaFS);
   gl.linkProgram(cinemaProg);
-  if (!gl.getProgramParameter(cinemaProg, gl.LINK_STATUS)) return null;
+  if (!gl.getProgramParameter(cinemaProg, gl.LINK_STATUS)) {
+    console.warn("CinemaGL: cinema program link failed:", gl.getProgramInfoLog(cinemaProg));
+    return null;
+  }
 
   // Cinema geometry — fullscreen quad (triangle strip)
   const quadBuf = gl.createBuffer()!;
@@ -280,13 +289,19 @@ export function initCinemaGL(canvas: HTMLCanvasElement): CinemaGL | null {
   // ---------------------------------------------------------------------------
   const particleVS = compile(gl, gl.VERTEX_SHADER, PARTICLE_VERT);
   const particleFS = compile(gl, gl.FRAGMENT_SHADER, PARTICLE_FRAG);
-  if (!particleVS || !particleFS) return null;
+  if (!particleVS || !particleFS) {
+    console.warn("CinemaGL: particle shader compilation failed");
+    return null;
+  }
 
   const particleProg = gl.createProgram()!;
   gl.attachShader(particleProg, particleVS);
   gl.attachShader(particleProg, particleFS);
   gl.linkProgram(particleProg);
-  if (!gl.getProgramParameter(particleProg, gl.LINK_STATUS)) return null;
+  if (!gl.getProgramParameter(particleProg, gl.LINK_STATUS)) {
+    console.warn("CinemaGL: particle program link failed:", gl.getProgramInfoLog(particleProg));
+    return null;
+  }
 
   // Particle buffer — pre-allocate for bufferSubData updates
   const particleBuf = gl.createBuffer()!;
