@@ -236,6 +236,8 @@ export interface CinemaGL {
   resize(w: number, h: number): void;
   /** Release all GL resources. */
   destroy(): void;
+  /** True if the WebGL context was lost (render is a no-op, fall back to raw video). */
+  readonly lost: boolean;
 }
 
 export function initCinemaGL(canvas: HTMLCanvasElement): CinemaGL | null {
@@ -251,13 +253,15 @@ export function initCinemaGL(canvas: HTMLCanvasElement): CinemaGL | null {
 
   // Track context loss — skip render calls while lost
   let contextLost = false;
-  canvas.addEventListener("webglcontextlost", (e) => {
+  const onContextLost = (e: Event) => {
     e.preventDefault();
     contextLost = true;
-  }, false);
-  canvas.addEventListener("webglcontextrestored", () => {
-    contextLost = false;
-  }, false);
+  };
+  canvas.addEventListener("webglcontextlost", onContextLost, false);
+  // Note: we do NOT handle webglcontextrestored — all GL objects (programs,
+  // buffers, VAOs, textures) are invalid after restore and would need full
+  // reinitialization. Instead, contextLost stays true and the render loop
+  // returns early. ScrollVideoPlayer checks cinema.lost to fall back to <video>.
 
   // ---------------------------------------------------------------------------
   // Cinema program (video post-processing)
@@ -400,6 +404,8 @@ export function initCinemaGL(canvas: HTMLCanvasElement): CinemaGL | null {
   // Render pipeline
   // ---------------------------------------------------------------------------
   return {
+    get lost() { return contextLost; },
+
     render(params) {
       const { video, time, energy, progress, bands, mouseX, mouseY, velocity } = params;
       if (contextLost || video.readyState < 2) return;
@@ -494,6 +500,7 @@ export function initCinemaGL(canvas: HTMLCanvasElement): CinemaGL | null {
     },
 
     destroy() {
+      canvas.removeEventListener("webglcontextlost", onContextLost);
       gl.deleteTexture(tex);
       gl.deleteBuffer(quadBuf);
       gl.deleteBuffer(particleBuf);

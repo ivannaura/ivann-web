@@ -1,12 +1,29 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useCallback } from "react";
 import { useUIStore } from "@/stores/useUIStore";
 
 export default function CustomCursor() {
   const dotRef = useRef<HTMLDivElement>(null);
   const ringRef = useRef<HTMLDivElement>(null);
   const cursorVariant = useUIStore((s) => s.cursorVariant);
+
+  // All opacity is managed imperatively — never via React style props.
+  // This prevents React re-renders from overwriting mouse-event-driven opacity.
+  const visibleRef = useRef(false);
+  const cursorVariantRef = useRef(cursorVariant);
+  cursorVariantRef.current = cursorVariant;
+
+  const applyOpacity = useCallback(() => {
+    const show = visibleRef.current && cursorVariantRef.current !== "hidden";
+    if (dotRef.current) dotRef.current.style.opacity = show ? "1" : "0";
+    if (ringRef.current) ringRef.current.style.opacity = show ? "0.3" : "0";
+  }, []);
+
+  // Sync Zustand cursorVariant → imperative opacity
+  useEffect(() => {
+    applyOpacity();
+  }, [cursorVariant, applyOpacity]);
 
   useEffect(() => {
     const isMobile = window.matchMedia("(pointer: coarse)").matches;
@@ -18,7 +35,6 @@ export default function CustomCursor() {
     let mouseY = -100;
     let ringX = -100;
     let ringY = -100;
-    let visible = false;
 
     // Set initial off-screen position imperatively (avoids React re-render overwriting transform)
     if (dotRef.current) dotRef.current.style.transform = "translate(-100px, -100px)";
@@ -28,10 +44,9 @@ export default function CustomCursor() {
       mouseX = e.clientX;
       mouseY = e.clientY;
 
-      if (!visible) {
-        visible = true;
-        if (dotRef.current) dotRef.current.style.opacity = "";
-        if (ringRef.current) ringRef.current.style.opacity = "";
+      if (!visibleRef.current) {
+        visibleRef.current = true;
+        applyOpacity();
       }
 
       // GPU-composited transform instead of left/top
@@ -41,15 +56,13 @@ export default function CustomCursor() {
     };
 
     const onMouseLeave = () => {
-      visible = false;
-      if (dotRef.current) dotRef.current.style.opacity = "0";
-      if (ringRef.current) ringRef.current.style.opacity = "0";
+      visibleRef.current = false;
+      applyOpacity();
     };
 
     const onMouseEnter = () => {
-      visible = true;
-      if (dotRef.current) dotRef.current.style.opacity = "";
-      if (ringRef.current) ringRef.current.style.opacity = "";
+      visibleRef.current = true;
+      applyOpacity();
     };
 
     let frameId = 0;
@@ -76,10 +89,9 @@ export default function CustomCursor() {
       cancelAnimationFrame(frameId);
       document.body.style.cursor = "";
     };
-  }, []);
+  }, [applyOpacity]);
 
   const isHover = cursorVariant === "hover";
-  const isHidden = cursorVariant === "hidden";
 
   return (
     <>
@@ -88,7 +100,6 @@ export default function CustomCursor() {
         className="cursor-dot hidden md:block"
         style={{
           ...(isHover ? { scale: "2" } : {}),
-          opacity: isHidden ? 0 : 1,
         }}
       />
       <div
@@ -97,7 +108,6 @@ export default function CustomCursor() {
         style={{
           width: isHover ? "60px" : "40px",
           height: isHover ? "60px" : "40px",
-          opacity: isHidden ? 0 : 0.3,
           borderColor: isHover
             ? "rgba(201, 168, 76, 0.5)"
             : "rgba(201, 168, 76, 0.2)",

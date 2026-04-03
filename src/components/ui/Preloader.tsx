@@ -105,6 +105,8 @@ export default function Preloader() {
   return (
     <div
       ref={containerRef}
+      role="status"
+      aria-label="Cargando IVANN AURA"
       style={{
         position: "fixed",
         inset: 0,

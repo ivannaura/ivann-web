@@ -44,7 +44,7 @@ const STORY_BEATS: StoryBeat[] = [
     frameEnd: 75,
     content: (
       <div className="text-center">
-        <h1
+        <p
           data-split="chars"
           data-split-mask="words"
           data-split-stagger="0.04"
@@ -52,8 +52,8 @@ const STORY_BEATS: StoryBeat[] = [
           style={{ color: "var(--text-primary)" }}
         >
           IVANN
-        </h1>
-        <h1
+        </p>
+        <p
           data-split="chars"
           data-split-mask="words"
           data-split-stagger="0.04"
@@ -61,7 +61,7 @@ const STORY_BEATS: StoryBeat[] = [
           style={{ color: "var(--aura-gold)" }}
         >
           AURA
-        </h1>
+        </p>
       </div>
     ),
     position: "center",
@@ -90,6 +90,7 @@ const STORY_BEATS: StoryBeat[] = [
     content: (
       <div className="flex flex-col items-center gap-2">
         <span
+          aria-hidden="true"
           className="text-[9px] tracking-[0.3em] uppercase animate-pulse"
           style={{ color: "var(--text-muted)" }}
         >
@@ -544,6 +545,9 @@ function AnimatedBeat({ beat, progress }: AnimatedBeatProps) {
     if (!el) return;
 
     const mm = gsap.matchMedia();
+    // Collect SplitText instances for explicit cleanup (prevents double-split
+    // when AnimatedBeat unmounts and remounts on scroll direction reversal)
+    const splits: { revert: () => void }[] = [];
 
     mm.add("(prefers-reduced-motion: no-preference)", () => {
       const splitTargets = el.querySelectorAll<HTMLElement>("[data-split]");
@@ -571,6 +575,7 @@ function AnimatedBeat({ beat, progress }: AnimatedBeatProps) {
             type,
             ...(mask ? { mask } : {}),
           });
+          splits.push(split);
 
           const elements = split.chars.length
             ? split.chars
@@ -650,7 +655,12 @@ function AnimatedBeat({ beat, progress }: AnimatedBeatProps) {
       }
     });
 
-    return () => mm.revert();
+    return () => {
+      mm.revert();
+      // Explicitly revert SplitText DOM mutations — matchMedia.revert() may not
+      // handle SplitText cleanup in all GSAP versions
+      splits.forEach(s => s.revert());
+    };
   }, [beat.animation]);
 
   // Exit: CSS opacity fade (works with and without reduced motion)

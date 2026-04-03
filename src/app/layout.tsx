@@ -17,12 +17,11 @@ const geistMono = Geist_Mono({
 
 const SITE_URL = "https://ivannaura.com";
 
-// Viewport — cover mode for iPhone notch, no zoom for immersive experience
+// Viewport — cover mode for iPhone notch
+// Note: maximumScale/userScalable removed — WCAG 1.4.4 requires pinch-to-zoom
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
-  maximumScale: 1,
-  userScalable: false,
   viewportFit: "cover",
   themeColor: "#050508",
 };
@@ -57,6 +56,7 @@ export const metadata: Metadata = {
     images: [
       {
         url: "/og-image.jpg",
+        type: "image/jpeg",
         width: 1200,
         height: 630,
         alt: "IVANN AURA — Live Experience",
@@ -136,6 +136,18 @@ export default function RootLayout({
         />
       </head>
       <body className="min-h-dvh">
+        {/* Skip link — WCAG 2.4.1 bypass blocks */}
+        <a
+          href="#main-content"
+          className="sr-only focus:not-sr-only focus:fixed focus:top-4 focus:left-4 focus:z-[100001] focus:px-4 focus:py-2 focus:text-sm focus:tracking-widest focus:uppercase"
+          style={{
+            background: "var(--bg-void)",
+            color: "var(--aura-gold)",
+            border: "1px solid var(--aura-gold-dim)",
+          }}
+        >
+          Saltar al contenido
+        </a>
         <Preloader />
         <MagneticButtons />
         <SmoothScroll>{children}</SmoothScroll>

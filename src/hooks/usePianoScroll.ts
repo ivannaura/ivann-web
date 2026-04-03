@@ -31,7 +31,8 @@ export function usePianoScroll(options: UsePianoScrollOptions = {}) {
       if (!/^[a-zA-Z]$/.test(e.key)) return;
       const tag = (e.target as HTMLElement)?.tagName;
       if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
-      e.preventDefault();
+      // Note: no e.preventDefault() — screen readers (JAWS/NVDA) use single-letter
+      // keys (H, B, T, etc.) for browse-mode navigation; blocking them breaks AT.
       lenis.scrollTo(lenis.scroll + scrollThreshold);
     };
     window.addEventListener("keydown", onKeyDown);

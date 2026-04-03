@@ -13,6 +13,12 @@ let refCount = 0;
 /** Acquire the shared AudioContext (creates on first call). */
 export function acquireAudioContext(): AudioContext | null {
   if (typeof window === 'undefined') return null;
+  // Guard: context may have been closed externally (e.g., releaseAudioContext
+  // closed it, then a consumer tries to re-acquire before the module var is nulled)
+  if (ctx && ctx.state === 'closed') {
+    ctx = null;
+    refCount = 0;
+  }
   if (!ctx) {
     try {
       ctx = new AudioContext();

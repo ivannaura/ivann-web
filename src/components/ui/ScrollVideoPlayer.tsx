@@ -89,7 +89,7 @@ export default function ScrollVideoPlayer({
       // Find a buffered range containing the target time
       for (let i = 0; i < video.buffered.length; i++) {
         if (time >= video.buffered.start(i) && time <= video.buffered.end(i)) {
-          return Math.min(time, video.buffered.end(i) - 0.1);
+          return Math.max(0, Math.min(time, video.buffered.end(i) - 0.1));
         }
       }
       // Target not buffered — use nearest buffered end before target
@@ -230,12 +230,12 @@ export default function ScrollVideoPlayer({
   // ---------------------------------------------------------------------------
   // Render loop — cinema + particles + energy + frequency bands + mouse + velocity
   // ---------------------------------------------------------------------------
+  const defaultBandsRef = useRef({ bass: 0, mids: 0, highs: 0 });
   useEffect(() => {
     if (!ready) return;
 
     let paused = false;
     let lastEnergy = -1;
-    const defaultBands = { bass: 0, mids: 0, highs: 0 };
 
     const tick = () => {
       if (paused) return;
@@ -251,7 +251,7 @@ export default function ScrollVideoPlayer({
       }
 
       // Frequency bands from AnalyserNode — also forwarded to page
-      const bands = momentum?.getFrequencyBands() ?? defaultBands;
+      const bands = momentum?.getFrequencyBands() ?? defaultBandsRef.current;
       onBandsChangeRef.current?.(bands);
 
       // Smooth velocity decay (exponential toward 0 when not scrolling)
@@ -260,20 +260,27 @@ export default function ScrollVideoPlayer({
       // Decay raw velocity toward 0 each frame (cleared on scroll)
       velocityRef.current *= 0.92;
 
-      // Unified cinema render
+      // Unified cinema render (with context-loss fallback)
       const video = videoRef.current;
       const cinema = cinemaRef.current;
       if (video && cinema) {
-        cinema.render({
-          video,
-          time: now,
-          energy: e,
-          progress: progressRef.current,
-          bands,
-          mouseX: mouseRef.current.x,
-          mouseY: mouseRef.current.y,
-          velocity: smoothVelocityRef.current,
-        });
+        if (cinema.lost) {
+          // WebGL context lost — null ref so future ticks skip this block,
+          // then fall back to raw <video> element
+          cinemaRef.current = null;
+          setHasGL(false);
+        } else {
+          cinema.render({
+            video,
+            time: now,
+            energy: e,
+            progress: progressRef.current,
+            bands,
+            mouseX: mouseRef.current.x,
+            mouseY: mouseRef.current.y,
+            velocity: smoothVelocityRef.current,
+          });
+        }
       }
 
       renderRafRef.current = requestAnimationFrame(tick);

@@ -14,17 +14,18 @@ export default function MagneticButtons() {
 
     const strength = 0.3;
     let currentBtn: HTMLElement | null = null;
+    let cachedRect: DOMRect | null = null;
 
     const onMove = (e: MouseEvent) => {
       const btn = (e.target as HTMLElement).closest<HTMLElement>(".magnetic-btn");
       if (btn !== currentBtn) {
         if (currentBtn) currentBtn.style.transform = "";
         currentBtn = btn;
+        cachedRect = btn ? btn.getBoundingClientRect() : null;
       }
-      if (!btn) return;
-      const rect = btn.getBoundingClientRect();
-      const x = e.clientX - rect.left - rect.width / 2;
-      const y = e.clientY - rect.top - rect.height / 2;
+      if (!btn || !cachedRect) return;
+      const x = e.clientX - cachedRect.left - cachedRect.width / 2;
+      const y = e.clientY - cachedRect.top - cachedRect.height / 2;
       btn.style.transform = `translate(${x * strength}px, ${y * strength}px)`;
     };
 

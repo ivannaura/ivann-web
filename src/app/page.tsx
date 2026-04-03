@@ -69,7 +69,7 @@ export default function Home() {
       />
       <PianoIndicator energy={displayEnergy} bands={displayBands} />
 
-      <main aria-label="Contenido principal">
+      <main id="main-content" aria-label="Contenido principal">
         <ScrollVideoPlayer
           videoSrc={VIDEO_SRC}
           audioSrc={AUDIO_SRC}

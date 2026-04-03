@@ -122,7 +122,8 @@ export default function Footer() {
             {/* Back to top — magnetic button */}
             <button
               onClick={scrollToTop}
-              className="hidden md:flex flex-col items-center gap-2 group mb-4 magnetic-btn"
+              aria-label="Volver al inicio de la página"
+              className="hidden md:flex flex-col items-center gap-2 group mb-4 magnetic-btn outline-none focus-visible:ring-1 focus-visible:ring-[var(--aura-gold)] rounded-sm"
               onMouseEnter={() => { setCursorVariant("hover"); playHover(); }}
               onMouseLeave={() => setCursorVariant("default")}
             >
@@ -133,6 +134,7 @@ export default function Footer() {
                 }}
               >
                 <svg
+                  aria-hidden="true"
                   width="14"
                   height="14"
                   viewBox="0 0 24 24"
@@ -146,6 +148,7 @@ export default function Footer() {
                 </svg>
               </div>
               <span
+                aria-hidden="true"
                 className="text-[9px] tracking-[0.3em] uppercase transition-colors duration-300 group-hover:text-[var(--aura-gold)]"
                 style={{ color: "var(--text-muted)" }}
               >

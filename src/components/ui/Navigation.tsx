@@ -114,6 +114,7 @@ export default function Navigation({
     <>
       {/* Scroll progress bar — thin gold line at very top */}
       <div
+        aria-hidden="true"
         className="fixed top-0 left-0 h-[2px] z-[1002] transition-opacity duration-500"
         style={{
           width: `${scrollProgress * 100}%`,
@@ -157,6 +158,7 @@ export default function Navigation({
             }}
           >
             <div
+              aria-hidden="true"
               className="w-5 h-5 mr-2 relative overflow-hidden transition-all duration-500"
               style={{
                 opacity: scrolled ? 1 : 0,
@@ -266,7 +268,7 @@ export default function Navigation({
             {/* Sound toggle — wired to AudioMomentum */}
             <button
               onClick={onSoundToggle}
-              className="w-8 h-8 flex items-center justify-center rounded-full transition-all duration-300 hover:bg-white/5"
+              className="w-8 h-8 flex items-center justify-center rounded-full transition-all duration-300 hover:bg-white/5 outline-none focus-visible:ring-1 focus-visible:ring-[var(--aura-gold)]"
               aria-label={soundMuted ? "Activar sonido" : "Silenciar sonido"}
               onMouseEnter={() => setCursorVariant("hover")}
               onMouseLeave={() => setCursorVariant("default")}
@@ -274,6 +276,7 @@ export default function Navigation({
               {soundMuted ? (
                 // Muted icon
                 <svg
+                  aria-hidden="true"
                   width="14"
                   height="14"
                   viewBox="0 0 24 24"
@@ -288,6 +291,7 @@ export default function Navigation({
               ) : (
                 // Active icon — gold when audio is playing
                 <svg
+                  aria-hidden="true"
                   width="14"
                   height="14"
                   viewBox="0 0 24 24"
@@ -314,6 +318,7 @@ export default function Navigation({
             aria-controls="mobile-menu"
           >
             <span
+              aria-hidden="true"
               className="w-5 h-[1px] transition-all duration-500 origin-center"
               style={{
                 background: "var(--text-primary)",
@@ -323,6 +328,7 @@ export default function Navigation({
               }}
             />
             <span
+              aria-hidden="true"
               className="w-5 h-[1px] transition-all duration-500"
               style={{
                 background: "var(--text-primary)",
@@ -331,6 +337,7 @@ export default function Navigation({
               }}
             />
             <span
+              aria-hidden="true"
               className="w-5 h-[1px] transition-all duration-500 origin-center"
               style={{
                 background: "var(--text-primary)",
@@ -403,6 +410,7 @@ export default function Navigation({
       <div
         className="fixed right-8 top-1/2 -translate-y-1/2 z-[998] hidden lg:flex flex-col items-center gap-3 transition-opacity duration-700"
         style={{ opacity: scrolled ? 1 : 0 }}
+        aria-hidden={!scrolled}
       >
         {NAV_ITEMS.map((item, i) => (
           <button
@@ -410,6 +418,7 @@ export default function Navigation({
             onClick={() => handleClick(item.href)}
             className="group flex items-center gap-3 rounded-sm outline-none focus-visible:ring-1 focus-visible:ring-[var(--aura-gold)]"
             aria-label={item.label}
+            tabIndex={scrolled ? 0 : -1}
           >
             <span
               className="text-[9px] tracking-[0.2em] uppercase opacity-0 group-hover:opacity-100 transition-all duration-300 translate-x-2 group-hover:translate-x-0"
