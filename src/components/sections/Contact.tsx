@@ -283,9 +283,10 @@ export default function Contact() {
                     }
                     className={inputBase}
                     aria-invalid={!!errors.name}
+                    aria-describedby={errors.name ? "contact-name-error" : undefined}
                   />
                   {errors.name && (
-                    <p className="text-[10px] mt-1" style={{ color: "var(--crimson)" }}>
+                    <p id="contact-name-error" className="text-[10px] mt-1" style={{ color: "var(--crimson)" }}>
                       {errors.name}
                     </p>
                   )}
@@ -309,9 +310,10 @@ export default function Contact() {
                     }
                     className={inputBase}
                     aria-invalid={!!errors.email}
+                    aria-describedby={errors.email ? "contact-email-error" : undefined}
                   />
                   {errors.email && (
-                    <p className="text-[10px] mt-1" style={{ color: "var(--crimson)" }}>
+                    <p id="contact-email-error" className="text-[10px] mt-1" style={{ color: "var(--crimson)" }}>
                       {errors.email}
                     </p>
                   )}
@@ -369,9 +371,10 @@ export default function Contact() {
                     }
                     className={`${inputBase} resize-none`}
                     aria-invalid={!!errors.message}
+                    aria-describedby={errors.message ? "contact-message-error" : undefined}
                   />
                   {errors.message && (
-                    <p className="text-[10px] mt-1" style={{ color: "var(--crimson)" }}>
+                    <p id="contact-message-error" className="text-[10px] mt-1" style={{ color: "var(--crimson)" }}>
                       {errors.message}
                     </p>
                   )}

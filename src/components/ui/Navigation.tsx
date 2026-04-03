@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, useCallback } from "react";
+import { useLenis } from "lenis/react";
 import { useUIStore } from "@/stores/useUIStore";
-import { playHover, playClick, setMicroSoundsMuted } from "@/lib/micro-sounds";
+import { playHover, playClick } from "@/lib/micro-sounds";
 
 const NAV_ITEMS = [
   { label: "Inicio", href: "#top", num: "01" },
@@ -34,6 +35,7 @@ export default function Navigation({
   const toggleMenu = useUIStore((s) => s.toggleMenu);
   const setMenuOpen = useUIStore((s) => s.setMenuOpen);
   const setCursorVariant = useUIStore((s) => s.setCursorVariant);
+  const lenis = useLenis();
 
   useEffect(() => {
     // Cache section elements once — no querySelector per scroll frame
@@ -97,21 +99,16 @@ export default function Navigation({
     return () => dialog.removeEventListener("close", onClose);
   }, [setMenuOpen]);
 
-  // Sync micro-sounds mute with sound toggle
-  useEffect(() => {
-    setMicroSoundsMuted(soundMuted);
-  }, [soundMuted]);
-
   const handleClick = useCallback((href: string) => {
     playClick();
     setMenuOpen(false);
     if (href === "#top") {
-      window.scrollTo({ top: 0, behavior: "smooth" });
+      lenis?.scrollTo(0);
     } else {
-      const el = document.querySelector(href);
-      if (el) el.scrollIntoView({ behavior: "smooth" });
+      const el = document.querySelector<HTMLElement>(href);
+      if (el) lenis?.scrollTo(el);
     }
-  }, [setMenuOpen]);
+  }, [setMenuOpen, lenis]);
 
   return (
     <>
@@ -314,6 +311,7 @@ export default function Navigation({
             onClick={toggleMenu}
             aria-label="Menu"
             aria-expanded={menuOpen}
+            aria-controls="mobile-menu"
           >
             <span
               className="w-5 h-[1px] transition-all duration-500 origin-center"
@@ -347,6 +345,7 @@ export default function Navigation({
 
       {/* Mobile menu — native <dialog> for automatic focus trap + Escape + inert background */}
       <dialog
+        id="mobile-menu"
         ref={dialogRef}
         className="fixed inset-0 z-[999] md:hidden w-full h-full max-w-full max-h-full m-0 p-0 border-none"
         style={{ background: "var(--bg-void)" }}
@@ -379,16 +378,17 @@ export default function Navigation({
 
           <div className="mt-12 flex gap-6">
             {[
-              { label: "IG", url: "https://www.instagram.com/ivannaura" },
-              { label: "SP", url: "https://open.spotify.com/artist/ivannaura" },
-              { label: "YT", url: "https://www.youtube.com/@ivannaura" },
-              { label: "TK", url: "https://www.tiktok.com/@ivannaura" },
+              { label: "IG", name: "Instagram", url: "https://www.instagram.com/ivannaura" },
+              { label: "SP", name: "Spotify", url: "https://open.spotify.com/artist/ivannaura" },
+              { label: "YT", name: "YouTube", url: "https://www.youtube.com/@ivannaura" },
+              { label: "TK", name: "TikTok", url: "https://www.tiktok.com/@ivannaura" },
             ].map((s) => (
               <a
                 key={s.label}
                 href={s.url}
                 target="_blank"
                 rel="noopener noreferrer"
+                aria-label={s.name}
                 className="text-[10px] tracking-[0.2em] transition-colors duration-300 hover:text-[var(--aura-gold)]"
                 style={{ color: "var(--text-muted)" }}
               >
@@ -408,7 +408,7 @@ export default function Navigation({
           <button
             key={item.href}
             onClick={() => handleClick(item.href)}
-            className="group flex items-center gap-3"
+            className="group flex items-center gap-3 rounded-sm outline-none focus-visible:ring-1 focus-visible:ring-[var(--aura-gold)]"
             aria-label={item.label}
           >
             <span

@@ -80,16 +80,25 @@ export default function ScrollVideoPlayer({
   onEnergyChangeRef.current = onEnergyChange;
   const onBandsChangeRef = useRef(onBandsChange);
   onBandsChangeRef.current = onBandsChange;
+  const audioMutedRef = useRef(audioMuted);
+  audioMutedRef.current = audioMuted;
 
   const clampToBuffered = useCallback(
     (video: HTMLVideoElement, time: number): number => {
       if (!video.buffered.length) return 0;
+      // Find a buffered range containing the target time
       for (let i = 0; i < video.buffered.length; i++) {
-        if (video.buffered.start(i) <= 0.5) {
+        if (time >= video.buffered.start(i) && time <= video.buffered.end(i)) {
           return Math.min(time, video.buffered.end(i) - 0.1);
         }
       }
-      return 0;
+      // Target not buffered — use nearest buffered end before target
+      let nearest = 0;
+      for (let i = 0; i < video.buffered.length; i++) {
+        const end = video.buffered.end(i);
+        if (end <= time) nearest = end - 0.1;
+      }
+      return Math.max(0, nearest);
     },
     []
   );
@@ -224,10 +233,12 @@ export default function ScrollVideoPlayer({
   useEffect(() => {
     if (!ready) return;
 
+    let paused = false;
     let lastEnergy = -1;
     const defaultBands = { bass: 0, mids: 0, highs: 0 };
 
     const tick = () => {
+      if (paused) return;
       const now = performance.now() / 1000;
 
       // Energy tracking
@@ -268,8 +279,23 @@ export default function ScrollVideoPlayer({
       renderRafRef.current = requestAnimationFrame(tick);
     };
 
+    // Pause render loop when tab is hidden (save GPU cycles)
+    const onVisibility = () => {
+      if (document.hidden) {
+        paused = true;
+        cancelAnimationFrame(renderRafRef.current);
+      } else {
+        paused = false;
+        renderRafRef.current = requestAnimationFrame(tick);
+      }
+    };
+
+    document.addEventListener("visibilitychange", onVisibility);
     renderRafRef.current = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(renderRafRef.current);
+    return () => {
+      document.removeEventListener("visibilitychange", onVisibility);
+      cancelAnimationFrame(renderRafRef.current);
+    };
   }, [ready]);
 
   // ---------------------------------------------------------------------------
@@ -285,12 +311,11 @@ export default function ScrollVideoPlayer({
 
     mm.add(
       {
-        standard: "(prefers-reduced-motion: no-preference)",
         reduced: "(prefers-reduced-motion: reduce)",
+        isDesktop: "(min-width: 768px)",
       },
       (context) => {
-        const { reduced } = context.conditions!;
-        const isDesktop = window.innerWidth >= 768;
+        const { reduced, isDesktop } = context.conditions!;
 
         ScrollTrigger.create({
           trigger: container,
@@ -352,6 +377,7 @@ export default function ScrollVideoPlayer({
     const momentum = new AudioMomentum();
     momentum.init(audioSrc);
     momentum.setVideoTimeGetter(() => currentTimeRef.current);
+    momentum.setMuted(audioMutedRef.current);
     momentumRef.current = momentum;
 
     return () => {
@@ -383,6 +409,7 @@ export default function ScrollVideoPlayer({
           playsInline
           preload="auto"
           onError={onError}
+          aria-hidden="true"
           className="absolute inset-0 w-full h-full object-cover"
           style={{
             background: "var(--bg-void)",
@@ -393,6 +420,7 @@ export default function ScrollVideoPlayer({
         {hasGL && (
           <canvas
             ref={canvasRef}
+            aria-hidden="true"
             className="absolute inset-0 w-full h-full object-cover"
             style={{ opacity: ready ? 1 : 0 }}
           />

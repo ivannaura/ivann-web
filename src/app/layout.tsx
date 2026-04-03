@@ -24,6 +24,7 @@ export const viewport: Viewport = {
   maximumScale: 1,
   userScalable: false,
   viewportFit: "cover",
+  themeColor: "#050508",
 };
 
 export const metadata: Metadata = {
@@ -123,8 +124,6 @@ export default function RootLayout({
   return (
     <html lang="es" className={`${geist.variable} ${geistMono.variable} antialiased`}>
       <head>
-        {/* Theme color for Android Chrome toolbar */}
-        <meta name="theme-color" content="#050508" />
         {/*
           Preload hints removed — <link rel="preload" as="video"> is unreliable
           across browsers and was blocking the <video> element from loading.

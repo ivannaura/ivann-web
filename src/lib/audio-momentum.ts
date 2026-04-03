@@ -271,6 +271,7 @@ export class AudioMomentum {
         this.audio.volume = volume;
         this.playPending = true;
         this.audio.play().then(() => {
+          if (!this.running) return; // destroyed while awaiting play()
           this.wasPlaying = true;
           this.playPending = false;
         }).catch(() => {

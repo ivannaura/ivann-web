@@ -1,6 +1,7 @@
 @import "tailwindcss";
 
 :root {
+  color-scheme: dark;
   --bg-void: #050508;
   --bg-surface: #0A0A10;
   --bg-subtle: #12121A;
@@ -10,10 +11,7 @@
   --aura-gold: #C9A84C;
   --aura-gold-bright: #E8C85A;
   --aura-gold-dim: #8A7435;
-  --deep-blue: #1A2D5A;
-  --electric-blue: #2E5BFF;
   --crimson: #6B1520;
-  --particle-core: #FFFDE8;
   --border-subtle: rgba(255, 255, 255, 0.06);
 }
 
@@ -25,8 +23,6 @@
   --color-gold: var(--aura-gold);
   --color-gold-bright: var(--aura-gold-bright);
   --color-gold-dim: var(--aura-gold-dim);
-  --color-blue: var(--deep-blue);
-  --color-electric: var(--electric-blue);
   --color-crimson: var(--crimson);
   --color-muted: var(--text-muted);
   --color-secondary: var(--text-secondary);
@@ -42,8 +38,6 @@ body {
   background-color: var(--bg-void);
   color: var(--text-primary);
   overflow-x: hidden;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
   -webkit-tap-highlight-color: transparent;
 }
 
@@ -105,12 +99,13 @@ dialog[open] {
   display: flex;
 }
 
-/* Reduced motion — disable all decorative animations for a11y (WCAG 2.3.3) */
+/* Reduced motion — disable decorative animations for a11y (WCAG 2.3.3) */
+/* Transitions are left intact so focus outlines, hover states, and opacity remain functional */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
   }
   .cursor-dot, .cursor-ring {
     display: none;

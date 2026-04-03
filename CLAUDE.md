@@ -20,7 +20,7 @@ Awwwards-quality immersive website for IVANN AURA, a Colombian pianist and live 
 
 ```
 layout.tsx
- ├── Preloader             (cinematic SplitText entrance + animated progress)
+ ├── Preloader             (cinematic SplitText entrance + decorative bar + scale exit)
  ├── MagneticButtons       (global .magnetic-btn hover effect provider)
  └── SmoothScroll          (Lenis + GSAP single RAF loop)
       └── page.tsx
@@ -52,7 +52,7 @@ layout.tsx
 | `Navigation` | `ui/Navigation.tsx` | Fixed nav, scroll progress, native `<dialog>`, cached querySelector |
 | `CustomCursor` | `ui/CustomCursor.tsx` | GPU-composited transform cursor + viewport mouseleave/mouseenter |
 | `MagneticButtons` | `providers/MagneticButtons.tsx` | Global `.magnetic-btn` hover effect (desktop, reduced-motion aware) |
-| `Preloader` | `ui/Preloader.tsx` | Cinematic preloader: SplitText reveal + animated progress + scale exit |
+| `Preloader` | `ui/Preloader.tsx` | Cinematic preloader: SplitText reveal + decorative bar + scale exit |
 | `SmoothScroll` | `providers/SmoothScroll.tsx` | Lenis + GSAP single RAF loop (lerp 0.08, autoRaf false, typed LenisRef) |
 | `Contact` | `sections/Contact.tsx` | GSAP ScrollTrigger entrance + SplitText heading + mailto: form + validation |
 | `Footer` | `ui/Footer.tsx` | GSAP SplitText entrance + real social links + micro-sounds |
@@ -111,9 +111,9 @@ Bands available via `getFrequencyBands()` → `{ bass, mids, highs }` (all 0-1).
    - Desktop: `scrub: 1.5` (vinyl feel)
    - Mobile: `scrub: 2` (gentler for touch)
    - `prefers-reduced-motion`: `scrub: true` (instant sync, no audio impulse)
-4. `onUpdate` clamps to buffered range, sets `video.currentTime`, reports frame changes
+4. `onUpdate` clamps to buffered range (finds containing range or nearest preceding), sets `video.currentTime`, reports frame changes
 5. Scroll velocity > 50px/s triggers `AudioMomentum.addImpulse()` (disabled for reduced-motion)
-6. A rAF render loop uploads video frames to WebGL2 canvas with post-processing + particles
+6. A rAF render loop uploads video frames to WebGL2 canvas with post-processing + particles (paused on `visibilitychange`)
 
 ## Story Beat Text Animations (GSAP SplitText)
 
@@ -157,7 +157,7 @@ Bands available via `getFrequencyBands()` → `{ bass, mids, highs }` (all 0-1).
 - **Soft bloom**: Glow on highlights, boosted by highs frequency band
 
 **Pass 2 — Luminance-reactive particles** (250 GL_POINTS, additive blending, `bufferSubData`):
-- Pre-allocated DYNAMIC_DRAW buffer, updated per frame with `bufferSubData` (no reallocation)
+- Pre-allocated DYNAMIC_DRAW buffer, updated per frame with `bufferSubData` (no reallocation); dead particles reset in-place via `resetParticle()` (zero GC)
 - Particles sample video texture for luminance at their position
 - Luminance gradient nudges toward bright areas + cursor attraction with distance falloff
 - Size pulses with bass, glow intensifies with highs
@@ -185,8 +185,7 @@ Falls back to raw `<video>` element if WebGL2 unavailable. Canvas sized to viewp
 --bg-void: #050508       --bg-surface: #0A0A10      --bg-subtle: #12121A
 --text-primary: #F0EDE6  --text-secondary: #8A8A99  --text-muted: #4A4A5A
 --aura-gold: #C9A84C     --aura-gold-bright: #E8C85A  --aura-gold-dim: #8A7435
---crimson: #6B1520       --deep-blue: #1A2D5A       --electric-blue: #2E5BFF
---particle-core: #FFFDE8 --border-subtle: rgba(255,255,255,0.06)
+--crimson: #6B1520       --border-subtle: rgba(255,255,255,0.06)
 ```
 
 ## Video Pipeline
@@ -213,9 +212,8 @@ Audio: `public/audio/flamenco.m4a` (AAC 128kbps, 3.9MB)
 - Complete Open Graph + Twitter Card metadata with OG image
 - JSON-LD structured data: `@graph` with `MusicGroup` + `Person` + `WebSite` (not MusicEvent — Google requires startDate)
 - `sitemap.xml` and `robots.txt` auto-generated via Next.js App Router
-- `<meta name="theme-color" content="#050508">` for Android Chrome toolbar
-- Video preload hint: `<link rel="preload" href="/videos/flamenco-graded.mp4">`
-- Audio preload hint: `<link rel="preload" href="/audio/flamenco.m4a">`
+- `themeColor` in viewport export for Android Chrome toolbar
+- No preload hints — `<link rel="preload" as="video">` is unreliable across browsers; `preload="auto"` on `<video>` handles progressive download
 - `prefers-reduced-motion` disables all animations
 - `aria-hidden="true"` on PianoIndicator (decorative)
 - `aria-label="Contenido principal"` on `<main>`
@@ -230,8 +228,9 @@ Audio: `public/audio/flamenco.m4a` (AAC 128kbps, 3.9MB)
 ## Commands
 
 ```bash
-npm run dev          # Dev server (webpack)
+npm run dev          # Dev server (Turbopack)
 npm run build        # Production build (Turbopack)
+npm run typecheck    # TypeScript check (tsc --noEmit)
 ```
 
 ## Public Assets
@@ -257,5 +256,21 @@ npm run build        # Production build (Turbopack)
 - Film grain is shader-only (CSS grain overlay removed to avoid duplication)
 - Energy state throttled: `useRef` at 60fps → `useState` at 10fps via `setInterval(100ms)`
 - Social links: real URLs with `target="_blank" rel="noopener noreferrer"`
-- Contact form: `mailto:` with pre-filled subject/body + client-side validation
+- Contact form: `mailto:` with pre-filled subject/body + client-side validation + `aria-describedby` error linking
+- Programmatic scroll: use `useLenis()` from `lenis/react` — **never** `window.scrollTo/scrollBy/scrollIntoView` (conflicts with Lenis smooth scroll)
+- `color-scheme: dark` in `:root` for native form control colors
+- CinemaGL: `texImage2D` guarded by `lastVideoTime` — skips upload when video frame unchanged
+- AudioMomentum: `play()` Promise callback guards against destroyed instance (`if (!this.running) return`)
+- MicroSounds: `getCtx()` re-acquires if shared AudioContext was closed
+- CinemaGL: `webglcontextlost` / `webglcontextrestored` events tracked — render skips when context lost
+- CinemaGL: all `gl.create*()` calls null-checked (no `!` non-null assertions on losable GL objects)
+- SharedAudioContext: `releaseAudioContext()` guards against negative refCount
+- ScrollVideoPlayer: `audioMuted` applied to freshly created AudioMomentum via ref (React effect ordering)
+- Navigation: `aria-controls="mobile-menu"` on hamburger, `id="mobile-menu"` on dialog
+- Navigation: mobile social links have `aria-label` for screen readers
+- Side dot navigation buttons have `focus-visible:ring` for keyboard users
+- Reduced-motion CSS: only `animation-*` properties are overridden; transitions preserved for focus/hover
+- `setMicroSoundsMuted` called from ScrollVideoPlayer only (not duplicated in Navigation)
+- `<video>` and `<canvas>` have `aria-hidden="true"` (decorative, content conveyed by overlay text)
+- Error boundary: `src/app/error.tsx` for Next.js App Router error handling
 - See `docs/CONVENTIONS.md` for full technical conventions

@@ -15,15 +15,20 @@ export default function Preloader() {
   const nameRef = useRef<HTMLHeadingElement>(null);
   const subtitleRef = useRef<HTMLParagraphElement>(null);
   const barRef = useRef<HTMLDivElement>(null);
-  const percentRef = useRef<HTMLSpanElement>(null);
 
   useEffect(() => {
     const container = containerRef.current;
     const nameEl = nameRef.current;
     const subtitleEl = subtitleRef.current;
     const barEl = barRef.current;
-    const percentEl = percentRef.current;
-    if (!container || !nameEl || !subtitleEl || !barEl || !percentEl) return;
+    if (!container || !nameEl || !subtitleEl || !barEl) return;
+
+    let dismissTimeout: ReturnType<typeof setTimeout>;
+
+    const dismiss = () => {
+      setDismissed(true);
+      dismissTimeout = setTimeout(() => setHidden(true), 100);
+    };
 
     const ctx = gsap.context(() => {
       // Split "IVANN AURA" into chars with word masking
@@ -44,11 +49,7 @@ export default function Preloader() {
             scale: 1.05,
             duration: 0.6,
             ease: "power2.in",
-            onComplete: () => {
-              setDismissed(true);
-              // Let React remove from DOM after transition
-              setTimeout(() => setHidden(true), 100);
-            },
+            onComplete: dismiss,
           });
         },
       });
@@ -72,21 +73,7 @@ export default function Preloader() {
         "-=0.3"
       );
 
-      // 3. Counter ticks up
-      tl.to(
-        { val: 0 },
-        {
-          val: 100,
-          duration: 1.2,
-          ease: "power2.inOut",
-          onUpdate: function () {
-            percentEl.textContent = `${Math.round(this.targets()[0].val)}%`;
-          },
-        },
-        "<"
-      );
-
-      // 4. Subtitle chars fade in
+      // 3. Subtitle chars fade in
       tl.from(
         subtitleSplit.chars,
         {
@@ -99,19 +86,17 @@ export default function Preloader() {
         "-=0.5"
       );
 
-      // 5. Brief pause to let user read
+      // 4. Brief pause to let user read
       tl.to({}, { duration: 0.3 });
     }, container);
 
     // Fallback: force dismiss after 5s
-    const fallback = setTimeout(() => {
-      setDismissed(true);
-      setTimeout(() => setHidden(true), 100);
-    }, 5000);
+    const fallback = setTimeout(dismiss, 5000);
 
     return () => {
       ctx.revert();
       clearTimeout(fallback);
+      clearTimeout(dismissTimeout);
     };
   }, []);
 
@@ -172,20 +157,6 @@ export default function Preloader() {
           }}
         />
       </div>
-
-      {/* Percentage counter */}
-      <span
-        ref={percentRef}
-        style={{
-          fontSize: 11,
-          fontFamily: "var(--font-geist-mono), monospace",
-          color: "var(--text-muted)",
-          marginTop: 12,
-          letterSpacing: "0.1em",
-        }}
-      >
-        0%
-      </span>
 
       {/* Subtitle */}
       <p

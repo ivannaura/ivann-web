@@ -4,6 +4,7 @@ import { useEffect, useRef } from "react";
 import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 import { SplitText } from "gsap/SplitText";
+import { useLenis } from "lenis/react";
 import { useUIStore } from "@/stores/useUIStore";
 import { playHover, playClick } from "@/lib/micro-sounds";
 
@@ -20,6 +21,7 @@ const SOCIAL_LINKS = [
 
 export default function Footer() {
   const setCursorVariant = useUIStore((s) => s.setCursorVariant);
+  const lenis = useLenis();
   const footerRef = useRef<HTMLElement>(null);
 
   // GSAP entrance animation
@@ -71,7 +73,7 @@ export default function Footer() {
 
   const scrollToTop = () => {
     playClick();
-    window.scrollTo({ top: 0, behavior: "smooth" });
+    lenis?.scrollTo(0);
   };
 
   return (

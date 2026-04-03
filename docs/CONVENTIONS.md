@@ -134,7 +134,7 @@ if abs(audio.currentTime - videoTime) > 3.0 seconds:
 
 ### Shared AudioContext
 
-AudioMomentum and MicroSounds share one `AudioContext` via `shared-audio-context.ts`. This is critical because iOS Safari limits pages to 4 AudioContexts total. The module uses ref counting: `acquireAudioContext()` increments, `releaseAudioContext()` decrements. The context only closes when the last consumer releases.
+AudioMomentum and MicroSounds share one `AudioContext` via `shared-audio-context.ts`. This is critical because iOS Safari limits pages to 4 AudioContexts total. The module uses ref counting: `acquireAudioContext()` increments, `releaseAudioContext()` decrements. The context only closes when the last consumer releases. `releaseAudioContext()` guards against negative `refCount` (e.g. double-release).
 
 ### Frequency Analysis
 
@@ -185,6 +185,10 @@ Particles use pre-allocated `DYNAMIC_DRAW` buffer. Updated per frame with `buffe
 
 `initCinemaGL()` returns `null` if WebGL is unavailable. `ScrollVideoPlayer` tracks `hasGL` state — when false, the raw `<video>` element is shown directly with `opacity: 1`.
 
+### Context loss handling
+
+`webglcontextlost` / `webglcontextrestored` events tracked on the canvas. A `contextLost` flag causes `render()` to early-return. All `gl.create*()` calls are null-checked (no `!` non-null assertions) so initialization fails gracefully if the context is lost during setup.
+
 ---
 
 ## Particle System
@@ -197,7 +201,7 @@ Speed multiplier: `0.05 + energy * 0.95` — particles nearly freeze when scroll
 
 ### Colors
 
-- Idle: `--particle-core` (#FFFDE8) — warm white dust
+- Idle: warm white (#FFFDE8)
 - Active: `--aura-gold-bright` (#E8C85A) — energized gold
 - Interpolated by `u_energy` in the fragment shader
 
@@ -237,13 +241,20 @@ On CDN (Vercel), the video downloads progressively. Seeking past the buffered ra
 
 ```typescript
 function clampToBuffered(video, time) {
-  // Find contiguous buffer starting from 0
+  if (!video.buffered.length) return 0;
+  // Find a buffered range containing the target time
   for (let i = 0; i < video.buffered.length; i++) {
-    if (video.buffered.start(i) <= 0.5) {
+    if (time >= video.buffered.start(i) && time <= video.buffered.end(i)) {
       return Math.min(time, video.buffered.end(i) - 0.1);
     }
   }
-  return 0;
+  // Target not buffered — use nearest buffered end before target
+  let nearest = 0;
+  for (let i = 0; i < video.buffered.length; i++) {
+    const end = video.buffered.end(i);
+    if (end <= time) nearest = end - 0.1;
+  }
+  return Math.max(0, nearest);
 }
 ```
 
@@ -366,6 +377,23 @@ All scroll event listeners use `{ passive: true }` since we never call `preventD
 
 The rAF loops and scroll handlers use refs (`useRef`) instead of state (`useState`) to avoid triggering React re-renders on every frame. State is only used for values that need to trigger UI updates, and even then throttled to ~10fps via `setInterval`.
 
+### Programmatic scrolling with Lenis
+
+**Never use** `window.scrollTo()`, `window.scrollBy()`, or `el.scrollIntoView()` with `behavior: "smooth"`. Lenis intercepts native scroll but `behavior: "smooth"` creates competing animations.
+
+Instead, use the `useLenis()` hook from `lenis/react`:
+
+```typescript
+import { useLenis } from "lenis/react";
+
+const lenis = useLenis();
+lenis?.scrollTo(0);              // scroll to top
+lenis?.scrollTo(element);        // scroll to element
+lenis?.scrollTo(lenis.scroll + 80); // relative scroll (scrollBy equivalent)
+```
+
+This works in any component rendered inside the `<ReactLenis>` tree (which wraps the entire page via `SmoothScroll`).
+
 ### CustomCursor: transform compositing
 
 The cursor uses `transform: translate()` instead of `left`/`top` for GPU-composited positioning. Combined with `will-change: transform` in CSS, the cursor elements get their own compositor layers, making 60fps animation essentially free (no layout recalculation).
@@ -387,6 +415,7 @@ src/
   app/
     layout.tsx         Root layout (fonts, preloader, magnetic buttons, smooth scroll)
     page.tsx           Home page (orchestrates all components, energy throttle)
+    error.tsx          Error boundary (Next.js App Router)
     globals.css        Design tokens, cursor styles, magnetic-btn, reduced-motion
   components/
     providers/

@@ -18,6 +18,10 @@ if (typeof window !== 'undefined') {
 
 function getCtx(): AudioContext | null {
   if (reducedMotion || muted) return null;
+  // Re-acquire if previous context was closed (shared context lifecycle)
+  if (ctx && ctx.state === 'closed') {
+    ctx = null;
+  }
   if (!ctx) {
     ctx = acquireAudioContext();
   }

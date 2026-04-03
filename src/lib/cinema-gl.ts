@@ -203,6 +203,17 @@ function spawnParticle(w: number, h: number): Particle {
   };
 }
 
+/** Reset an existing particle in-place (avoids GC pressure in render loop). */
+function resetParticle(p: Particle, w: number, h: number): void {
+  p.x = Math.random() * w;
+  p.y = Math.random() * h;
+  p.vx = (Math.random() - 0.5) * 0.5;
+  p.vy = (Math.random() - 0.5) * 0.3;
+  p.maxLife = 3 + Math.random() * 5;
+  p.life = p.maxLife;
+  p.size = 1 + Math.random() * 3;
+}
+
 // ---------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------
@@ -238,6 +249,16 @@ export function initCinemaGL(canvas: HTMLCanvasElement): CinemaGL | null {
     return null;
   }
 
+  // Track context loss — skip render calls while lost
+  let contextLost = false;
+  canvas.addEventListener("webglcontextlost", (e) => {
+    e.preventDefault();
+    contextLost = true;
+  }, false);
+  canvas.addEventListener("webglcontextrestored", () => {
+    contextLost = false;
+  }, false);
+
   // ---------------------------------------------------------------------------
   // Cinema program (video post-processing)
   // ---------------------------------------------------------------------------
@@ -248,7 +269,11 @@ export function initCinemaGL(canvas: HTMLCanvasElement): CinemaGL | null {
     return null;
   }
 
-  const cinemaProg = gl.createProgram()!;
+  const cinemaProg = gl.createProgram();
+  if (!cinemaProg) {
+    console.warn("CinemaGL: cinema program creation failed");
+    return null;
+  }
   gl.attachShader(cinemaProg, cinemaVS);
   gl.attachShader(cinemaProg, cinemaFS);
   gl.linkProgram(cinemaProg);
@@ -258,12 +283,14 @@ export function initCinemaGL(canvas: HTMLCanvasElement): CinemaGL | null {
   }
 
   // Cinema geometry — fullscreen quad (triangle strip)
-  const quadBuf = gl.createBuffer()!;
+  const quadBuf = gl.createBuffer();
+  if (!quadBuf) return null;
   gl.bindBuffer(gl.ARRAY_BUFFER, quadBuf);
   gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]), gl.STATIC_DRAW);
 
   // Cinema VAO
-  const cinemaVAO = gl.createVertexArray()!;
+  const cinemaVAO = gl.createVertexArray();
+  if (!cinemaVAO) return null;
   gl.bindVertexArray(cinemaVAO);
   const cinemaAPos = gl.getAttribLocation(cinemaProg, "a_pos");
   gl.bindBuffer(gl.ARRAY_BUFFER, quadBuf);
@@ -294,7 +321,11 @@ export function initCinemaGL(canvas: HTMLCanvasElement): CinemaGL | null {
     return null;
   }
 
-  const particleProg = gl.createProgram()!;
+  const particleProg = gl.createProgram();
+  if (!particleProg) {
+    console.warn("CinemaGL: particle program creation failed");
+    return null;
+  }
   gl.attachShader(particleProg, particleVS);
   gl.attachShader(particleProg, particleFS);
   gl.linkProgram(particleProg);
@@ -304,13 +335,15 @@ export function initCinemaGL(canvas: HTMLCanvasElement): CinemaGL | null {
   }
 
   // Particle buffer — pre-allocate for bufferSubData updates
-  const particleBuf = gl.createBuffer()!;
+  const particleBuf = gl.createBuffer();
+  if (!particleBuf) return null;
   const particleData = new Float32Array(PARTICLE_COUNT * STRIDE);
   gl.bindBuffer(gl.ARRAY_BUFFER, particleBuf);
   gl.bufferData(gl.ARRAY_BUFFER, particleData.byteLength, gl.DYNAMIC_DRAW);
 
   // Particle VAO
-  const particleVAO = gl.createVertexArray()!;
+  const particleVAO = gl.createVertexArray();
+  if (!particleVAO) return null;
   gl.bindVertexArray(particleVAO);
   const pAPos = gl.getAttribLocation(particleProg, "a_pos");
   const pAAlpha = gl.getAttribLocation(particleProg, "a_alpha");
@@ -337,13 +370,14 @@ export function initCinemaGL(canvas: HTMLCanvasElement): CinemaGL | null {
 
   // Set static particle uniforms
   gl.useProgram(particleProg);
-  gl.uniform3f(pUColorLow, 1.0, 0.992, 0.91);   // --particle-core: #FFFDE8
+  gl.uniform3f(pUColorLow, 1.0, 0.992, 0.91);   // warm white #FFFDE8
   gl.uniform3f(pUColorHigh, 0.91, 0.784, 0.353);  // --aura-gold-bright: #E8C85A
 
   // ---------------------------------------------------------------------------
   // Shared video texture
   // ---------------------------------------------------------------------------
-  const tex = gl.createTexture()!;
+  const tex = gl.createTexture();
+  if (!tex) return null;
   gl.bindTexture(gl.TEXTURE_2D, tex);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
@@ -360,6 +394,7 @@ export function initCinemaGL(canvas: HTMLCanvasElement): CinemaGL | null {
     particles.push(spawnParticle(w, h));
   }
   let lastTime = 0;
+  let lastVideoTime = -1; // guard against redundant texImage2D uploads
 
   // ---------------------------------------------------------------------------
   // Render pipeline
@@ -367,12 +402,15 @@ export function initCinemaGL(canvas: HTMLCanvasElement): CinemaGL | null {
   return {
     render(params) {
       const { video, time, energy, progress, bands, mouseX, mouseY, velocity } = params;
-      if (video.readyState < 2) return;
+      if (contextLost || video.readyState < 2) return;
 
-      // Upload video texture (shared by both programs)
+      // Upload video texture only when frame changed (avoids redundant GPU upload)
       gl.activeTexture(gl.TEXTURE0);
       gl.bindTexture(gl.TEXTURE_2D, tex);
-      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, video);
+      if (video.currentTime !== lastVideoTime) {
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, video);
+        lastVideoTime = video.currentTime;
+      }
 
       // --- Pass 1: Cinema post-processing ---
       gl.disable(gl.BLEND);
@@ -398,8 +436,7 @@ export function initCinemaGL(canvas: HTMLCanvasElement): CinemaGL | null {
         const p = particles[i];
         p.life -= dt * speed;
         if (p.life <= 0) {
-          particles[i] = spawnParticle(w, h);
-          particles[i].life = particles[i].maxLife;
+          resetParticle(p, w, h);
           continue;
         }
 
@@ -481,7 +518,8 @@ function compile(
   type: number,
   src: string
 ): WebGLShader | null {
-  const s = gl.createShader(type)!;
+  const s = gl.createShader(type);
+  if (!s) return null;
   gl.shaderSource(s, src);
   gl.compileShader(s);
   if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) {

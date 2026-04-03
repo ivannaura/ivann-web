@@ -29,6 +29,7 @@ export function acquireAudioContext(): AudioContext | null {
 
 /** Release a reference. Closes the context when last consumer releases. */
 export function releaseAudioContext(): void {
+  if (refCount <= 0) return; // guard: already fully released
   refCount--;
   if (refCount <= 0 && ctx) {
     ctx.close().catch(() => {});
