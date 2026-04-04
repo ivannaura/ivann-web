@@ -220,6 +220,9 @@ Audio: `public/audio/flamenco.m4a` (AAC 128kbps, 3.9MB)
 
 ## Deployment & Caching
 
+- **Production URL**: `https://ivannaura.vercel.app` (Vercel auto-deploy from `main`)
+- `SITE_URL` in `layout.tsx` = `https://ivannaura.vercel.app` (OG tags, sitemap, robots reference this)
+- `ivannaura.com` is a Squarespace placeholder — NOT connected to Vercel yet
 - `vercel.json`: custom cache headers for public assets:
   - `/videos/*` and `/audio/*`: `max-age=31536000, immutable` (1 year, fingerprinted)
   - `/og-image.jpg`: `max-age=86400` (1 day)
@@ -238,6 +241,7 @@ npm run typecheck    # TypeScript check (tsc --noEmit)
 - `videos/flamenco-graded.mp4` — **44MB, active** (all-keyframe scroll video)
 - `videos/flamenco-de-esfera.mp4` — 67MB, original source (kept in public but NOT used as fallback)
 - `audio/flamenco.m4a` — **3.9MB, active** (momentum-driven audio)
+- `og-image.jpg` — **47KB, active** (1200x630 OG/Twitter card image)
 
 ## Conventions
 
