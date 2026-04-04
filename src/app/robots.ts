@@ -6,6 +6,6 @@ export default function robots(): MetadataRoute.Robots {
       userAgent: "*",
       allow: "/",
     },
-    sitemap: "https://ivannaura.com/sitemap.xml",
+    sitemap: "https://ivannaura.vercel.app/sitemap.xml",
   };
 }

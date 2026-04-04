@@ -15,7 +15,7 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
-const SITE_URL = "https://ivannaura.com";
+const SITE_URL = "https://ivannaura.vercel.app";
 
 // Viewport — cover mode for iPhone notch
 // Note: maximumScale/userScalable removed — WCAG 1.4.4 requires pinch-to-zoom
