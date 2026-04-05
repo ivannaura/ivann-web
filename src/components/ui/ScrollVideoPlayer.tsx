@@ -128,6 +128,10 @@ export default function ScrollVideoPlayer({
     setReady(true);
   }, []);
 
+  const handleVideoError = useCallback(() => {
+    onError?.();
+  }, [onError]);
+
   // ---------------------------------------------------------------------------
   // Buffer tracking
   // ---------------------------------------------------------------------------
@@ -289,9 +293,7 @@ export default function ScrollVideoPlayer({
         lastActRef.current = actIndex;
         actTransitionRef.current = 1.0;
         // Mobile haptic feedback at act boundaries (Android only, silent fail elsewhere)
-        if (navigator.vibrate) {
-          navigator.vibrate([15, 30, 15]); // short double-tap pattern
-        }
+        try { navigator.vibrate?.([15, 30, 15]); } catch {} // short double-tap pattern
       }
       onActTransitionRef.current?.(actTransitionRef.current);
 
@@ -484,12 +486,12 @@ export default function ScrollVideoPlayer({
         <div
           ref={letterboxTopRef}
           className="absolute top-0 left-0 right-0 z-30 pointer-events-none"
-          style={{ background: 'var(--bg-void)', height: '4vh', transformOrigin: 'top' }}
+          style={{ background: 'var(--bg-void)', height: '4vh', transformOrigin: 'top', transition: 'transform 0.3s ease-out' }}
         />
         <div
           ref={letterboxBottomRef}
           className="absolute bottom-0 left-0 right-0 z-30 pointer-events-none"
-          style={{ background: 'var(--bg-void)', height: '4vh', transformOrigin: 'bottom' }}
+          style={{ background: 'var(--bg-void)', height: '4vh', transformOrigin: 'bottom', transition: 'transform 0.3s ease-out' }}
         />
 
         <video
@@ -498,7 +500,8 @@ export default function ScrollVideoPlayer({
           muted
           playsInline
           preload="auto"
-          onError={onError}
+          poster="/og-image.jpg"
+          onError={handleVideoError}
           aria-hidden="true"
           className="absolute inset-0 w-full h-full object-cover"
           style={{
@@ -513,7 +516,9 @@ export default function ScrollVideoPlayer({
             aria-hidden="true"
             className="absolute inset-0 w-full h-full object-cover"
             style={{ opacity: ready ? 1 : 0 }}
-          />
+          >
+            <p>Video en reproducción — desplázate para explorar.</p>
+          </canvas>
         )}
 
         {!ready && (
@@ -524,7 +529,7 @@ export default function ScrollVideoPlayer({
                 style={{ width: `${bufferProgress * 100}%` }}
               />
             </div>
-            <span className="text-[10px] font-mono mt-3 text-white/30">
+            <span className="text-[clamp(9px,1.5vw,11px)] font-mono mt-3 text-white/30">
               {bufferProgress < 0.1
                 ? "Conectando..."
                 : `Cargando ${Math.round(bufferProgress * 100)}%`}

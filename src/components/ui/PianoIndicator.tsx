@@ -45,8 +45,8 @@ export default function PianoIndicator({ energy, bands }: PianoIndicatorProps) {
   return (
     <div
       aria-hidden="true"
-      className="fixed bottom-8 left-8 z-[997] flex items-end gap-3 transition-opacity duration-700"
-      style={{ opacity: isActive ? 1 : 0.4 }}
+      className="fixed z-[997] flex items-end gap-3 transition-opacity duration-700"
+      style={{ opacity: isActive ? 1 : 0.4, bottom: "calc(2rem + env(safe-area-inset-bottom))", left: "calc(2rem + env(safe-area-inset-left))" }}
     >
       {/* Equalizer bars — frequency-reactive, cascade stagger from center */}
       <div className="flex items-end gap-[2px] h-5">
@@ -58,7 +58,7 @@ export default function PianoIndicator({ energy, bands }: PianoIndicatorProps) {
               key={i}
               className="w-[2px] rounded-[1px] transition-all duration-150 origin-bottom"
               style={{
-                height: `${h * (20 + energy * 80)}%`,
+                height: `${Math.min(100, h * (20 + energy * 80))}%`,
                 transitionDelay: `${cascadeDelay}ms`,
                 background: isGold
                   ? "var(--aura-gold)"
