@@ -1,18 +1,22 @@
 import type { Metadata, Viewport } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Cormorant_Garamond, Plus_Jakarta_Sans } from "next/font/google";
 import "./globals.css";
 import SmoothScroll from "@/components/providers/SmoothScroll";
 import Preloader from "@/components/ui/Preloader";
 import MagneticButtons from "@/components/providers/MagneticButtons";
 
-const geist = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
+const display = Cormorant_Garamond({
+  variable: "--font-display",
+  subsets: ["latin", "latin-ext"],
+  weight: ["300", "400", "600"],
+  display: "swap",
 });
 
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
+const body = Plus_Jakarta_Sans({
+  variable: "--font-body",
+  subsets: ["latin", "latin-ext"],
+  weight: ["300", "400", "500", "600"],
+  display: "swap",
 });
 
 const SITE_URL = "https://ivannaura.vercel.app";
@@ -122,7 +126,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="es" className={`${geist.variable} ${geistMono.variable} antialiased`}>
+    <html lang="es" className={`${display.variable} ${body.variable} antialiased`}>
       <head>
         {/*
           Preload hints removed — <link rel="preload" as="video"> is unreliable

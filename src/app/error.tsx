@@ -9,49 +9,18 @@ export default function Error({
 }) {
   return (
     <div
-      style={{
-        minHeight: "100dvh",
-        display: "flex",
-        flexDirection: "column",
-        alignItems: "center",
-        justifyContent: "center",
-        background: "var(--bg-void, #050508)",
-        color: "var(--text-primary, #F0EDE6)",
-      }}
+      className="min-h-dvh flex flex-col items-center justify-center gap-6"
+      style={{ background: "var(--bg-void)", color: "var(--text-primary)" }}
     >
-      <h2
-        style={{
-          fontSize: "1.5rem",
-          fontWeight: 200,
-          letterSpacing: "0.3em",
-          marginBottom: 16,
-        }}
-      >
-        ALGO SALIÓ MAL
+      <h2 className="text-lg tracking-[0.2em] uppercase" style={{ color: "var(--aura-gold)" }}>
+        Algo salió mal
       </h2>
-      <p
-        style={{
-          fontSize: "0.75rem",
-          color: "var(--text-muted, #4A4A5A)",
-          marginBottom: 24,
-        }}
-      >
-        {error.message || "Error inesperado"}
-      </p>
       <button
         onClick={reset}
-        style={{
-          padding: "12px 32px",
-          fontSize: "0.7rem",
-          letterSpacing: "0.3em",
-          textTransform: "uppercase",
-          border: "1px solid var(--aura-gold-dim, #8A7435)",
-          color: "var(--aura-gold, #C9A84C)",
-          background: "transparent",
-          cursor: "pointer",
-        }}
+        className="magnetic-btn px-6 py-3 text-sm tracking-[0.15em] uppercase border border-[var(--aura-gold-dim)] hover:border-[var(--aura-gold)] transition-colors"
+        style={{ color: "var(--text-secondary)" }}
       >
-        Reintentar
+        Intentar de nuevo
       </button>
     </div>
   );

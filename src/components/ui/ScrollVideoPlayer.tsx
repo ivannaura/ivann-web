@@ -84,6 +84,7 @@ export default function ScrollVideoPlayer({
   const velocityRef = useRef(0);
   const smoothVelocityRef = useRef(0);
   const lastWhooshRef = useRef(0); // throttle whoosh sounds
+  const lastRafTimeRef = useRef(0);
 
   // Stable callback refs
   const onFrameChangeRef = useRef(onFrameChange);
@@ -257,6 +258,11 @@ export default function ScrollVideoPlayer({
       if (paused) return;
       const now = performance.now() / 1000;
 
+      // Delta-time factor: 1.0 at 60fps, 0.5 at 120fps, 2.0 at 30fps (clamped to 3)
+      const nowMs = performance.now();
+      const dt = lastRafTimeRef.current ? Math.min((nowMs - lastRafTimeRef.current) / 16.667, 3) : 1;
+      lastRafTimeRef.current = nowMs;
+
       // Energy tracking
       const momentum = momentumRef.current;
       const e = momentum?.getEnergy() ?? 0;
@@ -272,12 +278,12 @@ export default function ScrollVideoPlayer({
 
       // Smooth velocity decay (exponential toward 0 when not scrolling)
       smoothVelocityRef.current +=
-        (velocityRef.current - smoothVelocityRef.current) * 0.15;
+        (velocityRef.current - smoothVelocityRef.current) * (1 - Math.pow(1 - 0.15, dt));
       // Decay raw velocity toward 0 each frame (cleared on scroll)
-      velocityRef.current *= 0.92;
+      velocityRef.current *= Math.pow(0.92, dt);
 
       // Act transition — spikes to 1.0 on act boundary, decays 0.95/frame
-      actTransitionRef.current *= 0.95;
+      actTransitionRef.current *= Math.pow(0.95, dt);
       const actIndex = Math.floor(progressRef.current * 8);
       if (actIndex !== lastActRef.current && actIndex > 0) {
         lastActRef.current = actIndex;
@@ -295,8 +301,8 @@ export default function ScrollVideoPlayer({
         shakeRef.current.x = (Math.random() - 0.5) * intensity * 3;
         shakeRef.current.y = (Math.random() - 0.5) * intensity * 3;
       } else {
-        shakeRef.current.x *= 0.8;
-        shakeRef.current.y *= 0.8;
+        shakeRef.current.x *= Math.pow(0.8, dt);
+        shakeRef.current.y *= Math.pow(0.8, dt);
       }
 
       // Apply shake
@@ -388,7 +394,7 @@ export default function ScrollVideoPlayer({
           trigger: container,
           start: "top top",
           end: "bottom bottom",
-          scrub: reduced ? true : isDesktop ? 1.5 : 2,
+          scrub: reduced ? true : isDesktop ? 1.5 : 1,
           onUpdate: (self) => {
             progressRef.current = self.progress;
             const targetTime = self.progress * durationRef.current;

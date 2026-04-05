@@ -10,11 +10,21 @@ import Footer from "@/components/ui/Footer";
 import PianoIndicator from "@/components/ui/PianoIndicator";
 import { usePianoScroll } from "@/hooks/usePianoScroll";
 import { destroyMicroSounds } from "@/lib/micro-sounds";
-import { getMoodCPU } from "@/lib/cinema-gl";
 import type { FrequencyBands } from "@/lib/audio-momentum";
 
 const VIDEO_SRC = "/videos/flamenco-graded.mp4";
 const AUDIO_SRC = "/audio/flamenco.m4a";
+
+// Mirrors getMood() in cinema-gl.ts — inlined to avoid importing 1209-line WebGL module
+function getMoodCPU(progress: number): number {
+  const moods = [0.5, 0.5, 0.6, 0.8, 0.9, 1.1, 1.2, 0.8, 0.5];
+  const t = Math.min(Math.max(progress, 0), 1) * 8;
+  const i = Math.floor(t);
+  const j = Math.min(i + 1, 8);
+  const f = t - i;
+  const s = f * f * (3 - 2 * f);
+  return moods[i] + (moods[j] - moods[i]) * s;
+}
 
 export default function Home() {
   const [currentFrame, setCurrentFrame] = useState(0);

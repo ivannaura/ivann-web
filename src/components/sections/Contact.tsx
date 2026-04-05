@@ -327,6 +327,8 @@ export default function Contact() {
                     id="contact-name"
                     type="text"
                     required
+                    autoComplete="name"
+                    enterKeyHint="next"
                     value={formState.name}
                     onChange={(e) =>
                       setFormState((s) => ({ ...s, name: e.target.value }))
@@ -354,6 +356,8 @@ export default function Contact() {
                     id="contact-email"
                     type="email"
                     required
+                    autoComplete="email"
+                    enterKeyHint="next"
                     value={formState.email}
                     onChange={(e) =>
                       setFormState((s) => ({ ...s, email: e.target.value }))
@@ -415,6 +419,8 @@ export default function Contact() {
                     id="contact-message"
                     rows={4}
                     required
+                    autoComplete="off"
+                    enterKeyHint="send"
                     value={formState.message}
                     onChange={(e) =>
                       setFormState((s) => ({ ...s, message: e.target.value }))

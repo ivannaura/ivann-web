@@ -9,7 +9,7 @@ import { acquireAudioContext, releaseAudioContext, resumeAudioContext } from './
 
 // Physics constants
 const FRICTION = 0.985;
-const MIN_RATE = 0.25;
+const MIN_RATE = 0.5;
 const MAX_RATE = 1.0;
 const MAX_VOLUME = 0.7;
 const PLAY_THRESHOLD = 0.05;
@@ -21,9 +21,6 @@ const DRIFT_THRESHOLD = 3.0;
 // Bass: 0–2 (~0-516Hz piano body, low octaves), Mids: 3–29 (~516-5160Hz melody, main piano), Highs: 30–128 (~5160Hz+ harmonics, shimmer, applause)
 const BASS_END = 3;
 const MIDS_END = 30;
-
-// EMA alpha for frequency bands — lower = smoother (less jitter)
-const BAND_ALPHA = 0.35;
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -66,9 +63,11 @@ export class AudioMomentum {
   private audioCtx: AudioContext | null = null;
   private analyser: AnalyserNode | null = null;
   private sourceNode: MediaElementAudioSourceNode | null = null;
+  private gainNode: GainNode | null = null;
   private freqData: Uint8Array<ArrayBuffer> | null = null;
   private bands: FrequencyBands = { bass: 0, mids: 0, highs: 0 };
   private smoothBands: FrequencyBands = { bass: 0, mids: 0, highs: 0 };
+  private lastTime: number = 0;
 
   // ---- Public API ---------------------------------------------------------
 
@@ -112,10 +111,12 @@ export class AudioMomentum {
     return this.smoothBands;
   }
 
-  /** Mute or unmute the audio element without stopping physics. */
+  /** Mute or unmute via GainNode — preserves AnalyserNode signal for visual reactivity. */
   setMuted(muted: boolean): void {
-    if (this.audio) {
-      this.audio.muted = muted;
+    if (this.gainNode && this.audioCtx) {
+      const now = this.audioCtx.currentTime;
+      this.gainNode.gain.cancelScheduledValues(now);
+      this.gainNode.gain.setTargetAtTime(muted ? 0 : 1, now, 0.05);
     }
   }
 
@@ -137,6 +138,10 @@ export class AudioMomentum {
     if (this.analyser) {
       this.analyser.disconnect();
       this.analyser = null;
+    }
+    if (this.gainNode) {
+      this.gainNode.disconnect();
+      this.gainNode = null;
     }
     if (this.audioCtx) {
       releaseAudioContext();
@@ -171,8 +176,10 @@ export class AudioMomentum {
       this.analyser.smoothingTimeConstant = 0.6;
 
       this.sourceNode = this.audioCtx.createMediaElementSource(this.audio);
+      this.gainNode = this.audioCtx.createGain();
       this.sourceNode.connect(this.analyser);
-      this.analyser.connect(this.audioCtx.destination);
+      this.analyser.connect(this.gainNode);
+      this.gainNode.connect(this.audioCtx.destination);
 
       this.freqData = new Uint8Array(this.analyser.frequencyBinCount) as Uint8Array<ArrayBuffer>;
     } catch {
@@ -207,10 +214,14 @@ export class AudioMomentum {
     this.bands.mids = midsSum / ((MIDS_END - BASS_END) * 255);
     this.bands.highs = highsSum / ((len - MIDS_END) * 255);
 
-    // EMA smoothing: smoothed = lerp(smoothed, raw, alpha)
-    this.smoothBands.bass = lerp(this.smoothBands.bass, this.bands.bass, BAND_ALPHA);
-    this.smoothBands.mids = lerp(this.smoothBands.mids, this.bands.mids, BAND_ALPHA);
-    this.smoothBands.highs = lerp(this.smoothBands.highs, this.bands.highs, BAND_ALPHA);
+    // Asymmetric EMA: fast attack (0.6), slow release (0.15) — piano dynamics
+    const ATTACK_ALPHA = 0.6;
+    const RELEASE_ALPHA = 0.15;
+    const asymmetric = (smoothed: number, raw: number) =>
+      lerp(smoothed, raw, raw > smoothed ? ATTACK_ALPHA : RELEASE_ALPHA);
+    this.smoothBands.bass = asymmetric(this.smoothBands.bass, this.bands.bass);
+    this.smoothBands.mids = asymmetric(this.smoothBands.mids, this.bands.mids);
+    this.smoothBands.highs = asymmetric(this.smoothBands.highs, this.bands.highs);
   }
 
   /** Pause loop and audio when tab goes to background. */
@@ -240,6 +251,7 @@ export class AudioMomentum {
   private startLoop(): void {
     if (this.running) return;
     this.running = true;
+    this.lastTime = performance.now();
     this.rafId = requestAnimationFrame(this.update);
   }
 
@@ -247,8 +259,11 @@ export class AudioMomentum {
   private update = (): void => {
     if (!this.running) return;
 
-    // --- friction decay ---
-    this.energy *= FRICTION;
+    // --- delta-time friction decay ---
+    const now = performance.now();
+    const dt = Math.min((now - this.lastTime) / 16.667, 3);
+    this.lastTime = now;
+    this.energy *= Math.pow(FRICTION, dt);
     if (this.energy < 0.001) this.energy = 0;
 
     // --- frequency analysis (runs even when muted for visual reactivity) ---

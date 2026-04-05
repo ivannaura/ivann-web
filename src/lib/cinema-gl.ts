@@ -222,7 +222,7 @@ vec3 applyColorGrade(vec3 c, ColorGrade grade) {
   float highlightW = smoothstep(0.65, 1.0, lum);
   float midW = 1.0 - shadowW - highlightW;
   vec3 graded = c;
-  graded = mix(graded, graded * (grade.shadows / max(grade.shadows, vec3(0.01))) * 1.2, shadowW * 0.4);
+  graded = mix(graded, grade.shadows * 1.2, shadowW * 0.4);
   graded *= mix(vec3(1.0), grade.midtones, midW * 0.3);
   graded = mix(graded, graded * grade.highlights, highlightW * 0.25);
   return graded;
@@ -377,7 +377,9 @@ out vec4 fragColor;
 void main() {
   vec3 c = texture(u_tex, v_uv).rgb;
   float lum = dot(c, vec3(0.2126, 0.7152, 0.0722));
-  float excess = max(0.0, lum - u_threshold);
+  float knee = 0.1;
+  float softLum = lum - u_threshold + knee;
+  float excess = clamp(softLum * softLum / (4.0 * knee + 0.0001), 0.0, max(0.0, lum - u_threshold));
   fragColor = vec4(c * excess, 1.0);
 }`;
 
@@ -421,9 +423,13 @@ void main() {
 
   // --- Motion blur (High tier only) ---
   if (u_useMotionBlur == 1) {
-    vec3 prev = texture(u_prevFrame, v_uv).rgb;
     float blurFactor = u_velocity * 0.3;
-    c = mix(c, prev, blurFactor);
+    vec2 blurDir = vec2(0.0, blurFactor * 0.01);
+    vec3 prev0 = texture(u_prevFrame, v_uv).rgb;
+    vec3 prev1 = texture(u_prevFrame, v_uv + blurDir).rgb;
+    vec3 prev2 = texture(u_prevFrame, v_uv - blurDir).rgb;
+    vec3 blurred = (prev0 + prev1 + prev2) / 3.0;
+    c = mix(c, blurred, blurFactor);
   }
 
   // --- Anamorphic lens flare (High tier only) ---

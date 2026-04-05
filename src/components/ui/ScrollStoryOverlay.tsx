@@ -42,7 +42,25 @@ interface StoryBeat {
 const STORY_BEATS: StoryBeat[] = [
   // === ACT 1: EL DESPERTAR ===
   {
-    frameStart: 15,
+    frameStart: 0,
+    frameEnd: 20,
+    content: (
+      <div className="text-center">
+        <p
+          data-split="words"
+          className="text-xs tracking-[0.4em] uppercase"
+          style={{ color: "var(--text-muted)" }}
+        >
+          Scroll para descubrir
+        </p>
+        <div className="mt-4 mx-auto w-px h-8 bg-gradient-to-b from-[var(--aura-gold-dim)] to-transparent" style={{ animation: "pulse 2s ease-in-out infinite" }} />
+      </div>
+    ),
+    position: "bottom" as const,
+    animation: "fade" as const,
+  },
+  {
+    frameStart: 3,
     frameEnd: 75,
     content: (
       <div className="text-center" data-depth="1.2">
@@ -50,7 +68,7 @@ const STORY_BEATS: StoryBeat[] = [
           data-split="chars"
           data-split-mask="words"
           data-split-stagger="0.04"
-          className="text-[clamp(3rem,8vw,8rem)] font-extralight tracking-[0.3em] leading-none"
+          className="text-[clamp(3rem,8vw,8rem)] font-extralight tracking-[0.3em] leading-none text-cinema"
           style={{ color: "var(--text-primary)" }}
         >
           IVANN
@@ -59,7 +77,7 @@ const STORY_BEATS: StoryBeat[] = [
           data-split="chars"
           data-split-mask="words"
           data-split-stagger="0.04"
-          className="text-[clamp(3rem,8vw,8rem)] font-extralight tracking-[0.3em] leading-none mt-2"
+          className="text-[clamp(3rem,8vw,8rem)] font-extralight tracking-[0.3em] leading-none mt-2 text-cinema"
           style={{ color: "var(--aura-gold)" }}
         >
           AURA
@@ -390,7 +408,7 @@ const STORY_BEATS: StoryBeat[] = [
         data-split="chars"
         data-split-mask="words"
         data-split-stagger="0.025"
-        className="text-[clamp(1.5rem,4vw,3.5rem)] font-extralight tracking-[0.15em] text-center"
+        className="text-[clamp(1.5rem,4vw,3.5rem)] font-extralight tracking-[0.15em] text-center text-cinema"
         style={{ color: "var(--text-primary)" }}
       >
         VIVE LA EXPERIENCIA
@@ -484,7 +502,7 @@ const STORY_BEATS: StoryBeat[] = [
           data-split="chars"
           data-split-mask="words"
           data-split-stagger="0.04"
-          className="text-[clamp(2rem,6vw,5rem)] font-extralight tracking-[0.3em]"
+          className="text-[clamp(2rem,6vw,5rem)] font-extralight tracking-[0.3em] text-cinema"
           style={{ color: "var(--text-primary)" }}
         >
           IVANN
@@ -493,21 +511,29 @@ const STORY_BEATS: StoryBeat[] = [
           data-split="chars"
           data-split-mask="words"
           data-split-stagger="0.04"
-          className="text-[clamp(2rem,6vw,5rem)] font-extralight tracking-[0.3em]"
+          className="text-[clamp(2rem,6vw,5rem)] font-extralight tracking-[0.3em] text-cinema"
           style={{ color: "var(--aura-gold)" }}
         >
           AURA
         </h2>
         <div className="flex gap-6 mt-8 justify-center">
-          {["YouTube", "Instagram", "Spotify"].map((platform) => (
-            <span
-              key={platform}
+          {[
+            { name: "Instagram", href: "https://www.instagram.com/ivannaura" },
+            { name: "Spotify", href: "https://open.spotify.com/artist/ivannaura" },
+            { name: "YouTube", href: "https://www.youtube.com/@ivannaura" },
+            { name: "TikTok", href: "https://www.tiktok.com/@ivannaura" },
+          ].map((platform) => (
+            <a
+              key={platform.name}
+              href={platform.href}
+              target="_blank"
+              rel="noopener noreferrer"
               data-stagger
-              className="text-[0.6rem] tracking-[0.2em] uppercase"
+              className="pointer-events-auto hover:text-[var(--aura-gold)] transition-colors text-[0.6rem] tracking-[0.2em] uppercase"
               style={{ color: "var(--text-muted)" }}
             >
-              {platform}
-            </span>
+              {platform.name}
+            </a>
           ))}
         </div>
         <p
