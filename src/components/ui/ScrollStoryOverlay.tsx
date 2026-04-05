@@ -705,6 +705,8 @@ function AnimatedBeat({ beat, progress, energy = 0, bands }: AnimatedBeatProps) 
   }, [progress]);
 
   // Parallax depth — elements with data-depth shift on Y axis based on progress
+  // Uses `style.translate` (CSS individual transform) to compose independently
+  // with `style.transform` set by GSAP SplitText — they don't overwrite each other
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
@@ -712,7 +714,7 @@ function AnimatedBeat({ beat, progress, energy = 0, bands }: AnimatedBeatProps) 
     if (!depthEl) return;
     const depth = parseFloat(depthEl.dataset.depth || "1");
     const offset = (progress - 0.5) * (depth - 1) * 60;
-    depthEl.style.transform = `translateY(${offset}px)`;
+    depthEl.style.translate = `0 ${offset}px`;
   }, [progress]);
 
   // Sound-reactive typography — letter-spacing scales continuously with energy + mids
