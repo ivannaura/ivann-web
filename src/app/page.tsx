@@ -47,6 +47,7 @@ export default function Home() {
   const [displayActTransition, setDisplayActTransition] = useState(0);
 
   useEffect(() => {
+    let lastHazeProgress = 0;
     const id = setInterval(() => {
       setDisplayEnergy(energyRef.current);
       setDisplayActTransition(actTransitionRef.current);
@@ -62,7 +63,9 @@ export default function Home() {
 
       // Update atmospheric haze color — smooth interpolation via mood curve
       // Mood range: 0.5 (calm) → 1.2 (climax), mirrors CinemaGL narrative arc
-      if (hazeRef.current) {
+      // Only update haze if progress actually changed (avoids redundant style writes)
+      if (hazeRef.current && Math.abs(progressRef.current - lastHazeProgress) > 0.005) {
+        lastHazeProgress = progressRef.current;
         const mood = getMoodCPU(progressRef.current);
         // Normalize mood 0.5-1.2 → t 0-1
         const t = Math.min(Math.max((mood - 0.5) / 0.7, 0), 1);
@@ -127,7 +130,8 @@ export default function Home() {
       />
       <PianoIndicator energy={displayEnergy} bands={displayBands} />
 
-      <main id="main-content" aria-label="Contenido principal">
+      <main id="main-content" tabIndex={-1} aria-label="Contenido principal">
+        <h1 className="sr-only">IVANN AURA — Live Experience</h1>
         <ScrollVideoPlayer
           videoSrc={VIDEO_SRC}
           audioSrc={AUDIO_SRC}
