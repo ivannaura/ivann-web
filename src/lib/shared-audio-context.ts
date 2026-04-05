@@ -22,6 +22,7 @@ export function acquireAudioContext(): AudioContext | null {
   if (!ctx) {
     try {
       ctx = new AudioContext();
+      primerAudioContext();
     } catch {
       return null;
     }
@@ -49,4 +50,18 @@ export function resumeAudioContext(): void {
   if (ctx?.state === 'suspended') {
     ctx.resume().catch(() => {});
   }
+}
+
+/** Prime audio context on iOS via user gesture (touchstart/click). */
+let primed = false;
+export function primerAudioContext(): void {
+  if (primed || typeof window === 'undefined') return;
+  const handler = () => {
+    resumeAudioContext();
+    primed = true;
+    document.removeEventListener('touchstart', handler);
+    document.removeEventListener('click', handler);
+  };
+  document.addEventListener('touchstart', handler, { once: true, passive: true });
+  document.addEventListener('click', handler, { once: true });
 }
