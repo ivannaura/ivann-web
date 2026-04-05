@@ -106,7 +106,7 @@ export default function Preloader() {
     }, container);
 
     // Fallback: force dismiss after 5s
-    const fallback = setTimeout(dismiss, 5000);
+    const fallback = setTimeout(dismiss, 8000);
 
     return () => {
       ctx.revert();
@@ -179,7 +179,7 @@ export default function Preloader() {
       <p
         ref={subtitleRef}
         style={{
-          fontSize: 10,
+          fontSize: "clamp(9px, 1.5vw, 11px)",
           letterSpacing: "0.3em",
           textTransform: "uppercase",
           color: "var(--text-muted)",
