@@ -7,6 +7,8 @@ export default function Error({
   error: Error & { digest?: string };
   reset: () => void;
 }) {
+  console.error(error);
+
   return (
     <div
       className="min-h-dvh flex flex-col items-center justify-center gap-6"
@@ -22,6 +24,11 @@ export default function Error({
       >
         Intentar de nuevo
       </button>
+      {process.env.NODE_ENV === 'development' && (
+        <p className="text-xs mt-4 max-w-md text-center" style={{ color: "var(--text-muted)" }}>
+          {error.message}
+        </p>
+      )}
     </div>
   );
 }
