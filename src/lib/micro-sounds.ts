@@ -59,12 +59,19 @@ export function setMicroSoundsMuted(m: boolean): void {
   muted = m;
 }
 
-/** Soft piano-like tone on hover (random note from pentatonic scale). */
+// Track last hover note to prevent consecutive repeats
+let lastNoteIndex = -1;
+
+/** Soft piano-like tone on hover (random non-repeating note from pentatonic scale). */
 export function playHover(): void {
   // C major pentatonic in octave 5-6: C5, D5, E5, G5, A5, C6
   const notes = [523, 587, 659, 784, 880, 1047];
-  const freq = notes[Math.floor(Math.random() * notes.length)];
-  playNote(freq, 0.15, 0.025);
+  let idx: number;
+  do {
+    idx = Math.floor(Math.random() * notes.length);
+  } while (idx === lastNoteIndex && notes.length > 1);
+  lastNoteIndex = idx;
+  playNote(notes[idx], 0.15, 0.025);
 }
 
 /** Resonant key press on CTA click. */
