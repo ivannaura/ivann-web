@@ -8,7 +8,7 @@ import MagneticButtons from "@/components/providers/MagneticButtons";
 const display = Cormorant_Garamond({
   variable: "--font-display",
   subsets: ["latin", "latin-ext"],
-  weight: ["300", "400", "600"],
+  weight: ["300", "400"],
   display: "swap",
 });
 
@@ -133,6 +133,8 @@ export default function RootLayout({
           across browsers and was blocking the <video> element from loading.
           The video's own preload="auto" handles progressive download.
         */}
+        <meta name="format-detection" content="telephone=no" />
+        <meta name="color-scheme" content="dark" />
         {/* JSON-LD structured data */}
         <script
           type="application/ld+json"
