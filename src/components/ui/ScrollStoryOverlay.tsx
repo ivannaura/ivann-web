@@ -701,18 +701,22 @@ function AnimatedBeat({ beat, progress, energy = 0, bands }: AnimatedBeatProps) 
     depthEl.style.transform = `translateY(${offset}px)`;
   }, [progress]);
 
-  // Sound-reactive typography — letter-spacing pulses with mids frequency band
+  // Sound-reactive typography — letter-spacing scales continuously with energy + mids
+  // No hard threshold: gentle scroll = subtle expansion, aggressive = dramatic
   useEffect(() => {
     const el = ref.current;
-    if (!el || !bands || energy < 0.3) return;
+    if (!el || !bands) return;
     const reactiveEls = el.querySelectorAll<HTMLElement>('[data-reactive]');
+    if (reactiveEls.length === 0) return;
+
+    const intensity = energy * bands.mids * 0.08;
     reactiveEls.forEach(target => {
       // Use a data attribute to cache original spacing (set once)
       if (!target.dataset.baseSpacing) {
         target.dataset.baseSpacing = getComputedStyle(target).letterSpacing || '0px';
       }
       const base = target.dataset.baseSpacing;
-      target.style.letterSpacing = `calc(${base} + ${bands.mids * 0.08}em)`;
+      target.style.letterSpacing = `calc(${base} + ${intensity}em)`;
     });
 
     return () => {
