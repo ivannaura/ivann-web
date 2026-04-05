@@ -21,9 +21,20 @@ interface ScrollVideoPlayerProps {
   ) => void;
   onEnergyChange?: (energy: number) => void;
   onBandsChange?: (bands: FrequencyBands) => void;
+  onProgressChange?: (progress: number) => void;
   onError?: () => void;
   audioMuted?: boolean;
   children?: React.ReactNode;
+}
+
+function getMoodApprox(progress: number): number {
+  const moods = [0.5, 0.5, 0.6, 0.8, 0.9, 1.1, 1.2, 0.8, 0.5];
+  const t = Math.min(Math.max(progress, 0), 1) * 8;
+  const i = Math.floor(t);
+  const j = Math.min(i + 1, 8);
+  const f = t - i;
+  const s = f * f * (3 - 2 * f);
+  return moods[i] + (moods[j] - moods[i]) * s;
 }
 
 function getBufferProgress(video: HTMLVideoElement): number {
@@ -43,6 +54,7 @@ export default function ScrollVideoPlayer({
   onFrameChange,
   onEnergyChange,
   onBandsChange,
+  onProgressChange,
   onError,
   audioMuted = false,
   children,
@@ -65,6 +77,14 @@ export default function ScrollVideoPlayer({
   const momentumRef = useRef<AudioMomentum | null>(null);
   const readyRef = useRef(false);
 
+  // Act transition + screen shake + letterbox refs
+  const lastActRef = useRef(0);
+  const actTransitionRef = useRef(0);
+  const stickyRef = useRef<HTMLDivElement>(null);
+  const letterboxTopRef = useRef<HTMLDivElement>(null);
+  const letterboxBottomRef = useRef<HTMLDivElement>(null);
+  const shakeRef = useRef({ x: 0, y: 0 });
+
   // Mouse tracking for cursor → WebGL interaction
   const mouseRef = useRef({ x: 0.5, y: 0.5 }); // normalized 0-1 of canvas
 
@@ -80,6 +100,8 @@ export default function ScrollVideoPlayer({
   onEnergyChangeRef.current = onEnergyChange;
   const onBandsChangeRef = useRef(onBandsChange);
   onBandsChangeRef.current = onBandsChange;
+  const onProgressChangeRef = useRef(onProgressChange);
+  onProgressChangeRef.current = onProgressChange;
   const audioMutedRef = useRef(audioMuted);
   audioMutedRef.current = audioMuted;
 
@@ -260,6 +282,44 @@ export default function ScrollVideoPlayer({
       // Decay raw velocity toward 0 each frame (cleared on scroll)
       velocityRef.current *= 0.92;
 
+      // Act transition — spikes to 1.0 on act boundary, decays 0.95/frame
+      actTransitionRef.current *= 0.95;
+      const actIndex = Math.floor(progressRef.current * 8);
+      if (actIndex !== lastActRef.current && actIndex > 0) {
+        lastActRef.current = actIndex;
+        actTransitionRef.current = 1.0;
+      }
+
+      // Bass screen shake (ref-based, no re-render)
+      if (bands.bass > 0.7 && e > 0.3) {
+        const intensity = (bands.bass - 0.7) * 5;
+        shakeRef.current.x = (Math.random() - 0.5) * intensity * 3;
+        shakeRef.current.y = (Math.random() - 0.5) * intensity * 3;
+      } else {
+        shakeRef.current.x *= 0.8;
+        shakeRef.current.y *= 0.8;
+      }
+
+      // Apply shake
+      const sticky = stickyRef.current;
+      if (sticky) {
+        if (Math.abs(shakeRef.current.x) > 0.1 || Math.abs(shakeRef.current.y) > 0.1) {
+          sticky.style.transform = `translate(${shakeRef.current.x}px, ${shakeRef.current.y}px)`;
+        } else {
+          sticky.style.transform = '';
+        }
+      }
+
+      // Dynamic letterbox
+      const mood = getMoodApprox(progressRef.current);
+      const barScale = Math.max(0.5, Math.min(1.5, 1.3 - mood * 0.4));
+      if (letterboxTopRef.current) {
+        letterboxTopRef.current.style.transform = `scaleY(${barScale})`;
+      }
+      if (letterboxBottomRef.current) {
+        letterboxBottomRef.current.style.transform = `scaleY(${barScale})`;
+      }
+
       // Unified cinema render (with context-loss fallback)
       const video = videoRef.current;
       const cinema = cinemaRef.current;
@@ -279,6 +339,7 @@ export default function ScrollVideoPlayer({
             mouseX: mouseRef.current.x,
             mouseY: mouseRef.current.y,
             velocity: smoothVelocityRef.current,
+            actTransition: actTransitionRef.current,
           });
         }
       }
@@ -350,14 +411,19 @@ export default function ScrollVideoPlayer({
               onFrameChangeRef.current?.(frameIndex, dir);
             }
 
+            // Fire progress callback
+            onProgressChangeRef.current?.(self.progress);
+
             // Scroll velocity → shader + audio impulse
             const rawVelocity = Math.abs(self.getVelocity());
             if (!reduced) {
-              // Normalize: 0 at rest, 1 at ~2000px/s
-              velocityRef.current = Math.min(1.0, rawVelocity / 2000);
+              // Normalize: 0 at rest, 1 at ~5000px/s
+              velocityRef.current = Math.min(1.0, rawVelocity / 5000);
 
               if (rawVelocity > 50) {
-                momentumRef.current?.addImpulse();
+                // Pass normalized velocity to impulse (proportional)
+                const normVel = Math.min(1.0, rawVelocity / 5000);
+                momentumRef.current?.addImpulse(normVel);
 
                 // Whoosh sound on fast scroll (throttled to 1/sec)
                 const now = performance.now();
@@ -408,7 +474,19 @@ export default function ScrollVideoPlayer({
       style={{ height: `${scrollHeight}vh` }}
       className="relative"
     >
-      <div className="sticky top-0 w-full h-dvh overflow-hidden">
+      <div ref={stickyRef} className="sticky top-0 w-full h-dvh overflow-hidden">
+        {/* Dynamic letterbox bars */}
+        <div
+          ref={letterboxTopRef}
+          className="absolute top-0 left-0 right-0 z-30 pointer-events-none"
+          style={{ background: 'var(--bg-void)', height: '4vh', transformOrigin: 'top' }}
+        />
+        <div
+          ref={letterboxBottomRef}
+          className="absolute bottom-0 left-0 right-0 z-30 pointer-events-none"
+          style={{ background: 'var(--bg-void)', height: '4vh', transformOrigin: 'bottom' }}
+        />
+
         <video
           ref={videoRef}
           src={videoSrc}
