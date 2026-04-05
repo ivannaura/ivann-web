@@ -68,7 +68,7 @@ const STORY_BEATS: StoryBeat[] = [
           data-split="chars"
           data-split-mask="words"
           data-split-stagger="0.04"
-          className="text-[clamp(3rem,8vw,8rem)] font-extralight tracking-[0.3em] leading-none"
+          className="text-[clamp(3rem,8vw,8rem)] font-extralight tracking-[0.3em] leading-none text-cinema"
           style={{ color: "var(--text-primary)" }}
         >
           IVANN
@@ -77,7 +77,7 @@ const STORY_BEATS: StoryBeat[] = [
           data-split="chars"
           data-split-mask="words"
           data-split-stagger="0.04"
-          className="text-[clamp(3rem,8vw,8rem)] font-extralight tracking-[0.3em] leading-none mt-2"
+          className="text-[clamp(3rem,8vw,8rem)] font-extralight tracking-[0.3em] leading-none mt-2 text-cinema"
           style={{ color: "var(--aura-gold)" }}
         >
           AURA
@@ -408,7 +408,7 @@ const STORY_BEATS: StoryBeat[] = [
         data-split="chars"
         data-split-mask="words"
         data-split-stagger="0.025"
-        className="text-[clamp(1.5rem,4vw,3.5rem)] font-extralight tracking-[0.15em] text-center"
+        className="text-[clamp(1.5rem,4vw,3.5rem)] font-extralight tracking-[0.15em] text-center text-cinema"
         style={{ color: "var(--text-primary)" }}
       >
         VIVE LA EXPERIENCIA
@@ -502,7 +502,7 @@ const STORY_BEATS: StoryBeat[] = [
           data-split="chars"
           data-split-mask="words"
           data-split-stagger="0.04"
-          className="text-[clamp(2rem,6vw,5rem)] font-extralight tracking-[0.3em]"
+          className="text-[clamp(2rem,6vw,5rem)] font-extralight tracking-[0.3em] text-cinema"
           style={{ color: "var(--text-primary)" }}
         >
           IVANN
@@ -511,7 +511,7 @@ const STORY_BEATS: StoryBeat[] = [
           data-split="chars"
           data-split-mask="words"
           data-split-stagger="0.04"
-          className="text-[clamp(2rem,6vw,5rem)] font-extralight tracking-[0.3em]"
+          className="text-[clamp(2rem,6vw,5rem)] font-extralight tracking-[0.3em] text-cinema"
           style={{ color: "var(--aura-gold)" }}
         >
           AURA
