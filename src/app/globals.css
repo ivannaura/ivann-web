@@ -32,6 +32,7 @@
 
 html {
   scroll-behavior: auto; /* Lenis handles this */
+  overscroll-behavior: none;
 }
 
 body {
@@ -49,6 +50,11 @@ html { scrollbar-width: none; }
 ::selection {
   background: var(--aura-gold);
   color: var(--bg-void);
+}
+
+/* Text shadow for overlay legibility on video */
+.text-cinema {
+  text-shadow: 0 1px 3px rgba(0,0,0,0.6), 0 0 20px rgba(0,0,0,0.3);
 }
 
 /* Grain overlay removed — shader handles film grain in cinema-gl.ts */
