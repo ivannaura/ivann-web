@@ -1,8 +1,9 @@
 "use client";
 
-import { useMemo, useRef, useLayoutEffect } from "react";
+import { useMemo, useRef, useLayoutEffect, useEffect } from "react";
 import gsap from "gsap";
 import { SplitText } from "gsap/SplitText";
+import type { FrequencyBands } from "@/lib/audio-momentum";
 
 if (typeof window !== "undefined") {
   gsap.registerPlugin(SplitText);
@@ -43,7 +44,7 @@ const STORY_BEATS: StoryBeat[] = [
     frameStart: 15,
     frameEnd: 75,
     content: (
-      <div className="text-center">
+      <div className="text-center" data-depth="1.2">
         <p
           data-split="chars"
           data-split-mask="words"
@@ -113,6 +114,7 @@ const STORY_BEATS: StoryBeat[] = [
     content: (
       <div className="max-w-[600px]">
         <p
+          data-reactive
           data-split="words"
           data-split-stagger="0.06"
           className="text-[clamp(1rem,2.5vw,1.8rem)] italic font-light leading-relaxed"
@@ -138,7 +140,7 @@ const STORY_BEATS: StoryBeat[] = [
     frameStart: 135,
     frameEnd: 170,
     content: (
-      <div className="flex gap-12 md:gap-20">
+      <div className="flex gap-12 md:gap-20" data-depth="0.8">
         {[
           { num: "200+", label: "SHOWS" },
           { num: "15+", label: "AÑOS" },
@@ -232,6 +234,7 @@ const STORY_BEATS: StoryBeat[] = [
     frameEnd: 268,
     content: (
       <p
+        data-reactive
         data-split="chars"
         data-split-mask="words"
         data-split-stagger="0.03"
@@ -381,6 +384,8 @@ const STORY_BEATS: StoryBeat[] = [
     frameEnd: 490,
     content: (
       <p
+        data-reactive
+        data-depth="1.3"
         data-split="chars"
         data-split-mask="words"
         data-split-stagger="0.025"
@@ -471,7 +476,7 @@ const STORY_BEATS: StoryBeat[] = [
     frameStart: 640,
     frameEnd: 720,
     content: (
-      <div className="text-center">
+      <div className="text-center" data-depth="1.1">
         <h2
           data-split="chars"
           data-split-mask="words"
@@ -529,16 +534,19 @@ const POSITION_CLASSES: Record<string, string> = {
 };
 
 // ---------------------------------------------------------------------------
-// AnimatedBeat — GSAP SplitText entrance + CSS exit
+// AnimatedBeat — GSAP SplitText entrance + exit, parallax, reactive typography
 // ---------------------------------------------------------------------------
 
 interface AnimatedBeatProps {
   beat: StoryBeat;
   progress: number;
+  energy?: number;
+  bands?: FrequencyBands;
 }
 
-function AnimatedBeat({ beat, progress }: AnimatedBeatProps) {
+function AnimatedBeat({ beat, progress, energy = 0, bands }: AnimatedBeatProps) {
   const ref = useRef<HTMLDivElement>(null);
+  const tlRef = useRef<gsap.core.Timeline | null>(null);
 
   useLayoutEffect(() => {
     const el = ref.current;
@@ -611,6 +619,8 @@ function AnimatedBeat({ beat, progress }: AnimatedBeatProps) {
             );
           }
         });
+
+        tlRef.current = tl;
       } else if (staggerTargets.length > 0) {
         // Compound elements — stagger children
         const fromVars: gsap.TweenVars = { opacity: 0 };
@@ -656,6 +666,7 @@ function AnimatedBeat({ beat, progress }: AnimatedBeatProps) {
     });
 
     return () => {
+      tlRef.current = null;
       mm.revert();
       // Explicitly revert SplitText DOM mutations — matchMedia.revert() may not
       // handle SplitText cleanup in all GSAP versions
@@ -663,16 +674,56 @@ function AnimatedBeat({ beat, progress }: AnimatedBeatProps) {
     };
   }, [beat.animation]);
 
-  // Exit: CSS opacity fade (works with and without reduced motion)
-  const exitOpacity =
-    progress > 0.85 ? (1 - progress) / 0.15 : 1;
+  // GSAP exit — reverse the entry timeline as beat approaches exit
+  useEffect(() => {
+    if (!tlRef.current) return;
+    if (progress > 0.8) {
+      const exitProgress = (progress - 0.8) / 0.2; // 0 to 1
+      // Reverse the timeline based on exit progress
+      tlRef.current.progress(Math.max(0, 1 - exitProgress));
+    } else {
+      // Ensure timeline is at full progress during active phase
+      if (tlRef.current.progress() < 1) {
+        tlRef.current.progress(1);
+      }
+    }
+  }, [progress]);
+
+  // Parallax depth — elements with data-depth shift on Y axis based on progress
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const depthEl = el.querySelector<HTMLElement>("[data-depth]");
+    if (!depthEl) return;
+    const depth = parseFloat(depthEl.dataset.depth || "1");
+    const offset = (progress - 0.5) * (depth - 1) * 60;
+    depthEl.style.transform = `translateY(${offset}px)`;
+  }, [progress]);
+
+  // Sound-reactive typography — letter-spacing pulses with mids frequency band
+  useEffect(() => {
+    const el = ref.current;
+    if (!el || !bands || energy < 0.3) return;
+    const reactiveEls = el.querySelectorAll<HTMLElement>("[data-reactive]");
+    reactiveEls.forEach((target) => {
+      const baseSpacing =
+        parseFloat(getComputedStyle(target).letterSpacing) || 0;
+      target.style.letterSpacing = `calc(${baseSpacing}px + ${bands.mids * 0.08}em)`;
+    });
+
+    return () => {
+      const reactiveEls2 = el?.querySelectorAll<HTMLElement>("[data-reactive]");
+      reactiveEls2?.forEach((target) => {
+        target.style.letterSpacing = "";
+      });
+    };
+  }, [energy, bands]);
 
   return (
     <div
       ref={ref}
       className={`absolute inset-0 ${POSITION_CLASSES[beat.position] || POSITION_CLASSES.center}`}
       style={{
-        opacity: Math.max(0, Math.min(1, exitOpacity)),
         mixBlendMode:
           (beat.blendMode as React.CSSProperties["mixBlendMode"]) || "normal",
       }}
@@ -688,10 +739,14 @@ function AnimatedBeat({ beat, progress }: AnimatedBeatProps) {
 
 interface ScrollStoryOverlayProps {
   currentFrame: number;
+  energy?: number;
+  bands?: FrequencyBands;
 }
 
 export default function ScrollStoryOverlay({
   currentFrame,
+  energy = 0,
+  bands,
 }: ScrollStoryOverlayProps) {
   const visibleBeats = useMemo(() => {
     return STORY_BEATS.filter(
@@ -713,6 +768,8 @@ export default function ScrollStoryOverlay({
           key={`${beat.frameStart}-${beat.frameEnd}`}
           beat={beat}
           progress={beat.progress}
+          energy={energy}
+          bands={bands}
         />
       ))}
     </div>

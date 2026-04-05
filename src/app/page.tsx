@@ -79,7 +79,11 @@ export default function Home() {
           onEnergyChange={handleEnergyChange}
           onBandsChange={handleBandsChange}
         >
-          <ScrollStoryOverlay currentFrame={currentFrame} />
+          <ScrollStoryOverlay
+            currentFrame={currentFrame}
+            energy={displayEnergy}
+            bands={displayBands}
+          />
         </ScrollVideoPlayer>
 
         <Contact />
