@@ -30,15 +30,18 @@ export default function Home() {
   const progressRef = useRef(0);
   const hazeRef = useRef<HTMLDivElement>(null);
 
-  // Energy + bands via refs to avoid 60fps re-renders, throttled to ~10fps for display
+  // Energy + bands + actTransition via refs to avoid 60fps re-renders, throttled to ~10fps for display
   const energyRef = useRef(0);
   const bandsRef = useRef<FrequencyBands>({ bass: 0, mids: 0, highs: 0 });
+  const actTransitionRef = useRef(0);
   const [displayEnergy, setDisplayEnergy] = useState(0);
   const [displayBands, setDisplayBands] = useState<FrequencyBands>({ bass: 0, mids: 0, highs: 0 });
+  const [displayActTransition, setDisplayActTransition] = useState(0);
 
   useEffect(() => {
     const id = setInterval(() => {
       setDisplayEnergy(energyRef.current);
+      setDisplayActTransition(actTransitionRef.current);
       const newBands = bandsRef.current;
       setDisplayBands(prev => {
         if (Math.abs(prev.bass - newBands.bass) < 0.01 &&
@@ -104,6 +107,10 @@ export default function Home() {
     progressRef.current = p;
   }, []);
 
+  const handleActTransition = useCallback((value: number) => {
+    actTransitionRef.current = value;
+  }, []);
+
   return (
     <>
       <CustomCursor />
@@ -124,6 +131,7 @@ export default function Home() {
           onEnergyChange={handleEnergyChange}
           onBandsChange={handleBandsChange}
           onProgressChange={handleProgressChange}
+          onActTransition={handleActTransition}
         >
           {/* Atmospheric haze — shifts color with narrative progress */}
           <div
@@ -139,6 +147,7 @@ export default function Home() {
             currentFrame={currentFrame}
             energy={displayEnergy}
             bands={displayBands}
+            actTransition={displayActTransition}
           />
         </ScrollVideoPlayer>
 

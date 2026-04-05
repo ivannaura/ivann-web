@@ -22,6 +22,7 @@ interface ScrollVideoPlayerProps {
   onEnergyChange?: (energy: number) => void;
   onBandsChange?: (bands: FrequencyBands) => void;
   onProgressChange?: (progress: number) => void;
+  onActTransition?: (value: number) => void;
   onError?: () => void;
   audioMuted?: boolean;
   children?: React.ReactNode;
@@ -45,6 +46,7 @@ export default function ScrollVideoPlayer({
   onEnergyChange,
   onBandsChange,
   onProgressChange,
+  onActTransition,
   onError,
   audioMuted = false,
   children,
@@ -92,6 +94,8 @@ export default function ScrollVideoPlayer({
   onBandsChangeRef.current = onBandsChange;
   const onProgressChangeRef = useRef(onProgressChange);
   onProgressChangeRef.current = onProgressChange;
+  const onActTransitionRef = useRef(onActTransition);
+  onActTransitionRef.current = onActTransition;
   const audioMutedRef = useRef(audioMuted);
   audioMutedRef.current = audioMuted;
 
@@ -279,6 +283,7 @@ export default function ScrollVideoPlayer({
         lastActRef.current = actIndex;
         actTransitionRef.current = 1.0;
       }
+      onActTransitionRef.current?.(actTransitionRef.current);
 
       // Bass screen shake (ref-based, no re-render)
       if (bands.bass > 0.7 && e > 0.3) {

@@ -545,9 +545,10 @@ interface AnimatedBeatProps {
   progress: number;
   energy?: number;
   bands?: FrequencyBands;
+  actTransition?: number;
 }
 
-function AnimatedBeat({ beat, progress, energy = 0, bands }: AnimatedBeatProps) {
+function AnimatedBeat({ beat, progress, energy = 0, bands, actTransition = 0 }: AnimatedBeatProps) {
   const ref = useRef<HTMLDivElement>(null);
   const tlRef = useRef<gsap.core.Timeline | null>(null);
 
@@ -743,6 +744,17 @@ function AnimatedBeat({ beat, progress, energy = 0, bands }: AnimatedBeatProps) 
     };
   }, [energy, bands]);
 
+  // Act transition echo — subtle opacity pulse during shader film burn
+  // Dims slightly when actTransition spikes (>0.3), returns as it decays
+  useEffect(() => {
+    const el = ref.current;
+    if (!el || actTransition <= 0.3) {
+      if (el) el.style.filter = "";
+      return;
+    }
+    el.style.filter = `brightness(${1 - actTransition * 0.3})`;
+  }, [actTransition]);
+
   return (
     <div
       ref={ref}
@@ -765,12 +777,14 @@ interface ScrollStoryOverlayProps {
   currentFrame: number;
   energy?: number;
   bands?: FrequencyBands;
+  actTransition?: number;
 }
 
 export default function ScrollStoryOverlay({
   currentFrame,
   energy = 0,
   bands,
+  actTransition = 0,
 }: ScrollStoryOverlayProps) {
   const visibleBeats = useMemo(() => {
     return STORY_BEATS.filter(
@@ -794,6 +808,7 @@ export default function ScrollStoryOverlay({
           progress={beat.progress}
           energy={energy}
           bands={bands}
+          actTransition={actTransition}
         />
       ))}
     </div>
