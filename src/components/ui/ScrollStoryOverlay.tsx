@@ -53,7 +53,7 @@ const STORY_BEATS: StoryBeat[] = [
         >
           Scroll para descubrir
         </p>
-        <div className="mt-4 mx-auto w-px h-8 bg-gradient-to-b from-[var(--aura-gold-dim)] to-transparent" style={{ animation: "pulse 2s ease-in-out infinite" }} />
+        <div className="mt-4 mx-auto w-px h-8 bg-gradient-to-b from-[var(--aura-gold-dim)] to-transparent animate-pulse" />
       </div>
     ),
     position: "bottom" as const,
@@ -399,6 +399,23 @@ const STORY_BEATS: StoryBeat[] = [
 
   // === ACT 6: EL CLÍMAX ===
   {
+    frameStart: 440,
+    frameEnd: 452,
+    content: (
+      <p
+        data-split="chars"
+        data-split-mask="words"
+        data-split-stagger="0.03"
+        className="text-[clamp(1.2rem,3vw,2.5rem)] font-extralight italic"
+        style={{ color: "var(--text-primary)" }}
+      >
+        El fuego se hace música
+      </p>
+    ),
+    position: "center",
+    animation: "fade",
+  },
+  {
     frameStart: 453,
     frameEnd: 490,
     content: (
@@ -439,7 +456,9 @@ const STORY_BEATS: StoryBeat[] = [
           className="text-[0.65rem] mt-4 tracking-[0.15em]"
           style={{ color: "var(--text-muted)" }}
         >
-          ivannprensa@gmail.com · +57 310 225 4687
+          <a href="mailto:ivannprensa@gmail.com" className="pointer-events-auto hover:text-[var(--aura-gold)] transition-colors duration-300">ivannprensa@gmail.com</a>
+          {" · "}
+          <a href="tel:+573102254687" className="pointer-events-auto hover:text-[var(--aura-gold)] transition-colors duration-300">+57 310 225 4687</a>
         </p>
       </div>
     ),
@@ -449,8 +468,43 @@ const STORY_BEATS: StoryBeat[] = [
 
   // === ACT 7: LA RESOLUCIÓN ===
   {
-    frameStart: 543,
-    frameEnd: 560,
+    frameStart: 540,
+    frameEnd: 555,
+    content: (
+      <p
+        data-reactive
+        data-split="chars"
+        data-split-mask="words"
+        data-split-stagger="0.035"
+        className="text-[clamp(1.3rem,3vw,2.5rem)] font-extralight italic tracking-wide"
+        style={{ color: "var(--text-primary)" }}
+      >
+        Cuando el silencio habla
+      </p>
+    ),
+    position: "center",
+    animation: "fade",
+  },
+  {
+    frameStart: 612,
+    frameEnd: 635,
+    content: (
+      <p
+        data-split="words"
+        data-split-stagger="0.04"
+        className="text-[clamp(0.75rem,1.3vw,1rem)] font-light leading-relaxed max-w-[500px]"
+        style={{ color: "var(--text-secondary)" }}
+      >
+        La música que queda no se escucha — se siente.
+        En cada acorde vive un universo que no necesita explicación.
+      </p>
+    ),
+    position: "right",
+    animation: "slide-right",
+  },
+  {
+    frameStart: 556,
+    frameEnd: 575,
     content: (
       <span
         data-split="chars"
@@ -518,16 +572,17 @@ const STORY_BEATS: StoryBeat[] = [
         </h2>
         <div className="flex gap-6 mt-8 justify-center">
           {[
-            { name: "Instagram", href: "https://www.instagram.com/ivannaura" },
-            { name: "Spotify", href: "https://open.spotify.com/artist/ivannaura" },
-            { name: "YouTube", href: "https://www.youtube.com/@ivannaura" },
-            { name: "TikTok", href: "https://www.tiktok.com/@ivannaura" },
+            { name: "Instagram", href: "https://www.instagram.com/ivannaura", ariaLabel: "Visitar Instagram de IVANN AURA" },
+            { name: "Spotify", href: "https://open.spotify.com/artist/ivannaura", ariaLabel: "Escuchar IVANN AURA en Spotify" },
+            { name: "YouTube", href: "https://www.youtube.com/@ivannaura", ariaLabel: "Ver IVANN AURA en YouTube" },
+            { name: "TikTok", href: "https://www.tiktok.com/@ivannaura", ariaLabel: "Seguir a IVANN AURA en TikTok" },
           ].map((platform) => (
             <a
               key={platform.name}
               href={platform.href}
               target="_blank"
               rel="noopener noreferrer"
+              aria-label={platform.ariaLabel}
               data-stagger
               className="pointer-events-auto hover:text-[var(--aura-gold)] transition-colors text-[0.6rem] tracking-[0.2em] uppercase"
               style={{ color: "var(--text-muted)" }}
