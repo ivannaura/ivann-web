@@ -92,14 +92,28 @@ function createProgramFromSources(
 ): WebGLProgram | null {
   const vs = compile(gl, gl.VERTEX_SHADER, vertSrc);
   const fs = compile(gl, gl.FRAGMENT_SHADER, fragSrc);
-  if (!vs || !fs) return null;
+  if (!vs || !fs) {
+    if (vs) gl.deleteShader(vs);
+    if (fs) gl.deleteShader(fs);
+    return null;
+  }
   const prog = gl.createProgram();
-  if (!prog) return null;
+  if (!prog) {
+    gl.deleteShader(vs);
+    gl.deleteShader(fs);
+    return null;
+  }
   gl.attachShader(prog, vs);
   gl.attachShader(prog, fs);
   gl.linkProgram(prog);
+  // Shaders can be deleted after linking — the program retains them internally
+  gl.detachShader(prog, vs);
+  gl.detachShader(prog, fs);
+  gl.deleteShader(vs);
+  gl.deleteShader(fs);
   if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) {
     console.warn('CinemaGL: program link failed:', gl.getProgramInfoLog(prog));
+    gl.deleteProgram(prog);
     return null;
   }
   return prog;
@@ -436,6 +450,7 @@ void main() {
 // Particle state (CPU-side physics)
 // ---------------------------------------------------------------------------
 
+const KAWASE_ITERATIONS = 3;
 const PARTICLE_COUNT_HIGH = 1000;
 const PARTICLE_COUNT_MID = 500;
 const CURSOR_TRAIL_COUNT = 100;
@@ -513,7 +528,7 @@ export interface CinemaGL {
 // CPU-side mood interpolation (mirrors GLSL getMood for bloom threshold)
 // ---------------------------------------------------------------------------
 
-function getMoodCPU(progress: number): number {
+export function getMoodCPU(progress: number): number {
   const moods = [0.5, 0.5, 0.6, 0.8, 0.9, 1.1, 1.2, 0.8, 0.5];
   const t = Math.min(Math.max(progress, 0), 1) * 8;
   const i = Math.floor(t);
@@ -725,6 +740,7 @@ export function initCinemaGL(canvas: HTMLCanvasElement): CinemaGL | null {
   // Luminance grid for CPU-side particle attraction
   // ---------------------------------------------------------------------------
   const lumGrid = new Float32Array(GRID_W * GRID_H);
+  const lumPixels = new Uint8Array(GRID_W * GRID_H * 4);
   let lumGridFrame = 0;
   let lumFBO: FBO | null = null;
   if (effectiveTier !== 'low' && fboA) {
@@ -739,13 +755,12 @@ export function initCinemaGL(canvas: HTMLCanvasElement): CinemaGL | null {
     gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, null);
     gl.bindFramebuffer(gl.READ_FRAMEBUFFER, null);
 
-    const pixels = new Uint8Array(GRID_W * GRID_H * 4);
     gl.bindFramebuffer(gl.FRAMEBUFFER, lumFBO.framebuffer);
-    gl.readPixels(0, 0, GRID_W, GRID_H, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
+    gl.readPixels(0, 0, GRID_W, GRID_H, gl.RGBA, gl.UNSIGNED_BYTE, lumPixels);
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
 
     for (let i = 0; i < GRID_W * GRID_H; i++) {
-      lumGrid[i] = (0.2126 * pixels[i * 4] + 0.7152 * pixels[i * 4 + 1] + 0.0722 * pixels[i * 4 + 2]) / 255;
+      lumGrid[i] = (0.2126 * lumPixels[i * 4] + 0.7152 * lumPixels[i * 4 + 1] + 0.0722 * lumPixels[i * 4 + 2]) / 255;
     }
   }
 
@@ -880,14 +895,14 @@ export function initCinemaGL(canvas: HTMLCanvasElement): CinemaGL | null {
         gl.bindVertexArray(cinemaVAO);
         gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
 
-        // --- Pass 3: Kawase blur (FBO_B ↔ FBO_B2, 3 iterations) ---
+        // --- Pass 3: Kawase blur (FBO_B ↔ FBO_B2, KAWASE_ITERATIONS iterations) ---
         if (fboB2 && kawaseProg) {
           gl.useProgram(kawaseProg);
           const tw = 1.0 / fboB.width;
           const th = 1.0 / fboB.height;
           gl.uniform2f(kUTexelSize, tw, th);
 
-          for (let i = 0; i < 3; i++) {
+          for (let i = 0; i < KAWASE_ITERATIONS; i++) {
             const readFbo = i % 2 === 0 ? fboB : fboB2;
             const writeFbo = i % 2 === 0 ? fboB2 : fboB;
 
@@ -915,10 +930,11 @@ export function initCinemaGL(canvas: HTMLCanvasElement): CinemaGL | null {
         gl.bindTexture(gl.TEXTURE_2D, fboA.texture);
         gl.uniform1i(cpUCinema, 1);
 
-        // Bind bloom texture (FBO_B2 after 3 Kawase iterations)
-        if (fboB2) {
+        // Bind bloom texture (result of Kawase blur iterations)
+        const bloomResult = KAWASE_ITERATIONS % 2 === 1 ? fboB2 : fboB;
+        if (bloomResult) {
           gl.activeTexture(gl.TEXTURE2);
-          gl.bindTexture(gl.TEXTURE_2D, fboB2.texture);
+          gl.bindTexture(gl.TEXTURE_2D, bloomResult.texture);
           gl.uniform1i(cpUBloom, 2);
         }
 

@@ -676,16 +676,14 @@ function AnimatedBeat({ beat, progress, energy = 0, bands }: AnimatedBeatProps) 
 
   // GSAP exit — reverse the entry timeline as beat approaches exit
   useEffect(() => {
-    if (!tlRef.current) return;
+    const tl = tlRef.current;
+    if (!tl) return;
+    // Only control exit after the entry animation has finished
+    if (tl.totalProgress() < 1 && progress <= 0.8) return;
+
     if (progress > 0.8) {
-      const exitProgress = (progress - 0.8) / 0.2; // 0 to 1
-      // Reverse the timeline based on exit progress
-      tlRef.current.progress(Math.max(0, 1 - exitProgress));
-    } else {
-      // Ensure timeline is at full progress during active phase
-      if (tlRef.current.progress() < 1) {
-        tlRef.current.progress(1);
-      }
+      const exitProgress = (progress - 0.8) / 0.2;
+      tl.progress(Math.max(0, 1 - exitProgress));
     }
   }, [progress]);
 
@@ -704,17 +702,20 @@ function AnimatedBeat({ beat, progress, energy = 0, bands }: AnimatedBeatProps) 
   useEffect(() => {
     const el = ref.current;
     if (!el || !bands || energy < 0.3) return;
-    const reactiveEls = el.querySelectorAll<HTMLElement>("[data-reactive]");
-    reactiveEls.forEach((target) => {
-      const baseSpacing =
-        parseFloat(getComputedStyle(target).letterSpacing) || 0;
-      target.style.letterSpacing = `calc(${baseSpacing}px + ${bands.mids * 0.08}em)`;
+    const reactiveEls = el.querySelectorAll<HTMLElement>('[data-reactive]');
+    reactiveEls.forEach(target => {
+      // Use a data attribute to cache original spacing (set once)
+      if (!target.dataset.baseSpacing) {
+        target.dataset.baseSpacing = getComputedStyle(target).letterSpacing || '0px';
+      }
+      const base = target.dataset.baseSpacing;
+      target.style.letterSpacing = `calc(${base} + ${bands.mids * 0.08}em)`;
     });
 
     return () => {
-      const reactiveEls2 = el?.querySelectorAll<HTMLElement>("[data-reactive]");
-      reactiveEls2?.forEach((target) => {
-        target.style.letterSpacing = "";
+      const els = el?.querySelectorAll<HTMLElement>('[data-reactive]');
+      els?.forEach(target => {
+        target.style.letterSpacing = '';
       });
     };
   }, [energy, bands]);

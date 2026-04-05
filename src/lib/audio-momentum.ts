@@ -8,7 +8,6 @@
 import { acquireAudioContext, releaseAudioContext, resumeAudioContext } from './shared-audio-context';
 
 // Physics constants
-const IMPULSE = 0.2;
 const FRICTION = 0.985;
 const MIN_RATE = 0.25;
 const MAX_RATE = 1.0;

@@ -34,7 +34,15 @@ export default function Home() {
   useEffect(() => {
     const id = setInterval(() => {
       setDisplayEnergy(energyRef.current);
-      setDisplayBands({ ...bandsRef.current });
+      const newBands = bandsRef.current;
+      setDisplayBands(prev => {
+        if (Math.abs(prev.bass - newBands.bass) < 0.01 &&
+            Math.abs(prev.mids - newBands.mids) < 0.01 &&
+            Math.abs(prev.highs - newBands.highs) < 0.01) {
+          return prev; // same reference, no re-render
+        }
+        return { ...newBands };
+      });
 
       // Update atmospheric haze color
       if (hazeRef.current) {

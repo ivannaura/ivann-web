@@ -4,7 +4,7 @@ import { useEffect, useRef, useState, useCallback } from "react";
 import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 import { AudioMomentum, type FrequencyBands } from "@/lib/audio-momentum";
-import { initCinemaGL, type CinemaGL } from "@/lib/cinema-gl";
+import { initCinemaGL, type CinemaGL, getMoodCPU } from "@/lib/cinema-gl";
 import { playWhoosh, setMicroSoundsMuted } from "@/lib/micro-sounds";
 
 if (typeof window !== "undefined") {
@@ -25,16 +25,6 @@ interface ScrollVideoPlayerProps {
   onError?: () => void;
   audioMuted?: boolean;
   children?: React.ReactNode;
-}
-
-function getMoodApprox(progress: number): number {
-  const moods = [0.5, 0.5, 0.6, 0.8, 0.9, 1.1, 1.2, 0.8, 0.5];
-  const t = Math.min(Math.max(progress, 0), 1) * 8;
-  const i = Math.floor(t);
-  const j = Math.min(i + 1, 8);
-  const f = t - i;
-  const s = f * f * (3 - 2 * f);
-  return moods[i] + (moods[j] - moods[i]) * s;
 }
 
 function getBufferProgress(video: HTMLVideoElement): number {
@@ -311,7 +301,7 @@ export default function ScrollVideoPlayer({
       }
 
       // Dynamic letterbox
-      const mood = getMoodApprox(progressRef.current);
+      const mood = getMoodCPU(progressRef.current);
       const barScale = Math.max(0.5, Math.min(1.5, 1.3 - mood * 0.4));
       if (letterboxTopRef.current) {
         letterboxTopRef.current.style.transform = `scaleY(${barScale})`;
