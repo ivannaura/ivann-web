@@ -197,6 +197,7 @@ export class AudioMomentum {
   /** Extract bass/mids/highs from frequency data. */
   private updateFrequencyBands(): void {
     if (!this.analyser || !this.freqData) return;
+    if (this.energy <= 0 && !this.wasPlaying) return;
 
     this.analyser.getByteFrequencyData(this.freqData);
     const bins = this.freqData;
@@ -286,7 +287,7 @@ export class AudioMomentum {
       if (this.energy >= PLAY_THRESHOLD && !this.wasPlaying && !this.playPending) {
         this.syncToVideo();
         this.audio.playbackRate = rate;
-        this.audio.volume = volume;
+        this.audio.volume = Math.pow(volume, 2);
         this.playPending = true;
         this.audio.play().then(() => {
           if (!this.running) return; // destroyed while awaiting play()
@@ -306,8 +307,8 @@ export class AudioMomentum {
       // --- update while playing ---
       if (this.wasPlaying) {
         this.audio.playbackRate = rate;
-        this.audio.volume = volume;
-        this.checkDrift();
+        this.audio.volume = Math.pow(volume, 2);
+        this.checkDrift(dt);
       }
     }
 
@@ -319,13 +320,18 @@ export class AudioMomentum {
   private syncToVideo(): void {
     if (!this.audio || !this.videoTimeGetter) return;
     const t = this.videoTimeGetter();
-    if (Number.isFinite(t)) {
-      this.audio.currentTime = t;
+    if (!Number.isFinite(t)) return;
+    // Brief mute to avoid click on snap
+    if (this.gainNode && this.audioCtx) {
+      const now = this.audioCtx.currentTime;
+      this.gainNode.gain.setTargetAtTime(0, now, 0.005);
+      this.gainNode.gain.setTargetAtTime(this.audio.muted ? 0 : 1, now + 0.015, 0.01);
     }
+    this.audio.currentTime = t;
   }
 
   /** If audio has drifted too far from video, re-sync. */
-  private checkDrift(): void {
+  private checkDrift(dt: number): void {
     if (!this.audio || !this.videoTimeGetter) return;
     const videoTime = this.videoTimeGetter();
     if (!Number.isFinite(videoTime)) return;
@@ -336,8 +342,8 @@ export class AudioMomentum {
       // Hard snap (safety net)
       this.syncToVideo();
     } else if (absDrift > 1.0) {
-      // Soft correction — nudge 10% per frame toward sync
-      this.audio.currentTime -= drift * 0.1;
+      // Soft correction — nudge 10% per frame toward sync, scaled by dt
+      this.audio.currentTime -= drift * 0.1 * dt;
     }
   }
 }

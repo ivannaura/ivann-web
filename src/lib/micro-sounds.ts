@@ -11,9 +11,11 @@ let ctx: AudioContext | null = null;
 let muted = false;
 let reducedMotion = false;
 
-// Check prefers-reduced-motion at module load
+// Live prefers-reduced-motion listener (responds to runtime OS toggle)
 if (typeof window !== 'undefined') {
-  reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const mq = window.matchMedia('(prefers-reduced-motion: reduce)');
+  reducedMotion = mq.matches;
+  mq.addEventListener('change', (e) => { reducedMotion = e.matches; });
 }
 
 function getCtx(): AudioContext | null {
@@ -48,6 +50,7 @@ function playNote(freq: number, duration: number, volume: number = 0.04): void {
   gain.connect(ac.destination);
   osc.start(now);
   osc.stop(now + duration);
+  osc.onended = () => { osc.disconnect(); gain.disconnect(); };
 }
 
 // ---------------------------------------------------------------------------
@@ -75,10 +78,14 @@ export function playHover(): void {
 }
 
 /** Resonant key press on CTA click. */
+let lastClickTime = 0;
 export function playClick(): void {
-  // C4 + octave harmonic
-  playNote(262, 0.3, 0.04);
-  playNote(524, 0.2, 0.02);
+  const now = performance.now();
+  if (now - lastClickTime < 100) return;
+  lastClickTime = now;
+  // E4 + octave harmonic (Phrygian match)
+  playNote(330, 0.3, 0.04);
+  playNote(659, 0.2, 0.02);
 }
 
 /** Subtle whoosh for scroll momentum — frequency sweeps down. */
@@ -113,6 +120,7 @@ export function playWhoosh(): void {
   gain.connect(ac.destination);
   osc.start(now);
   osc.stop(now + 0.2);
+  osc.onended = () => { osc.disconnect(); filter.disconnect(); gain.disconnect(); };
 }
 
 /** Release shared AudioContext reference. */

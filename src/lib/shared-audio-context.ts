@@ -21,7 +21,7 @@ export function acquireAudioContext(): AudioContext | null {
   }
   if (!ctx) {
     try {
-      ctx = new AudioContext();
+      ctx = new AudioContext({ sampleRate: 44100 });
       primerAudioContext();
     } catch {
       return null;
@@ -62,6 +62,6 @@ export function primerAudioContext(): void {
     document.removeEventListener('touchstart', handler);
     document.removeEventListener('click', handler);
   };
-  document.addEventListener('touchstart', handler, { once: true, passive: true });
-  document.addEventListener('click', handler, { once: true });
+  document.addEventListener('touchstart', handler, { passive: true });
+  document.addEventListener('click', handler);
 }
