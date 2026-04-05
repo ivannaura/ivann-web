@@ -31,6 +31,15 @@ export default function Preloader() {
       dismissTimeout = setTimeout(() => setHidden(true), 1100);
     };
 
+    // Reduced-motion: skip all animations, show static content briefly, dismiss
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      const rmTimeout = setTimeout(dismiss, 500);
+      return () => {
+        clearTimeout(rmTimeout);
+        clearTimeout(dismissTimeout);
+      };
+    }
+
     const ctx = gsap.context(() => {
       // Split "IVANN AURA" into chars with word masking
       const nameSplit = SplitText.create(nameEl, {
@@ -44,27 +53,36 @@ export default function Preloader() {
       // Master timeline
       const tl = gsap.timeline({
         onComplete: () => {
-          // Reduced-motion: skip animation, dismiss immediately
-          if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
-            dismiss();
-            return;
+          // Wait for video readiness before iris-close exit
+          const video = document.querySelector("video");
+          const proceedDismiss = () => {
+            if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+              dismiss();
+              return;
+            }
+
+            // Exit: cinematic iris-close — circle collapses to center, revealing page
+            gsap.to(container, {
+              clipPath: "circle(0.01% at 50% 50%)",
+              duration: 1.0,
+              ease: "power3.inOut",
+              onComplete: dismiss,
+            });
+
+            // Simultaneously scale content down for parallax depth
+            gsap.to([nameEl, subtitleEl, barEl.parentElement], {
+              scale: 0.95,
+              opacity: 0.5,
+              duration: 1.0,
+              ease: "power2.in",
+            });
+          };
+
+          if (video && video.readyState < 4) {
+            video.addEventListener("canplaythrough", proceedDismiss, { once: true });
+          } else {
+            proceedDismiss();
           }
-
-          // Exit: cinematic iris-close — circle collapses to center, revealing page
-          gsap.to(container, {
-            clipPath: "circle(0% at 50% 50%)",
-            duration: 1.0,
-            ease: "power3.inOut",
-            onComplete: dismiss,
-          });
-
-          // Simultaneously scale content down for parallax depth
-          gsap.to([nameEl, subtitleEl, barEl.parentElement], {
-            scale: 0.95,
-            opacity: 0.5,
-            duration: 1.0,
-            ease: "power2.in",
-          });
         },
       });
 
@@ -121,6 +139,7 @@ export default function Preloader() {
     <div
       ref={containerRef}
       role="status"
+      aria-live="polite"
       aria-label="Cargando IVANN AURA"
       style={{
         position: "fixed",
