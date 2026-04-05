@@ -436,25 +436,36 @@ void main() {
 // Particle state (CPU-side physics)
 // ---------------------------------------------------------------------------
 
-const PARTICLE_COUNT = 250;
+const PARTICLE_COUNT_HIGH = 1000;
+const PARTICLE_COUNT_MID = 500;
+const CURSOR_TRAIL_COUNT = 100;
+const BURST_COUNT = 50;
 const STRIDE = 4; // x, y, alpha, size per vertex
+
+const GRID_W = 48;
+const GRID_H = 20;
+const LUM_GRID_INTERVAL = 10;
+const LUMINANCE_FORCE = 2.0;
+const CURSOR_FORCE = 0.8;
 
 interface Particle {
   x: number; y: number;
   vx: number; vy: number;
   life: number; maxLife: number;
   size: number;
+  isCursorTrail: boolean;
 }
 
-function spawnParticle(w: number, h: number): Particle {
+function spawnParticle(w: number, h: number, isCursorTrail: boolean = false): Particle {
   return {
     x: Math.random() * w,
     y: Math.random() * h,
     vx: (Math.random() - 0.5) * 0.5,
     vy: (Math.random() - 0.5) * 0.3,
-    life: 3 + Math.random() * 5,
-    maxLife: 3 + Math.random() * 5,
-    size: 1 + Math.random() * 3,
+    life: isCursorTrail ? 0.8 + Math.random() * 0.5 : 3 + Math.random() * 5,
+    maxLife: isCursorTrail ? 0.8 + Math.random() * 0.5 : 3 + Math.random() * 5,
+    size: isCursorTrail ? 1.5 + Math.random() * 2 : 1 + Math.random() * 3,
+    isCursorTrail,
   };
 }
 
@@ -464,9 +475,9 @@ function resetParticle(p: Particle, w: number, h: number): void {
   p.y = Math.random() * h;
   p.vx = (Math.random() - 0.5) * 0.5;
   p.vy = (Math.random() - 0.5) * 0.3;
-  p.maxLife = 3 + Math.random() * 5;
+  p.maxLife = p.isCursorTrail ? 0.8 + Math.random() * 0.5 : 3 + Math.random() * 5;
   p.life = p.maxLife;
-  p.size = 1 + Math.random() * 3;
+  p.size = p.isCursorTrail ? 1.5 + Math.random() * 2 : 1 + Math.random() * 3;
 }
 
 // ---------------------------------------------------------------------------
@@ -610,12 +621,9 @@ export function initCinemaGL(canvas: HTMLCanvasElement): CinemaGL | null {
     return null;
   }
 
-  // Particle buffer — pre-allocate for bufferSubData updates
+  // Particle buffer — pre-allocate for bufferSubData updates (sized after tier detection)
   const particleBuf = gl.createBuffer();
   if (!particleBuf) return null;
-  const particleData = new Float32Array(PARTICLE_COUNT * STRIDE);
-  gl.bindBuffer(gl.ARRAY_BUFFER, particleBuf);
-  gl.bufferData(gl.ARRAY_BUFFER, particleData.byteLength, gl.DYNAMIC_DRAW);
 
   // Particle VAO
   const particleVAO = gl.createVertexArray();
@@ -661,14 +669,10 @@ export function initCinemaGL(canvas: HTMLCanvasElement): CinemaGL | null {
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
 
   // ---------------------------------------------------------------------------
-  // Particle CPU state
+  // Particle CPU state (sized after tier detection below)
   // ---------------------------------------------------------------------------
   let w = canvas.width || 960;
   let h = canvas.height || 540;
-  const particles: Particle[] = [];
-  for (let i = 0; i < PARTICLE_COUNT; i++) {
-    particles.push(spawnParticle(w, h));
-  }
   let lastTime = 0;
   let lastVideoTime = -1; // guard against redundant texImage2D uploads
 
@@ -697,6 +701,71 @@ export function initCinemaGL(canvas: HTMLCanvasElement): CinemaGL | null {
     }
   }
   const effectiveTier: CinemaTier = fboA ? tier : 'low';
+
+  // ---------------------------------------------------------------------------
+  // Tier-dependent particle initialization
+  // ---------------------------------------------------------------------------
+  const particleCount = effectiveTier === 'high'
+    ? PARTICLE_COUNT_HIGH + CURSOR_TRAIL_COUNT
+    : effectiveTier === 'mid'
+      ? PARTICLE_COUNT_MID
+      : 0;
+
+  const particles: Particle[] = [];
+  for (let i = 0; i < particleCount; i++) {
+    const isCursorTrail = effectiveTier === 'high' && i >= PARTICLE_COUNT_HIGH;
+    particles.push(spawnParticle(w, h, isCursorTrail));
+  }
+
+  const particleData = new Float32Array(particleCount * STRIDE);
+  gl.bindBuffer(gl.ARRAY_BUFFER, particleBuf);
+  gl.bufferData(gl.ARRAY_BUFFER, particleData.byteLength, gl.DYNAMIC_DRAW);
+
+  // ---------------------------------------------------------------------------
+  // Luminance grid for CPU-side particle attraction
+  // ---------------------------------------------------------------------------
+  const lumGrid = new Float32Array(GRID_W * GRID_H);
+  let lumGridFrame = 0;
+  let lumFBO: FBO | null = null;
+  if (effectiveTier !== 'low' && fboA) {
+    lumFBO = createFBO(gl, GRID_W, GRID_H);
+  }
+
+  function updateLuminanceGrid(): void {
+    if (!gl || !lumFBO || !fboA) return;
+    gl.bindFramebuffer(gl.READ_FRAMEBUFFER, fboA.framebuffer);
+    gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, lumFBO.framebuffer);
+    gl.blitFramebuffer(0, 0, fboA.width, fboA.height, 0, 0, GRID_W, GRID_H, gl.COLOR_BUFFER_BIT, gl.LINEAR);
+    gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, null);
+    gl.bindFramebuffer(gl.READ_FRAMEBUFFER, null);
+
+    const pixels = new Uint8Array(GRID_W * GRID_H * 4);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, lumFBO.framebuffer);
+    gl.readPixels(0, 0, GRID_W, GRID_H, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+
+    for (let i = 0; i < GRID_W * GRID_H; i++) {
+      lumGrid[i] = (0.2126 * pixels[i * 4] + 0.7152 * pixels[i * 4 + 1] + 0.0722 * pixels[i * 4 + 2]) / 255;
+    }
+  }
+
+  function sampleLumGrad(px: number, py: number): { gx: number; gy: number } {
+    const gxIdx = Math.floor((px / w) * (GRID_W - 1));
+    const gyIdx = Math.floor((py / h) * (GRID_H - 1));
+    const idx = gyIdx * GRID_W + gxIdx;
+    const right = Math.min(idx + 1, lumGrid.length - 1);
+    const left = Math.max(idx - 1, 0);
+    const down = Math.min(idx + GRID_W, lumGrid.length - 1);
+    const up = Math.max(idx - GRID_W, 0);
+    return {
+      gx: (lumGrid[right] - lumGrid[left]) * 0.5,
+      gy: (lumGrid[down] - lumGrid[up]) * 0.5,
+    };
+  }
+
+  let lastActIndex = 0;
+  let lastMouseX = 0;
+  let lastMouseY = 0;
 
   // Blit program (passthrough FBO → screen)
   const blitProg = createProgramFromSources(gl, CINEMA_VERT, BLIT_FRAG);
@@ -892,12 +961,60 @@ export function initCinemaGL(canvas: HTMLCanvasElement): CinemaGL | null {
       }
 
       // --- Pass 5: Particles (additive blending on top) ---
+
+      // Update luminance grid periodically (after composite pass, before particle physics)
+      lumGridFrame++;
+      if (lumGridFrame % LUM_GRID_INTERVAL === 0 && fboA) {
+        updateLuminanceGrid();
+      }
+
+      // Particle burst on act change
+      const actIndex = Math.floor(progress * 8);
+      if (actIndex !== lastActIndex && actIndex > 0) {
+        lastActIndex = actIndex;
+        let burst = 0;
+        for (let i = 0; i < Math.min(particleCount, PARTICLE_COUNT_HIGH) && burst < BURST_COUNT; i++) {
+          const p = particles[i];
+          if (p.life < p.maxLife * 0.3) {
+            p.x = w * 0.5 + (Math.random() - 0.5) * w * 0.3;
+            p.y = h * 0.5 + (Math.random() - 0.5) * h * 0.3;
+            const angle = Math.random() * Math.PI * 2;
+            const spd = 3 + Math.random() * 5;
+            p.vx = Math.cos(angle) * spd;
+            p.vy = Math.sin(angle) * spd;
+            p.life = 0.5 + Math.random() * 0.3;
+            p.maxLife = p.life;
+            p.size = 3 + Math.random() * 3;
+            burst++;
+          }
+        }
+      }
+
+      // Cursor trail: spawn one particle per frame at cursor position (high tier)
+      if (effectiveTier === 'high' && (mouseX !== lastMouseX || mouseY !== lastMouseY)) {
+        lastMouseX = mouseX;
+        lastMouseY = mouseY;
+        for (let i = PARTICLE_COUNT_HIGH; i < particleCount; i++) {
+          if (particles[i].life <= 0) {
+            const p = particles[i];
+            p.x = mouseX;
+            p.y = mouseY;
+            p.vx = (Math.random() - 0.5) * 2;
+            p.vy = (Math.random() - 0.5) * 2;
+            p.life = 0.8 + Math.random() * 0.5;
+            p.maxLife = p.life;
+            p.size = 1.5 + Math.random() * 2;
+            break;
+          }
+        }
+      }
+
+      // Physics update
       const dt = lastTime ? Math.min(time - lastTime, 0.05) : 0.016;
       lastTime = time;
       const speed = 0.05 + energy * 0.95;
 
-      // Update particle physics (CPU-side)
-      for (let i = 0; i < PARTICLE_COUNT; i++) {
+      for (let i = 0; i < particleCount; i++) {
         const p = particles[i];
         p.life -= dt * speed;
         if (p.life <= 0) {
@@ -905,8 +1022,29 @@ export function initCinemaGL(canvas: HTMLCanvasElement): CinemaGL | null {
           continue;
         }
 
-        p.x += p.vx * dt * speed * 60;
-        p.y += p.vy * dt * speed * 60;
+        // Luminance gradient force (velocity persistence)
+        if (lumGridFrame >= LUM_GRID_INTERVAL) {
+          const grad = sampleLumGrad(p.x, p.y);
+          p.vx += grad.gx * LUMINANCE_FORCE * energy * dt;
+          p.vy += grad.gy * LUMINANCE_FORCE * energy * dt;
+        }
+
+        // Cursor attraction (as velocity force)
+        const toCursorX = mouseX - p.x;
+        const toCursorY = mouseY - p.y;
+        const cursorDist = Math.sqrt(toCursorX * toCursorX + toCursorY * toCursorY) + 1;
+        if (cursorDist < 300) {
+          const pull = (1 - cursorDist / 300) * CURSOR_FORCE * energy;
+          p.vx += (toCursorX / cursorDist) * pull * dt;
+          p.vy += (toCursorY / cursorDist) * pull * dt;
+        }
+
+        // Velocity damping
+        p.vx *= 0.98;
+        p.vy *= 0.98;
+
+        p.x += p.vx * dt * 60;
+        p.y += p.vy * dt * 60;
         p.y -= 0.15 * dt * speed * 60; // gentle upward drift
 
         // Wrap edges
@@ -946,7 +1084,7 @@ export function initCinemaGL(canvas: HTMLCanvasElement): CinemaGL | null {
       gl.bindBuffer(gl.ARRAY_BUFFER, particleBuf);
       gl.bufferSubData(gl.ARRAY_BUFFER, 0, particleData);
       gl.bindVertexArray(particleVAO);
-      gl.drawArrays(gl.POINTS, 0, PARTICLE_COUNT);
+      gl.drawArrays(gl.POINTS, 0, particleCount);
 
       gl.bindVertexArray(null);
       gl.disable(gl.BLEND);
@@ -982,6 +1120,7 @@ export function initCinemaGL(canvas: HTMLCanvasElement): CinemaGL | null {
     destroy() {
       canvas.removeEventListener("webglcontextlost", onContextLost);
       // FBO cleanup
+      if (lumFBO) destroyFBO(gl, lumFBO);
       [fboA, fboB, fboB2, fboD].forEach(f => f && destroyFBO(gl, f));
       if (blitProg) gl.deleteProgram(blitProg);
       if (bloomThreshProg) gl.deleteProgram(bloomThreshProg);
