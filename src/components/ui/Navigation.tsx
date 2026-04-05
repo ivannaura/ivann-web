@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, useCallback } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import { useLenis } from "lenis/react";
 import { useUIStore } from "@/stores/useUIStore";
 import { playHover, playClick } from "@/lib/micro-sounds";
@@ -30,7 +30,8 @@ export default function Navigation({
   const [logoHovered, setLogoHovered] = useState(false);
   const dialogRef = useRef<HTMLDialogElement>(null);
   const hamburgerRef = useRef<HTMLButtonElement>(null);
-  const logoBarOffsets = useMemo(() => [0.4, 0.7, 1, 0.7, 0.4].map(() => 1 + Math.random() * 0.3), []);
+  // Fixed decorative offsets — avoids Math.random() hydration mismatch (server != client)
+  const logoBarOffsets = [1.12, 1.24, 1.30, 1.18, 1.08];
   const menuOpen = useUIStore((s) => s.menuOpen);
   const toggleMenu = useUIStore((s) => s.toggleMenu);
   const setMenuOpen = useUIStore((s) => s.setMenuOpen);
