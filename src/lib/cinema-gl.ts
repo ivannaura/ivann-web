@@ -377,7 +377,9 @@ out vec4 fragColor;
 void main() {
   vec3 c = texture(u_tex, v_uv).rgb;
   float lum = dot(c, vec3(0.2126, 0.7152, 0.0722));
-  float excess = max(0.0, lum - u_threshold);
+  float knee = 0.1;
+  float softLum = lum - u_threshold + knee;
+  float excess = clamp(softLum * softLum / (4.0 * knee + 0.0001), 0.0, max(0.0, lum - u_threshold));
   fragColor = vec4(c * excess, 1.0);
 }`;
 
