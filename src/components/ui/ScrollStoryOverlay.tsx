@@ -681,13 +681,12 @@ function AnimatedBeat({ beat, progress, energy = 0, bands }: AnimatedBeatProps) 
   useEffect(() => {
     const tl = tlRef.current;
     if (!tl) return;
-    // Only control exit after the entry animation has finished
-    if (tl.totalProgress() < 1 && progress <= 0.8) return;
+    if (progress <= 0.8) return;
+    // Don't reverse a timeline that hasn't started playing yet
+    if (tl.totalProgress() === 0) return;
 
-    if (progress > 0.8) {
-      const exitProgress = (progress - 0.8) / 0.2;
-      tl.progress(Math.max(0, 1 - exitProgress));
-    }
+    const exitProgress = (progress - 0.8) / 0.2;
+    tl.progress(Math.max(0, 1 - exitProgress));
   }, [progress]);
 
   // Parallax depth — elements with data-depth shift on Y axis based on progress
