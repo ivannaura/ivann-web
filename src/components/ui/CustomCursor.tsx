@@ -29,7 +29,9 @@ export default function CustomCursor() {
     const isMobile = window.matchMedia("(pointer: coarse)").matches;
     if (isMobile) return;
 
-    document.body.style.cursor = "none";
+    if (!window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      document.body.style.cursor = "none";
+    }
 
     let mouseX = -100;
     let mouseY = -100;
@@ -81,12 +83,25 @@ export default function CustomCursor() {
     };
 
     let frameId = 0;
+    let lastTime = 0;
     const animateRing = () => {
-      ringX += (mouseX - ringX) * 0.12;
-      ringY += (mouseY - ringY) * 0.12;
+      // Pause rAF work when cursor is not visible
+      if (!visibleRef.current) {
+        frameId = requestAnimationFrame(animateRing);
+        return;
+      }
 
-      // Decay scroll velocity smoothly each frame
-      scrollVelocity *= VELOCITY_DECAY;
+      // Delta-time correction for frame-rate independence
+      const now = performance.now();
+      const dt = lastTime ? Math.min((now - lastTime) / 16.667, 3) : 1;
+      lastTime = now;
+
+      const lerpFactor = 1 - Math.pow(1 - 0.12, dt);
+      ringX += (mouseX - ringX) * lerpFactor;
+      ringY += (mouseY - ringY) * lerpFactor;
+
+      // Decay scroll velocity smoothly each frame (dt-corrected)
+      scrollVelocity *= Math.pow(VELOCITY_DECAY, dt);
 
       // Compute scaleY stretch from absolute velocity
       const absVelocity = Math.abs(scrollVelocity);
