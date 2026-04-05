@@ -4,7 +4,7 @@
 //   Pass 1: Video post-processing → FBO_A (vignette, chromatic aberration, grain)
 //   Pass 2: Bloom threshold (FBO_A → FBO_B, half-res luminance extraction)
 //   Pass 3: Kawase blur (FBO_B ↔ FBO_B2, 3 iterations with increasing offset)
-//   Pass 4: Blit FBO_A + additive bloom → screen (temporary until Task 5 composite)
+//   Pass 4: Composite (FBO_A + bloom + motion blur + flare + burn → screen)
 //   Pass 5: Luminance-reactive particles (additive blending on screen)
 //
 // Tier system:
@@ -382,6 +382,56 @@ void main() {
   fragColor = c * 0.25;
 }`;
 
+const COMPOSITE_FRAG = `#version 300 es
+precision highp float;
+in vec2 v_uv;
+uniform sampler2D u_cinema;
+uniform sampler2D u_bloom;
+uniform sampler2D u_prevFrame;
+uniform float u_mood;
+uniform float u_velocity;
+uniform float u_highs;
+uniform float u_actTransition;
+uniform int u_useMotionBlur;
+uniform int u_useFlare;
+out vec4 fragColor;
+
+void main() {
+  vec3 cinema = texture(u_cinema, v_uv).rgb;
+  vec3 bloom = texture(u_bloom, v_uv).rgb;
+
+  // --- Bloom composite ---
+  float bloomStr = 0.4 + u_mood * 0.3;
+  vec3 c = cinema + bloom * bloomStr;
+
+  // --- Motion blur (High tier only) ---
+  if (u_useMotionBlur == 1) {
+    vec3 prev = texture(u_prevFrame, v_uv).rgb;
+    float blurFactor = u_velocity * 0.3;
+    c = mix(c, prev, blurFactor);
+  }
+
+  // --- Anamorphic lens flare (High tier only) ---
+  if (u_useFlare == 1) {
+    float flare = 0.0;
+    for (int i = -8; i <= 8; i++) {
+      vec2 off = vec2(float(i) * 0.012, 0.0);
+      float s = texture(u_bloom, v_uv + off).r;
+      float w = 1.0 - abs(float(i)) / 8.0;
+      flare += s * w * w;
+    }
+    flare *= 0.12 * u_mood;
+    c += flare * vec3(0.7, 0.85, 1.0);
+  }
+
+  // --- Film burn at act transitions ---
+  float burn = smoothstep(0.0, 0.15, u_actTransition) * smoothstep(0.3, 0.15, u_actTransition);
+  vec3 leak = mix(vec3(1.0, 0.6, 0.2), vec3(1.0, 0.9, 0.5), v_uv.x);
+  c = mix(c, leak, burn * 0.35);
+
+  fragColor = vec4(c, 1.0);
+}`;
+
 // ---------------------------------------------------------------------------
 // Particle state (CPU-side physics)
 // ---------------------------------------------------------------------------
@@ -674,6 +724,30 @@ export function initCinemaGL(canvas: HTMLCanvasElement): CinemaGL | null {
     kUOffset = gl.getUniformLocation(kawaseProg, "u_offset");
   }
 
+  // Composite program
+  const compositeProg = createProgramFromSources(gl, CINEMA_VERT, COMPOSITE_FRAG);
+  let cpUCinema: WebGLUniformLocation | null = null;
+  let cpUBloom: WebGLUniformLocation | null = null;
+  let cpUPrevFrame: WebGLUniformLocation | null = null;
+  let cpUMood: WebGLUniformLocation | null = null;
+  let cpUVelocity: WebGLUniformLocation | null = null;
+  let cpUHighs: WebGLUniformLocation | null = null;
+  let cpUActTransition: WebGLUniformLocation | null = null;
+  let cpUUseMotionBlur: WebGLUniformLocation | null = null;
+  let cpUUseFlare: WebGLUniformLocation | null = null;
+  if (compositeProg) {
+    gl.useProgram(compositeProg);
+    cpUCinema = gl.getUniformLocation(compositeProg, "u_cinema");
+    cpUBloom = gl.getUniformLocation(compositeProg, "u_bloom");
+    cpUPrevFrame = gl.getUniformLocation(compositeProg, "u_prevFrame");
+    cpUMood = gl.getUniformLocation(compositeProg, "u_mood");
+    cpUVelocity = gl.getUniformLocation(compositeProg, "u_velocity");
+    cpUHighs = gl.getUniformLocation(compositeProg, "u_highs");
+    cpUActTransition = gl.getUniformLocation(compositeProg, "u_actTransition");
+    cpUUseMotionBlur = gl.getUniformLocation(compositeProg, "u_useMotionBlur");
+    cpUUseFlare = gl.getUniformLocation(compositeProg, "u_useFlare");
+  }
+
   // ---------------------------------------------------------------------------
   // Runtime performance monitoring
   // ---------------------------------------------------------------------------
@@ -760,31 +834,61 @@ export function initCinemaGL(canvas: HTMLCanvasElement): CinemaGL | null {
         }
       }
 
-      // --- Blit FBO_A + bloom to screen (temporary until Task 5 composite) ---
-      if (fboA && blitProg) {
+      // --- Pass 4: Composite (FBO_A + bloom + motion blur + flare + burn → screen) ---
+      if (fboA && compositeProg) {
         gl.bindFramebuffer(gl.FRAMEBUFFER, null);
         gl.viewport(0, 0, w, h);
+        gl.disable(gl.BLEND);
+        gl.useProgram(compositeProg);
 
-        // First blit cinema
+        // Bind cinema texture (FBO_A)
+        gl.activeTexture(gl.TEXTURE1);
+        gl.bindTexture(gl.TEXTURE_2D, fboA.texture);
+        gl.uniform1i(cpUCinema, 1);
+
+        // Bind bloom texture (FBO_B2 after 3 Kawase iterations)
+        if (fboB2) {
+          gl.activeTexture(gl.TEXTURE2);
+          gl.bindTexture(gl.TEXTURE_2D, fboB2.texture);
+          gl.uniform1i(cpUBloom, 2);
+        }
+
+        // Bind previous frame (FBO_D, for motion blur)
+        if (fboD) {
+          gl.activeTexture(gl.TEXTURE3);
+          gl.bindTexture(gl.TEXTURE_2D, fboD.texture);
+          gl.uniform1i(cpUPrevFrame, 3);
+        }
+
+        const mood = getMoodCPU(progress);
+        gl.uniform1f(cpUMood, mood);
+        gl.uniform1f(cpUVelocity, velocity);
+        gl.uniform1f(cpUHighs, bands.highs);
+        gl.uniform1f(cpUActTransition, params.actTransition);
+        gl.uniform1i(cpUUseMotionBlur, fboD ? 1 : 0);
+        gl.uniform1i(cpUUseFlare, runtimeTier === 'high' ? 1 : 0);
+
+        gl.bindVertexArray(cinemaVAO);
+        gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+
+        // Copy current screen to FBO_D for next frame's motion blur
+        if (fboD) {
+          gl.bindFramebuffer(gl.READ_FRAMEBUFFER, null);
+          gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, fboD.framebuffer);
+          gl.blitFramebuffer(0, 0, w, h, 0, 0, fboD.width, fboD.height, gl.COLOR_BUFFER_BIT, gl.NEAREST);
+          gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, null);
+          gl.bindFramebuffer(gl.READ_FRAMEBUFFER, null);
+        }
+      } else if (fboA && blitProg) {
+        // Fallback: simple blit if composite program failed
+        gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+        gl.viewport(0, 0, w, h);
         gl.useProgram(blitProg);
         gl.activeTexture(gl.TEXTURE1);
         gl.bindTexture(gl.TEXTURE_2D, fboA.texture);
         gl.uniform1i(blitUTex, 1);
         gl.bindVertexArray(cinemaVAO);
         gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
-
-        // Additive blend bloom on top
-        if (fboB2) {
-          gl.enable(gl.BLEND);
-          gl.blendFunc(gl.ONE, gl.ONE); // additive
-          // After 3 iterations (odd count), result is in fboB2
-          gl.activeTexture(gl.TEXTURE1);
-          gl.bindTexture(gl.TEXTURE_2D, fboB2.texture);
-          gl.uniform1i(blitUTex, 1);
-          gl.bindVertexArray(cinemaVAO);
-          gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
-          gl.disable(gl.BLEND);
-        }
       }
 
       // --- Pass 5: Particles (additive blending on top) ---
@@ -882,6 +986,7 @@ export function initCinemaGL(canvas: HTMLCanvasElement): CinemaGL | null {
       if (blitProg) gl.deleteProgram(blitProg);
       if (bloomThreshProg) gl.deleteProgram(bloomThreshProg);
       if (kawaseProg) gl.deleteProgram(kawaseProg);
+      if (compositeProg) gl.deleteProgram(compositeProg);
       // Existing cleanup
       gl.deleteTexture(tex);
       gl.deleteBuffer(quadBuf);
