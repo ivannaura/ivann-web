@@ -748,21 +748,48 @@ export function initCinemaGL(canvas: HTMLCanvasElement): CinemaGL | null {
     lumFBO = createFBO(gl, GRID_W, GRID_H);
   }
 
+  // PBO for async GPU readback — avoids synchronous readPixels stall
+  let lumPBO: WebGLBuffer | null = null;
+  let lumPBOPending = false;
+  if (lumFBO) {
+    lumPBO = gl.createBuffer();
+    if (lumPBO) {
+      gl.bindBuffer(gl.PIXEL_PACK_BUFFER, lumPBO);
+      gl.bufferData(gl.PIXEL_PACK_BUFFER, lumPixels.byteLength, gl.STREAM_READ);
+      gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null);
+    }
+  }
+
   function updateLuminanceGrid(): void {
-    if (!gl || !lumFBO || !fboA) return;
+    if (!gl || !lumFBO || !fboA || !lumPBO) return;
+
+    // Step 1: If there's a pending read from last call, retrieve it (non-blocking)
+    if (lumPBOPending) {
+      gl.bindBuffer(gl.PIXEL_PACK_BUFFER, lumPBO);
+      gl.getBufferSubData(gl.PIXEL_PACK_BUFFER, 0, lumPixels);
+      gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null);
+      lumPBOPending = false;
+
+      // Process into grid
+      for (let i = 0; i < GRID_W * GRID_H; i++) {
+        lumGrid[i] = (0.2126 * lumPixels[i * 4] + 0.7152 * lumPixels[i * 4 + 1] + 0.0722 * lumPixels[i * 4 + 2]) / 255;
+      }
+    }
+
+    // Step 2: Blit FBO_A to lumFBO (downscale)
     gl.bindFramebuffer(gl.READ_FRAMEBUFFER, fboA.framebuffer);
     gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, lumFBO.framebuffer);
     gl.blitFramebuffer(0, 0, fboA.width, fboA.height, 0, 0, GRID_W, GRID_H, gl.COLOR_BUFFER_BIT, gl.LINEAR);
     gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, null);
     gl.bindFramebuffer(gl.READ_FRAMEBUFFER, null);
 
+    // Step 3: Start async readback into PBO (returns immediately, GPU works in background)
     gl.bindFramebuffer(gl.FRAMEBUFFER, lumFBO.framebuffer);
-    gl.readPixels(0, 0, GRID_W, GRID_H, gl.RGBA, gl.UNSIGNED_BYTE, lumPixels);
+    gl.bindBuffer(gl.PIXEL_PACK_BUFFER, lumPBO);
+    gl.readPixels(0, 0, GRID_W, GRID_H, gl.RGBA, gl.UNSIGNED_BYTE, 0);
+    gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null);
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-
-    for (let i = 0; i < GRID_W * GRID_H; i++) {
-      lumGrid[i] = (0.2126 * lumPixels[i * 4] + 0.7152 * lumPixels[i * 4 + 1] + 0.0722 * lumPixels[i * 4 + 2]) / 255;
-    }
+    lumPBOPending = true;
   }
 
   function sampleLumGrad(px: number, py: number): { gx: number; gy: number } {
@@ -1136,7 +1163,8 @@ export function initCinemaGL(canvas: HTMLCanvasElement): CinemaGL | null {
 
     destroy() {
       canvas.removeEventListener("webglcontextlost", onContextLost);
-      // FBO cleanup
+      // FBO + PBO cleanup
+      if (lumPBO) gl.deleteBuffer(lumPBO);
       if (lumFBO) destroyFBO(gl, lumFBO);
       [fboA, fboB, fboB2, fboD].forEach(f => f && destroyFBO(gl, f));
       if (blitProg) gl.deleteProgram(blitProg);
