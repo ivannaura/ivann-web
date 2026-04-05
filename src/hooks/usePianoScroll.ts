@@ -39,6 +39,7 @@ export function usePianoScroll(options: UsePianoScrollOptions = {}) {
   const rafRef = useRef(0);
   const runningRef = useRef(false);
   const lastTapRef = useRef(0);
+  const lastTimeRef = useRef(0);
   // Stable ref to lenis so the rAF loop always has the latest instance
   const lenisRef = useRef(lenis);
   lenisRef.current = lenis;
@@ -58,11 +59,14 @@ export function usePianoScroll(options: UsePianoScrollOptions = {}) {
         return;
       }
 
-      // Apply friction
-      energyRef.current *= FRICTION;
+      // Delta-time friction
+      const now = performance.now();
+      const dt = lastTimeRef.current ? Math.min((now - lastTimeRef.current) / 16.667, 3) : 1;
+      lastTimeRef.current = now;
+      energyRef.current *= Math.pow(FRICTION, dt);
 
-      // Convert energy to scroll delta
-      const delta = energyRef.current * VELOCITY_SCALE;
+      // Convert energy to scroll delta (dt-scaled)
+      const delta = energyRef.current * VELOCITY_SCALE * dt;
       l.scrollTo(l.scroll + delta);
 
       rafRef.current = requestAnimationFrame(tick);
@@ -71,6 +75,7 @@ export function usePianoScroll(options: UsePianoScrollOptions = {}) {
     const startLoop = () => {
       if (runningRef.current) return;
       runningRef.current = true;
+      lastTimeRef.current = performance.now();
       rafRef.current = requestAnimationFrame(tick);
     };
 
