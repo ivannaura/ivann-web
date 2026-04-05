@@ -186,7 +186,7 @@ export default function Footer() {
                   href={link.url}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="group flex items-center justify-between py-1 transition-all duration-300"
+                  className="group flex items-center justify-between py-1 min-w-[44px] min-h-[44px] transition-all duration-300"
                   onMouseEnter={() => { setCursorVariant("hover"); playHover(); }}
                   onMouseLeave={() => setCursorVariant("default")}
                 >
