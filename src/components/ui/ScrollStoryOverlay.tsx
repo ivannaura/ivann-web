@@ -42,7 +42,25 @@ interface StoryBeat {
 const STORY_BEATS: StoryBeat[] = [
   // === ACT 1: EL DESPERTAR ===
   {
-    frameStart: 15,
+    frameStart: 0,
+    frameEnd: 20,
+    content: (
+      <div className="text-center">
+        <p
+          data-split="words"
+          className="text-xs tracking-[0.4em] uppercase"
+          style={{ color: "var(--text-muted)" }}
+        >
+          Scroll para descubrir
+        </p>
+        <div className="mt-4 mx-auto w-px h-8 bg-gradient-to-b from-[var(--aura-gold-dim)] to-transparent" style={{ animation: "pulse 2s ease-in-out infinite" }} />
+      </div>
+    ),
+    position: "bottom" as const,
+    animation: "fade" as const,
+  },
+  {
+    frameStart: 3,
     frameEnd: 75,
     content: (
       <div className="text-center" data-depth="1.2">
