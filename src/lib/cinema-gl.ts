@@ -117,7 +117,7 @@ void main() {
 }`;
 
 const CINEMA_FRAG = `#version 300 es
-precision mediump float;
+precision highp float;
 in vec2 v_uv;
 uniform sampler2D u_tex;
 uniform float u_time;
@@ -126,68 +126,140 @@ uniform float u_progress;
 uniform float u_bass;
 uniform float u_mids;
 uniform float u_highs;
-uniform vec2 u_mouse;   // NDC (0-1), default 0.5,0.5
-uniform float u_velocity; // normalized scroll velocity 0-1
+uniform vec2 u_mouse;
+uniform float u_velocity;
 out vec4 fragColor;
 
 float hash(vec2 p) {
   return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453);
 }
+float hash2(vec2 p) {
+  return fract(sin(dot(p, vec2(45.5432, 98.1234))) * 23421.6312);
+}
 
-// Smooth narrative mood — interpolates between act intensities
-// Acts: Despertar(0.5) Entrada(0.6) Danza(0.8) Espectáculo(0.9)
-//       Fuego(1.1) Clímax(1.2) Resolución(0.8) Cierre(0.5)
+// Smooth narrative mood — Hermite interpolation between act intensities
 float getMood(float progress) {
   float moods[9] = float[9](0.5, 0.5, 0.6, 0.8, 0.9, 1.1, 1.2, 0.8, 0.5);
   float t = clamp(progress, 0.0, 1.0) * 8.0;
   int i = int(floor(t));
   int j = min(i + 1, 8);
   float f = fract(t);
-  // Smooth interpolation between acts
   float s = f * f * (3.0 - 2.0 * f);
   return mix(moods[i], moods[j], s);
+}
+
+// Color grading — per-act shadow/midtone/highlight tints
+struct ColorGrade {
+  vec3 shadows;
+  vec3 midtones;
+  vec3 highlights;
+};
+
+ColorGrade getColorGrade(float progress) {
+  vec3 sh[9] = vec3[9](
+    vec3(0.15,0.18,0.25),
+    vec3(0.15,0.18,0.25),
+    vec3(0.12,0.15,0.28),
+    vec3(0.20,0.12,0.22),
+    vec3(0.25,0.10,0.10),
+    vec3(0.30,0.08,0.08),
+    vec3(0.08,0.05,0.05),
+    vec3(0.10,0.12,0.20),
+    vec3(0.15,0.18,0.25)
+  );
+  vec3 mt[9] = vec3[9](
+    vec3(1.0,1.0,1.0),
+    vec3(1.0,1.0,1.0),
+    vec3(1.0,0.98,0.90),
+    vec3(1.0,0.92,0.75),
+    vec3(1.0,0.85,0.65),
+    vec3(1.0,0.70,0.50),
+    vec3(1.0,0.60,0.45),
+    vec3(0.95,0.90,1.0),
+    vec3(1.0,1.0,1.0)
+  );
+  vec3 hl[9] = vec3[9](
+    vec3(1.0,0.96,0.90),
+    vec3(1.0,0.95,0.85),
+    vec3(1.0,0.97,0.92),
+    vec3(1.0,0.90,0.70),
+    vec3(1.0,0.88,0.55),
+    vec3(1.0,0.92,0.75),
+    vec3(1.0,0.85,0.40),
+    vec3(0.95,0.95,1.0),
+    vec3(1.0,0.96,0.90)
+  );
+  float t = clamp(progress, 0.0, 1.0) * 8.0;
+  int i = int(floor(t));
+  int j = min(i + 1, 8);
+  float f = fract(t);
+  float s = f * f * (3.0 - 2.0 * f);
+  ColorGrade g;
+  g.shadows = mix(sh[i], sh[j], s);
+  g.midtones = mix(mt[i], mt[j], s);
+  g.highlights = mix(hl[i], hl[j], s);
+  return g;
+}
+
+vec3 applyColorGrade(vec3 c, ColorGrade grade) {
+  float lum = dot(c, vec3(0.2126, 0.7152, 0.0722));
+  float shadowW = 1.0 - smoothstep(0.0, 0.35, lum);
+  float highlightW = smoothstep(0.65, 1.0, lum);
+  float midW = 1.0 - shadowW - highlightW;
+  vec3 graded = c;
+  graded = mix(graded, graded * (grade.shadows / max(grade.shadows, vec3(0.01))) * 1.2, shadowW * 0.4);
+  graded *= mix(vec3(1.0), grade.midtones, midW * 0.3);
+  graded = mix(graded, graded * grade.highlights, highlightW * 0.25);
+  return graded;
 }
 
 void main() {
   vec2 uv = v_uv;
   float mood = getMood(u_progress);
-
-  // Distance from center and from cursor
   float dCenter = length(uv - 0.5);
   vec2 cursorOffset = uv - u_mouse;
   float dCursor = length(cursorOffset);
 
-  // --- Chromatic aberration ---
-  // Base: radial from center, boosted by energy + mids + scroll velocity
-  // Cursor: slight directional offset toward cursor
-  float caBase = dCenter * 0.002 * (1.0 + u_energy * 3.0 + u_mids * 2.0) * mood;
+  // --- Heat distortion (gated by energy * bass > 0.3) ---
+  float heatIntensity = max(0.0, u_energy * u_bass - 0.3) * mood;
+  vec2 heat = vec2(
+    sin(uv.y * 30.0 + u_time * 3.0) * 0.003,
+    cos(uv.x * 25.0 + u_time * 2.5) * 0.002
+  ) * heatIntensity;
+  uv += heat;
+
+  // --- Chromatic aberration (prismatic: quadratic falloff, asymmetric RGB) ---
+  float caBase = dCenter * dCenter * 0.004 * (1.0 + u_energy * 3.0 + u_mids * 2.0) * mood;
   float caVelocity = u_velocity * 0.003 * mood;
-  // Directional CA from cursor — subtle, max at edges
-  vec2 caDir = normalize(cursorOffset + 0.001) * dCursor * 0.001 * u_energy;
+  vec2 radialDir = normalize(uv - 0.5 + 0.001);
+  vec2 tangentDir = vec2(-radialDir.y, radialDir.x);
+  vec2 caDir = normalize(cursorOffset + 0.001) * dCursor * 0.0015 * u_energy;
   vec3 c;
-  c.r = texture(u_tex, uv + vec2(caBase + caVelocity, caVelocity * 0.3) + caDir).r;
-  c.g = texture(u_tex, uv).g;
-  c.b = texture(u_tex, uv - vec2(caBase + caVelocity, caVelocity * 0.3) - caDir).b;
+  c.r = texture(u_tex, uv + radialDir * (caBase + caVelocity) + caDir).r;
+  c.g = texture(u_tex, uv + tangentDir * caBase * 0.3).g;
+  c.b = texture(u_tex, uv - radialDir * (caBase + caVelocity) - caDir).b;
+
+  // --- Color grading per act ---
+  ColorGrade grade = getColorGrade(u_progress);
+  c = applyColorGrade(c, grade);
 
   // --- Vignette with bass pulse ---
-  // Bass makes vignette "breathe" — opens slightly on low hits
   float bassPulse = u_bass * 0.08;
   float vigEdge = 0.7 - mood * 0.1 + bassPulse;
   float vigCenter = 0.3 - mood * 0.05 + bassPulse;
   c *= mix(0.2 + (1.0 - mood) * 0.15, 1.0, smoothstep(vigEdge, vigCenter, dCenter));
 
-  // --- Cursor spotlight — very subtle brightening near cursor ---
-  float spotlight = smoothstep(0.4, 0.0, dCursor) * 0.06 * u_energy;
-  c += spotlight;
+  // --- Cursor spotlight (quadratic falloff, act-tinted) ---
+  float spot = pow(1.0 - smoothstep(0.0, 0.35, dCursor), 2.0);
+  vec3 spotTint = mix(vec3(1.0), grade.highlights, 0.3);
+  c += c * spot * 0.12 * u_energy * spotTint;
 
-  // --- Film grain ---
-  float grainAmt = (0.04 + mood * 0.025);
-  c += hash(uv * 800.0 + fract(u_time)) * grainAmt * 2.0 - grainAmt;
-
-  // --- Soft bloom boosted by highs ---
-  float bloomThresh = 0.7 - mood * 0.1 - u_highs * 0.15;
+  // --- Film grain (2-octave FBM, shadow-weighted) ---
   float lum = dot(c, vec3(0.2126, 0.7152, 0.0722));
-  c += max(0.0, lum - bloomThresh) * (0.3 + mood * 0.15 + u_highs * 0.2);
+  float grainAmt = (0.03 + mood * 0.05) * (1.0 - lum * 0.5);
+  float grain = hash(uv * 800.0 + fract(u_time)) * 0.6
+              + hash2(uv * 1600.0 + fract(u_time * 1.3)) * 0.4;
+  c += (grain * 2.0 - 1.0) * grainAmt;
 
   fragColor = vec4(c, 1.0);
 }`;
