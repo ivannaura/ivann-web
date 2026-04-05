@@ -19,12 +19,12 @@ const DRIFT_THRESHOLD = 3.0;
 
 // Frequency band boundaries (bin indices for fftSize=256 → 128 bins)
 // Sample rate 44100Hz → each bin ≈ 172Hz
-// Bass: 0–10 (~0-1720Hz fundamentals), Mids: 10–50 (~1720-8600Hz), Highs: 50–128 (~8600Hz+)
-const BASS_END = 10;
-const MIDS_END = 50;
+// Bass: 0–2 (~0-516Hz piano body, low octaves), Mids: 3–29 (~516-5160Hz melody, main piano), Highs: 30–128 (~5160Hz+ harmonics, shimmer, applause)
+const BASS_END = 3;
+const MIDS_END = 30;
 
 // EMA alpha for frequency bands — lower = smoother (less jitter)
-const BAND_ALPHA = 0.2;
+const BAND_ALPHA = 0.35;
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -98,7 +98,8 @@ export class AudioMomentum {
   }
 
   /** Inject energy from a user interaction (scroll / key / click). */
-  addImpulse(amount: number = IMPULSE): void {
+  addImpulse(normalizedVelocity: number = 0.5): void {
+    const amount = 0.1 + normalizedVelocity * 0.25; // 0.1 gentle → 0.35 aggressive
     this.energy = Math.min(1.0, this.energy + amount);
   }
 
@@ -168,7 +169,7 @@ export class AudioMomentum {
       if (!this.audioCtx) return;
       this.analyser = this.audioCtx.createAnalyser();
       this.analyser.fftSize = 256;
-      this.analyser.smoothingTimeConstant = 0.8;
+      this.analyser.smoothingTimeConstant = 0.6;
 
       this.sourceNode = this.audioCtx.createMediaElementSource(this.audio);
       this.sourceNode.connect(this.analyser);
@@ -311,8 +312,15 @@ export class AudioMomentum {
     if (!this.audio || !this.videoTimeGetter) return;
     const videoTime = this.videoTimeGetter();
     if (!Number.isFinite(videoTime)) return;
-    if (Math.abs(this.audio.currentTime - videoTime) > DRIFT_THRESHOLD) {
+    const drift = this.audio.currentTime - videoTime;
+    const absDrift = Math.abs(drift);
+
+    if (absDrift > DRIFT_THRESHOLD) {
+      // Hard snap (safety net)
       this.syncToVideo();
+    } else if (absDrift > 1.0) {
+      // Soft correction — nudge 10% per frame toward sync
+      this.audio.currentTime -= drift * 0.1;
     }
   }
 }
