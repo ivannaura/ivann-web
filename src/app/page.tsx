@@ -21,6 +21,10 @@ export default function Home() {
   const [currentFrame, setCurrentFrame] = useState(0);
   const [soundMuted, setSoundMuted] = useState(false);
 
+  // Progress ref for atmospheric haze color
+  const progressRef = useRef(0);
+  const hazeRef = useRef<HTMLDivElement>(null);
+
   // Energy + bands via refs to avoid 60fps re-renders, throttled to ~10fps for display
   const energyRef = useRef(0);
   const bandsRef = useRef<FrequencyBands>({ bass: 0, mids: 0, highs: 0 });
@@ -31,6 +35,17 @@ export default function Home() {
     const id = setInterval(() => {
       setDisplayEnergy(energyRef.current);
       setDisplayBands({ ...bandsRef.current });
+
+      // Update atmospheric haze color
+      if (hazeRef.current) {
+        const p = progressRef.current;
+        let color: string;
+        if (p < 0.25) color = 'rgba(10,15,30,0.08)';
+        else if (p < 0.5) color = 'rgba(25,18,10,0.10)';
+        else if (p < 0.75) color = 'rgba(30,8,8,0.12)';
+        else color = 'rgba(10,12,25,0.06)';
+        hazeRef.current.style.setProperty('--haze-color', color);
+      }
     }, 100);
     return () => clearInterval(id);
   }, []);
@@ -53,6 +68,10 @@ export default function Home() {
 
   const handleBandsChange = useCallback((b: FrequencyBands) => {
     bandsRef.current = b;
+  }, []);
+
+  const handleProgressChange = useCallback((p: number) => {
+    progressRef.current = p;
   }, []);
 
   const handleSoundToggle = useCallback(() => {
@@ -78,7 +97,18 @@ export default function Home() {
           onFrameChange={handleFrameChange}
           onEnergyChange={handleEnergyChange}
           onBandsChange={handleBandsChange}
+          onProgressChange={handleProgressChange}
         >
+          {/* Atmospheric haze — shifts color with narrative progress */}
+          <div
+            ref={hazeRef}
+            className="absolute inset-0 pointer-events-none"
+            style={{
+              background: 'radial-gradient(ellipse at 50% 100%, var(--haze-color, rgba(10,15,30,0.08)), transparent 70%)',
+              opacity: 0.6,
+              zIndex: 10,
+            }}
+          />
           <ScrollStoryOverlay
             currentFrame={currentFrame}
             energy={displayEnergy}
