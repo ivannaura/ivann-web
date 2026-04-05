@@ -423,9 +423,13 @@ void main() {
 
   // --- Motion blur (High tier only) ---
   if (u_useMotionBlur == 1) {
-    vec3 prev = texture(u_prevFrame, v_uv).rgb;
     float blurFactor = u_velocity * 0.3;
-    c = mix(c, prev, blurFactor);
+    vec2 blurDir = vec2(0.0, blurFactor * 0.01);
+    vec3 prev0 = texture(u_prevFrame, v_uv).rgb;
+    vec3 prev1 = texture(u_prevFrame, v_uv + blurDir).rgb;
+    vec3 prev2 = texture(u_prevFrame, v_uv - blurDir).rgb;
+    vec3 blurred = (prev0 + prev1 + prev2) / 3.0;
+    c = mix(c, blurred, blurFactor);
   }
 
   // --- Anamorphic lens flare (High tier only) ---
