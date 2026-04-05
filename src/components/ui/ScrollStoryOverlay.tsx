@@ -689,6 +689,21 @@ function AnimatedBeat({ beat, progress, energy = 0, bands }: AnimatedBeatProps) 
     tl.progress(Math.max(0, 1 - exitProgress));
   }, [progress]);
 
+  // CSS fade-out for non-split/non-stagger beats (e.g. scroll indicator)
+  // These have no GSAP timeline, so they need a graceful exit via opacity
+  useEffect(() => {
+    // Only apply to beats without a GSAP timeline
+    if (tlRef.current) return;
+    const el = ref.current;
+    if (!el) return;
+
+    if (progress > 0.8) {
+      el.style.opacity = String(1 - (progress - 0.8) / 0.2);
+    } else {
+      el.style.opacity = "";
+    }
+  }, [progress]);
+
   // Parallax depth — elements with data-depth shift on Y axis based on progress
   useEffect(() => {
     const el = ref.current;
