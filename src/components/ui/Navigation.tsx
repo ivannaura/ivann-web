@@ -146,6 +146,7 @@ export default function Navigation({
             : "bg-transparent py-6"
         }`}
         style={{
+          paddingTop: "env(safe-area-inset-top)",
           background: scrolled
             ? "rgba(5, 5, 8, 0.7)"
             : "transparent",
@@ -283,7 +284,7 @@ export default function Navigation({
             {/* Sound toggle — wired to AudioMomentum */}
             <button
               onClick={onSoundToggle}
-              className="w-8 h-8 flex items-center justify-center rounded-full transition-all duration-300 hover:bg-white/5 outline-none focus-visible:ring-1 focus-visible:ring-[var(--aura-gold)]"
+              className="w-8 h-8 min-w-[44px] min-h-[44px] flex items-center justify-center rounded-full transition-all duration-300 hover:bg-white/5 outline-none focus-visible:ring-1 focus-visible:ring-[var(--aura-gold)]"
               aria-label={soundMuted ? "Activar sonido" : "Silenciar sonido"}
               onMouseEnter={() => setCursorVariant("hover")}
               onMouseLeave={() => setCursorVariant("default")}
@@ -411,7 +412,7 @@ export default function Navigation({
                 target="_blank"
                 rel="noopener noreferrer"
                 aria-label={s.name}
-                className="text-[10px] tracking-[0.2em] transition-colors duration-300 hover:text-[var(--aura-gold)]"
+                className="text-[10px] tracking-[0.2em] min-h-[44px] inline-flex items-center transition-colors duration-300 hover:text-[var(--aura-gold)]"
                 style={{ color: "var(--text-muted)" }}
               >
                 {s.label}
