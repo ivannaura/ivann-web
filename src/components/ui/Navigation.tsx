@@ -73,15 +73,28 @@ export default function Navigation({
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
 
-  // Native <dialog> management — showModal/close with focus return
+  // Native <dialog> management — showModal/close with animated entrance/exit
   useEffect(() => {
     const dialog = dialogRef.current;
     if (!dialog) return;
 
     if (menuOpen) {
+      dialog.classList.remove("dialog-closing");
       if (!dialog.open) dialog.showModal();
-    } else {
-      if (dialog.open) dialog.close();
+    } else if (dialog.open) {
+      // Animate out, then close
+      dialog.classList.add("dialog-closing");
+      const onEnd = () => {
+        dialog.classList.remove("dialog-closing");
+        dialog.close();
+      };
+      dialog.addEventListener("transitionend", onEnd, { once: true });
+      // Fallback in case transition doesn't fire (e.g. reduced-motion)
+      const fallback = setTimeout(onEnd, 300);
+      return () => {
+        clearTimeout(fallback);
+        dialog.removeEventListener("transitionend", onEnd);
+      };
     }
   }, [menuOpen]);
 

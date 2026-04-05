@@ -91,12 +91,44 @@ html { scrollbar-width: none; }
   transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-/* Native <dialog> reset for mobile menu */
+/* Native <dialog> reset + entrance/exit animations for mobile menu */
 dialog::backdrop {
-  background: transparent;
+  background: rgba(5, 5, 8, 0);
+  transition: background 300ms ease-out;
 }
+dialog[open]::backdrop {
+  background: rgba(5, 5, 8, 0.85);
+}
+@starting-style {
+  dialog[open]::backdrop {
+    background: rgba(5, 5, 8, 0);
+  }
+}
+
 dialog[open] {
   display: flex;
+  opacity: 1;
+  transform: translateY(0);
+  transition: opacity 300ms ease-out, transform 300ms ease-out,
+              overlay 300ms ease-out allow-discrete,
+              display 300ms ease-out allow-discrete;
+}
+@starting-style {
+  dialog[open] {
+    opacity: 0;
+    transform: translateY(-16px);
+  }
+}
+
+/* Closing animation — applied via .dialog-closing class before close() */
+dialog.dialog-closing {
+  opacity: 0;
+  transform: translateY(-16px);
+  transition: opacity 250ms ease-in, transform 250ms ease-in;
+}
+dialog.dialog-closing::backdrop {
+  background: rgba(5, 5, 8, 0);
+  transition: background 250ms ease-in;
 }
 
 /* Reduced motion — disable decorative animations for a11y (WCAG 2.3.3) */
