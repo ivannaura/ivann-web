@@ -144,8 +144,21 @@ dialog.dialog-closing::backdrop {
   50% { transform: scaleY(1.15); }
 }
 
+/* Content-visibility on below-fold sections for rendering performance */
+#contacto, footer {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 500px;
+}
+
+/* Focus ring global style for form controls */
+input:focus-visible, textarea:focus-visible, select:focus-visible {
+  outline: 1px solid var(--aura-gold-dim);
+  outline-offset: 2px;
+}
+
 /* Reduced motion — disable decorative animations for a11y (WCAG 2.3.3) */
 /* Transitions are left intact so focus outlines, hover states, and opacity remain functional */
+/* NOTE: CustomCursor.tsx must NOT set cursor:none when this media query matches */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     animation-duration: 0.01ms !important;
