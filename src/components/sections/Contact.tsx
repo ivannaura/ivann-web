@@ -28,6 +28,7 @@ const SOCIAL_LINKS = [
 
 export default function Contact() {
   const sectionRef = useRef<HTMLElement>(null);
+  const successRef = useRef<HTMLDivElement>(null);
   const setCursorVariant = useUIStore((s) => s.setCursorVariant);
   const [formState, setFormState] = useState({
     name: "",
@@ -99,6 +100,49 @@ export default function Contact() {
 
     return () => ctx.revert();
   }, []);
+
+  // Cinematic entrance for success state
+  useEffect(() => {
+    if (!submitted || !successRef.current) return;
+
+    const el = successRef.current;
+    const ctx = gsap.context(() => {
+      const mm = gsap.matchMedia();
+
+      mm.add("(prefers-reduced-motion: no-preference)", () => {
+        const circle = el.querySelector<HTMLElement>("[data-success-circle]");
+        const heading = el.querySelector<HTMLElement>("[data-success-heading]");
+        const text = el.querySelector<HTMLElement>("[data-success-text]");
+        if (!circle || !heading || !text) return;
+
+        // Initial state
+        gsap.set([circle, heading, text], { opacity: 0 });
+        gsap.set(circle, { scale: 0 });
+        gsap.set([heading, text], { y: 15 });
+
+        // Staggered entrance
+        const tl = gsap.timeline();
+        tl.to(circle, {
+          scale: 1,
+          opacity: 1,
+          duration: 0.6,
+          ease: "back.out(1.7)",
+        });
+        tl.to(
+          heading,
+          { y: 0, opacity: 1, duration: 0.5, ease: "power3.out" },
+          "-=0.2"
+        );
+        tl.to(
+          text,
+          { y: 0, opacity: 1, duration: 0.5, ease: "power3.out" },
+          "-=0.3"
+        );
+      });
+    }, el);
+
+    return () => ctx.revert();
+  }, [submitted]);
 
   const validate = (): boolean => {
     const e: Record<string, string> = {};
@@ -237,20 +281,26 @@ export default function Contact() {
           <div className="md:col-span-1" />
           <div className="md:col-span-6">
             {submitted ? (
-              <div data-reveal className="flex flex-col items-center justify-center h-full text-center py-20">
+              <div
+                ref={successRef}
+                className="flex flex-col items-center justify-center h-full text-center py-20"
+              >
                 <div
+                  data-success-circle
                   className="w-16 h-16 rounded-full flex items-center justify-center mb-6"
                   style={{ border: "1px solid var(--aura-gold-dim)" }}
                 >
                   <span style={{ color: "var(--aura-gold)" }}>✓</span>
                 </div>
                 <h3
+                  data-success-heading
                   className="text-xl font-light mb-3"
                   style={{ color: "var(--text-primary)" }}
                 >
                   Abriendo tu correo...
                 </h3>
                 <p
+                  data-success-text
                   className="text-sm"
                   style={{ color: "var(--text-secondary)" }}
                 >
