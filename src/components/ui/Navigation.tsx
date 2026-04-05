@@ -113,12 +113,13 @@ export default function Navigation({
 
   return (
     <>
-      {/* Scroll progress bar — thin gold line at very top */}
+      {/* Scroll progress bar — thin gold line at very top (GPU-composited via scaleX) */}
       <div
         aria-hidden="true"
-        className="fixed top-0 left-0 h-[2px] z-[1002] transition-opacity duration-500"
+        className="fixed top-0 left-0 w-full h-[2px] z-[1002] transition-opacity duration-500 will-change-transform"
         style={{
-          width: `${scrollProgress * 100}%`,
+          transformOrigin: "left",
+          transform: `scaleX(${scrollProgress})`,
           background:
             "linear-gradient(to right, var(--aura-gold-dim), var(--aura-gold), var(--aura-gold-bright))",
           opacity: scrolled ? 1 : 0,
