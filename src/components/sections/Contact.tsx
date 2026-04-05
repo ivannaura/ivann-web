@@ -255,6 +255,26 @@ export default function Contact() {
                   className="text-[10px] tracking-[0.3em] uppercase block mb-2"
                   style={{ color: "var(--text-muted)" }}
                 >
+                  WhatsApp
+                </span>
+                <a
+                  href="https://wa.me/573102254687?text=Hola%20IVANN%2C%20quiero%20saber%20más%20sobre%20tu%20show"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="magnetic-btn inline-flex items-center gap-2 text-sm transition-colors duration-300 hover:text-[var(--aura-gold)]"
+                  style={{ color: "var(--text-secondary)" }}
+                  onMouseEnter={() => { setCursorVariant("hover"); playHover(); }}
+                  onMouseLeave={() => setCursorVariant("default")}
+                >
+                  +57 310 225 4687
+                </a>
+              </div>
+
+              <div>
+                <span
+                  className="text-[10px] tracking-[0.3em] uppercase block mb-2"
+                  style={{ color: "var(--text-muted)" }}
+                >
                   Redes
                 </span>
                 <div className="flex gap-6">

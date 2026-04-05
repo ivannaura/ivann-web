@@ -13,17 +13,13 @@ const NAV_ITEMS = [
 interface NavigationProps {
   /** Whether audio is currently active (energy > threshold) */
   audioActive?: boolean;
-  /** Called when user toggles sound on/off */
-  onSoundToggle?: () => void;
-  /** Whether sound is muted */
-  soundMuted?: boolean;
 }
 
 export default function Navigation({
   audioActive = false,
-  onSoundToggle,
-  soundMuted = false,
 }: NavigationProps) {
+  const soundMuted = useUIStore((s) => s.soundMuted);
+  const toggleSoundMuted = useUIStore((s) => s.toggleSoundMuted);
   const [scrolled, setScrolled] = useState(false);
   const [scrollProgress, setScrollProgress] = useState(0);
   const [activeSection, setActiveSection] = useState(0);
@@ -283,7 +279,7 @@ export default function Navigation({
 
             {/* Sound toggle — wired to AudioMomentum */}
             <button
-              onClick={onSoundToggle}
+              onClick={toggleSoundMuted}
               className="w-8 h-8 min-w-[44px] min-h-[44px] flex items-center justify-center rounded-full transition-all duration-300 hover:bg-white/5 outline-none focus-visible:ring-1 focus-visible:ring-[var(--aura-gold)]"
               aria-label={soundMuted ? "Activar sonido" : "Silenciar sonido"}
               onMouseEnter={() => setCursorVariant("hover")}

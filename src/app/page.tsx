@@ -10,6 +10,7 @@ import Footer from "@/components/ui/Footer";
 import PianoIndicator from "@/components/ui/PianoIndicator";
 import { usePianoScroll } from "@/hooks/usePianoScroll";
 import { destroyMicroSounds } from "@/lib/micro-sounds";
+import { useUIStore } from "@/stores/useUIStore";
 import type { FrequencyBands } from "@/lib/audio-momentum";
 
 const VIDEO_SRC = "/videos/flamenco-graded.mp4";
@@ -28,13 +29,10 @@ function getMoodCPU(progress: number): number {
 
 export default function Home() {
   const [currentFrame, setCurrentFrame] = useState(0);
-  const [soundMuted, setSoundMuted] = useState(false);
+  const soundMuted = useUIStore((s) => s.soundMuted);
+  const toggleSoundMuted = useUIStore((s) => s.toggleSoundMuted);
 
-  const handleSoundToggle = useCallback(() => {
-    setSoundMuted((prev) => !prev);
-  }, []);
-
-  usePianoScroll({ enabled: true, onMuteToggle: handleSoundToggle });
+  usePianoScroll({ enabled: true, onMuteToggle: toggleSoundMuted });
 
   // Progress ref for atmospheric haze color
   const progressRef = useRef(0);
@@ -126,8 +124,6 @@ export default function Home() {
       <CustomCursor />
       <Navigation
         audioActive={displayEnergy > 0.05}
-        soundMuted={soundMuted}
-        onSoundToggle={handleSoundToggle}
       />
       <PianoIndicator energy={displayEnergy} bands={displayBands} />
 
