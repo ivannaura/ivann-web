@@ -255,7 +255,10 @@ export class AudioMomentum {
     this.updateFrequencyBands();
 
     // --- derived values ---
-    const rate = lerp(MIN_RATE, MAX_RATE, this.energy);
+    // Exponential curve: pitch holds longer at high energy, drops dramatically
+    // near zero — mimics real turntable/vinyl slowdown behavior.
+    const curved = Math.pow(Math.max(0, this.energy), 0.7);
+    const rate = lerp(MIN_RATE, MAX_RATE, curved);
     const volume = smoothstep(0, 0.15, this.energy) * MAX_VOLUME;
 
     if (this.audio) {
