@@ -16,7 +16,7 @@ const VIDEO_SRC = "/videos/flamenco-graded.mp4";
 const AUDIO_SRC = "/audio/flamenco.m4a";
 
 export default function Home() {
-  usePianoScroll({ enabled: true, scrollThreshold: 80 });
+  usePianoScroll({ enabled: true });
 
   const [currentFrame, setCurrentFrame] = useState(0);
   const [soundMuted, setSoundMuted] = useState(false);
