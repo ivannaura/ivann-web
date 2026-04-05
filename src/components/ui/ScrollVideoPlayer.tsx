@@ -282,6 +282,10 @@ export default function ScrollVideoPlayer({
       if (actIndex !== lastActRef.current && actIndex > 0) {
         lastActRef.current = actIndex;
         actTransitionRef.current = 1.0;
+        // Mobile haptic feedback at act boundaries (Android only, silent fail elsewhere)
+        if (navigator.vibrate) {
+          navigator.vibrate([15, 30, 15]); // short double-tap pattern
+        }
       }
       onActTransitionRef.current?.(actTransitionRef.current);
 
