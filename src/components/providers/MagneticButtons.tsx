@@ -47,12 +47,19 @@ export default function MagneticButtons() {
       }
     };
 
+    // Invalidate cached rect on resize (layout may have shifted)
+    const onResize = () => {
+      cachedRect = null;
+    };
+
     document.addEventListener("mousemove", onMove, { passive: true });
     document.addEventListener("mouseout", onOut, { passive: true });
+    window.addEventListener("resize", onResize, { passive: true });
 
     return () => {
       document.removeEventListener("mousemove", onMove);
       document.removeEventListener("mouseout", onOut);
+      window.removeEventListener("resize", onResize);
       if (currentBtn) currentBtn.style.transform = "";
     };
   }, []);
