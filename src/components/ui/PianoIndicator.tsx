@@ -27,14 +27,14 @@ export default function PianoIndicator({ energy, bands }: PianoIndicatorProps) {
     return () => clearTimeout(t);
   }, []);
 
-  // Bar heights driven by frequency bands when available
+  // Bar heights driven by frequency bands (tuned for narrower bass: 0-516Hz)
   const b = bands ?? { bass: 0, mids: 0, highs: 0 };
   const barHeights = [
-    0.3 + b.highs * 0.7,   // outer high
-    0.5 + b.mids * 0.5,    // mid
-    0.6 + b.bass * 0.4,    // center bass
-    0.5 + b.mids * 0.5,    // mid
-    0.3 + b.highs * 0.7,   // outer high
+    0.2 + b.highs * 0.8,   // outer high (broader band → more range)
+    0.4 + b.mids * 0.6,    // mid
+    0.5 + b.bass * 0.5,    // center bass (narrower band → sharper peaks)
+    0.4 + b.mids * 0.6,    // mid
+    0.2 + b.highs * 0.8,   // outer high
   ];
 
   const isGold = energy > 0.3;
