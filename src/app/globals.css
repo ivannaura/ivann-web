@@ -130,6 +130,12 @@ dialog.dialog-closing::backdrop {
   transition: background 250ms ease-in;
 }
 
+/* PianoIndicator idle breathing — gentle sine-wave oscillation when no audio */
+@keyframes piano-idle {
+  0%, 100% { transform: scaleY(1); }
+  50% { transform: scaleY(1.15); }
+}
+
 /* Reduced motion — disable decorative animations for a11y (WCAG 2.3.3) */
 /* Transitions are left intact so focus outlines, hover states, and opacity remain functional */
 @media (prefers-reduced-motion: reduce) {

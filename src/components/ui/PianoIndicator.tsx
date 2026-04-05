@@ -39,6 +39,9 @@ export default function PianoIndicator({ energy, bands }: PianoIndicatorProps) {
 
   const isGold = energy > 0.3;
 
+  // Per-bar idle animation delays (staggered to avoid synchronous breathing)
+  const idleDelays = [0, 0.6, 1.2, 0.4, 0.9];
+
   return (
     <div
       aria-hidden="true"
@@ -53,13 +56,17 @@ export default function PianoIndicator({ energy, bands }: PianoIndicatorProps) {
           return (
             <div
               key={i}
-              className="w-[2px] rounded-[1px] transition-all duration-150"
+              className="w-[2px] rounded-[1px] transition-all duration-150 origin-bottom"
               style={{
                 height: `${h * (20 + energy * 80)}%`,
                 transitionDelay: `${cascadeDelay}ms`,
                 background: isGold
                   ? "var(--aura-gold)"
                   : "var(--text-muted)",
+                // Idle breathing animation when no audio energy
+                ...(!isActive ? {
+                  animation: `piano-idle ${3 + i * 0.3}s ease-in-out ${idleDelays[i]}s infinite`,
+                } : {}),
               }}
             />
           );
