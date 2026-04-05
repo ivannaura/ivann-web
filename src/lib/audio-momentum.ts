@@ -66,6 +66,7 @@ export class AudioMomentum {
   private audioCtx: AudioContext | null = null;
   private analyser: AnalyserNode | null = null;
   private sourceNode: MediaElementAudioSourceNode | null = null;
+  private gainNode: GainNode | null = null;
   private freqData: Uint8Array<ArrayBuffer> | null = null;
   private bands: FrequencyBands = { bass: 0, mids: 0, highs: 0 };
   private smoothBands: FrequencyBands = { bass: 0, mids: 0, highs: 0 };
@@ -112,10 +113,12 @@ export class AudioMomentum {
     return this.smoothBands;
   }
 
-  /** Mute or unmute the audio element without stopping physics. */
+  /** Mute or unmute via GainNode — preserves AnalyserNode signal for visual reactivity. */
   setMuted(muted: boolean): void {
-    if (this.audio) {
-      this.audio.muted = muted;
+    if (this.gainNode && this.audioCtx) {
+      const now = this.audioCtx.currentTime;
+      this.gainNode.gain.cancelScheduledValues(now);
+      this.gainNode.gain.setTargetAtTime(muted ? 0 : 1, now, 0.05);
     }
   }
 
@@ -137,6 +140,10 @@ export class AudioMomentum {
     if (this.analyser) {
       this.analyser.disconnect();
       this.analyser = null;
+    }
+    if (this.gainNode) {
+      this.gainNode.disconnect();
+      this.gainNode = null;
     }
     if (this.audioCtx) {
       releaseAudioContext();
@@ -171,8 +178,10 @@ export class AudioMomentum {
       this.analyser.smoothingTimeConstant = 0.6;
 
       this.sourceNode = this.audioCtx.createMediaElementSource(this.audio);
+      this.gainNode = this.audioCtx.createGain();
       this.sourceNode.connect(this.analyser);
-      this.analyser.connect(this.audioCtx.destination);
+      this.analyser.connect(this.gainNode);
+      this.gainNode.connect(this.audioCtx.destination);
 
       this.freqData = new Uint8Array(this.analyser.frequencyBinCount) as Uint8Array<ArrayBuffer>;
     } catch {
