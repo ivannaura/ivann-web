@@ -284,6 +284,7 @@ void main() {
 // ---------------------------------------------------------------------------
 
 const PARTICLE_VERT = `#version 300 es
+precision highp float;
 in vec2 a_pos;
 in float a_alpha;
 in float a_size;
@@ -336,7 +337,7 @@ void main() {
 }`;
 
 const PARTICLE_FRAG = `#version 300 es
-precision mediump float;
+precision highp float;
 in float v_alpha;
 in float v_lum;
 uniform vec3 u_colorLow;
@@ -359,7 +360,7 @@ void main() {
 // ---------------------------------------------------------------------------
 
 const BLIT_FRAG = `#version 300 es
-precision mediump float;
+precision highp float;
 in vec2 v_uv;
 uniform sampler2D u_tex;
 out vec4 fragColor;
