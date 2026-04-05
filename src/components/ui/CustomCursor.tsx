@@ -36,6 +36,21 @@ export default function CustomCursor() {
     let ringX = -100;
     let ringY = -100;
 
+    // Scroll velocity tracking for directional ring stretch
+    let lastScrollY = window.scrollY;
+    let scrollVelocity = 0;
+    const VELOCITY_DECAY = 0.9;
+    const VELOCITY_SCALE = 0.003; // Normalize px/frame to 0-1 range
+    const MAX_STRETCH = 0.4; // Cap scaleY addition at 1.4
+    const VELOCITY_THRESHOLD = 0.02; // Minimum velocity to apply stretch
+
+    const onScroll = () => {
+      const currentScrollY = window.scrollY;
+      const delta = currentScrollY - lastScrollY;
+      lastScrollY = currentScrollY;
+      scrollVelocity += delta * VELOCITY_SCALE;
+    };
+
     // Set initial off-screen position imperatively (avoids React re-render overwriting transform)
     if (dotRef.current) dotRef.current.style.transform = "translate(-100px, -100px)";
     if (ringRef.current) ringRef.current.style.transform = "translate(-100px, -100px)";
@@ -70,20 +85,35 @@ export default function CustomCursor() {
       ringX += (mouseX - ringX) * 0.12;
       ringY += (mouseY - ringY) * 0.12;
 
+      // Decay scroll velocity smoothly each frame
+      scrollVelocity *= VELOCITY_DECAY;
+
+      // Compute scaleY stretch from absolute velocity
+      const absVelocity = Math.abs(scrollVelocity);
+      const stretchY = absVelocity > VELOCITY_THRESHOLD
+        ? 1 + Math.min(absVelocity, MAX_STRETCH)
+        : 1;
+      // Compress X slightly to maintain perceived area
+      const stretchX = stretchY > 1 ? 1 / Math.sqrt(stretchY) : 1;
+
       if (ringRef.current) {
-        ringRef.current.style.transform = `translate(${ringX - 20}px, ${ringY - 20}px)`;
+        // Compose translate + velocity stretch; hover scale applied via CSS `scale` property
+        ringRef.current.style.transform =
+          `translate(${ringX - 20}px, ${ringY - 20}px) scaleX(${stretchX.toFixed(3)}) scaleY(${stretchY.toFixed(3)})`;
       }
 
       frameId = requestAnimationFrame(animateRing);
     };
 
     window.addEventListener("mousemove", onMouseMove);
+    window.addEventListener("scroll", onScroll, { passive: true });
     document.documentElement.addEventListener("mouseleave", onMouseLeave);
     document.documentElement.addEventListener("mouseenter", onMouseEnter);
     frameId = requestAnimationFrame(animateRing);
 
     return () => {
       window.removeEventListener("mousemove", onMouseMove);
+      window.removeEventListener("scroll", onScroll);
       document.documentElement.removeEventListener("mouseleave", onMouseLeave);
       document.documentElement.removeEventListener("mouseenter", onMouseEnter);
       cancelAnimationFrame(frameId);
