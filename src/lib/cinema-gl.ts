@@ -1,10 +1,11 @@
 // ---------------------------------------------------------------------------
 // CinemaGL — Unified WebGL2 renderer for scroll-driven video cinema
 // Multi-pass rendering pipeline:
-//   Pass 1: Video post-processing → FBO_A (vignette, chromatic aberration, grain, bloom)
-//   Pass 2: Bloom + Composite (Tasks 4-5, uses FBO_B/B2/D)
-//   Pass 3: Blit FBO_A → screen (temporary until composite pass added)
-//   Pass 4: Luminance-reactive particles (additive blending on screen)
+//   Pass 1: Video post-processing → FBO_A (vignette, chromatic aberration, grain)
+//   Pass 2: Bloom threshold (FBO_A → FBO_B, half-res luminance extraction)
+//   Pass 3: Kawase blur (FBO_B ↔ FBO_B2, 3 iterations with increasing offset)
+//   Pass 4: Blit FBO_A + additive bloom → screen (temporary until Task 5 composite)
+//   Pass 5: Luminance-reactive particles (additive blending on screen)
 //
 // Tier system:
 //   high — full FBO pipeline (A + B + B2 + D), all post-processing
@@ -352,6 +353,35 @@ void main() {
   fragColor = texture(u_tex, v_uv);
 }`;
 
+const BLOOM_THRESH_FRAG = `#version 300 es
+precision highp float;
+in vec2 v_uv;
+uniform sampler2D u_tex;
+uniform float u_threshold;
+out vec4 fragColor;
+void main() {
+  vec3 c = texture(u_tex, v_uv).rgb;
+  float lum = dot(c, vec3(0.2126, 0.7152, 0.0722));
+  float excess = max(0.0, lum - u_threshold);
+  fragColor = vec4(c * excess, 1.0);
+}`;
+
+const KAWASE_BLUR_FRAG = `#version 300 es
+precision highp float;
+in vec2 v_uv;
+uniform sampler2D u_tex;
+uniform vec2 u_texelSize;
+uniform float u_offset;
+out vec4 fragColor;
+void main() {
+  vec2 off = u_texelSize * (u_offset + 0.5);
+  vec4 c = texture(u_tex, v_uv + vec2(-off.x, -off.y))
+         + texture(u_tex, v_uv + vec2( off.x, -off.y))
+         + texture(u_tex, v_uv + vec2(-off.x,  off.y))
+         + texture(u_tex, v_uv + vec2( off.x,  off.y));
+  fragColor = c * 0.25;
+}`;
+
 // ---------------------------------------------------------------------------
 // Particle state (CPU-side physics)
 // ---------------------------------------------------------------------------
@@ -416,6 +446,20 @@ export interface CinemaGL {
   readonly lost: boolean;
   /** Current rendering tier (may downgrade at runtime if GPU is slow). */
   readonly tier: CinemaTier;
+}
+
+// ---------------------------------------------------------------------------
+// CPU-side mood interpolation (mirrors GLSL getMood for bloom threshold)
+// ---------------------------------------------------------------------------
+
+function getMoodCPU(progress: number): number {
+  const moods = [0.5, 0.5, 0.6, 0.8, 0.9, 1.1, 1.2, 0.8, 0.5];
+  const t = Math.min(Math.max(progress, 0), 1) * 8;
+  const i = Math.floor(t);
+  const j = Math.min(i + 1, 8);
+  const f = t - i;
+  const s = f * f * (3 - 2 * f);
+  return moods[i] + (moods[j] - moods[i]) * s;
 }
 
 export function initCinemaGL(canvas: HTMLCanvasElement): CinemaGL | null {
@@ -608,6 +652,28 @@ export function initCinemaGL(canvas: HTMLCanvasElement): CinemaGL | null {
   const blitProg = createProgramFromSources(gl, CINEMA_VERT, BLIT_FRAG);
   const blitUTex = blitProg ? gl.getUniformLocation(blitProg, "u_tex") : null;
 
+  // Bloom threshold program
+  const bloomThreshProg = createProgramFromSources(gl, CINEMA_VERT, BLOOM_THRESH_FRAG);
+  let btUTex: WebGLUniformLocation | null = null;
+  let btUThreshold: WebGLUniformLocation | null = null;
+  if (bloomThreshProg) {
+    gl.useProgram(bloomThreshProg);
+    btUTex = gl.getUniformLocation(bloomThreshProg, "u_tex");
+    btUThreshold = gl.getUniformLocation(bloomThreshProg, "u_threshold");
+  }
+
+  // Kawase blur program
+  const kawaseProg = createProgramFromSources(gl, CINEMA_VERT, KAWASE_BLUR_FRAG);
+  let kUTex: WebGLUniformLocation | null = null;
+  let kUTexelSize: WebGLUniformLocation | null = null;
+  let kUOffset: WebGLUniformLocation | null = null;
+  if (kawaseProg) {
+    gl.useProgram(kawaseProg);
+    kUTex = gl.getUniformLocation(kawaseProg, "u_tex");
+    kUTexelSize = gl.getUniformLocation(kawaseProg, "u_texelSize");
+    kUOffset = gl.getUniformLocation(kawaseProg, "u_offset");
+  }
+
   // ---------------------------------------------------------------------------
   // Runtime performance monitoring
   // ---------------------------------------------------------------------------
@@ -657,21 +723,71 @@ export function initCinemaGL(canvas: HTMLCanvasElement): CinemaGL | null {
       gl.bindVertexArray(cinemaVAO);
       gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
 
-      // --- Bloom + Composite passes will be inserted here in Tasks 4-5 ---
+      // --- Pass 2: Bloom threshold (FBO_A → FBO_B, half-res) ---
+      if (fboA && fboB && bloomThreshProg) {
+        gl.bindFramebuffer(gl.FRAMEBUFFER, fboB.framebuffer);
+        gl.viewport(0, 0, fboB.width, fboB.height);
+        gl.useProgram(bloomThreshProg);
+        gl.activeTexture(gl.TEXTURE1);
+        gl.bindTexture(gl.TEXTURE_2D, fboA.texture);
+        gl.uniform1i(btUTex, 1);
+        const mood = getMoodCPU(progress);
+        const threshold = Math.max(0.3, 0.75 - mood * 0.1 - bands.highs * 0.15);
+        gl.uniform1f(btUThreshold, threshold);
+        gl.bindVertexArray(cinemaVAO);
+        gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
 
-      // Blit FBO_A → screen (temporary until composite pass is added)
+        // --- Pass 3: Kawase blur (FBO_B ↔ FBO_B2, 3 iterations) ---
+        if (fboB2 && kawaseProg) {
+          gl.useProgram(kawaseProg);
+          const tw = 1.0 / fboB.width;
+          const th = 1.0 / fboB.height;
+          gl.uniform2f(kUTexelSize, tw, th);
+
+          for (let i = 0; i < 3; i++) {
+            const readFbo = i % 2 === 0 ? fboB : fboB2;
+            const writeFbo = i % 2 === 0 ? fboB2 : fboB;
+
+            gl.bindFramebuffer(gl.FRAMEBUFFER, writeFbo.framebuffer);
+            gl.viewport(0, 0, writeFbo.width, writeFbo.height);
+            gl.activeTexture(gl.TEXTURE1);
+            gl.bindTexture(gl.TEXTURE_2D, readFbo.texture);
+            gl.uniform1i(kUTex, 1);
+            gl.uniform1f(kUOffset, i);
+            gl.bindVertexArray(cinemaVAO);
+            gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+          }
+        }
+      }
+
+      // --- Blit FBO_A + bloom to screen (temporary until Task 5 composite) ---
       if (fboA && blitProg) {
         gl.bindFramebuffer(gl.FRAMEBUFFER, null);
         gl.viewport(0, 0, w, h);
+
+        // First blit cinema
         gl.useProgram(blitProg);
         gl.activeTexture(gl.TEXTURE1);
         gl.bindTexture(gl.TEXTURE_2D, fboA.texture);
         gl.uniform1i(blitUTex, 1);
         gl.bindVertexArray(cinemaVAO);
         gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+
+        // Additive blend bloom on top
+        if (fboB2) {
+          gl.enable(gl.BLEND);
+          gl.blendFunc(gl.ONE, gl.ONE); // additive
+          // After 3 iterations (odd count), result is in fboB2
+          gl.activeTexture(gl.TEXTURE1);
+          gl.bindTexture(gl.TEXTURE_2D, fboB2.texture);
+          gl.uniform1i(blitUTex, 1);
+          gl.bindVertexArray(cinemaVAO);
+          gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+          gl.disable(gl.BLEND);
+        }
       }
 
-      // --- Pass 2: Particles (additive blending on top) ---
+      // --- Pass 5: Particles (additive blending on top) ---
       const dt = lastTime ? Math.min(time - lastTime, 0.05) : 0.016;
       lastTime = time;
       const speed = 0.05 + energy * 0.95;
@@ -764,6 +880,8 @@ export function initCinemaGL(canvas: HTMLCanvasElement): CinemaGL | null {
       // FBO cleanup
       [fboA, fboB, fboB2, fboD].forEach(f => f && destroyFBO(gl, f));
       if (blitProg) gl.deleteProgram(blitProg);
+      if (bloomThreshProg) gl.deleteProgram(bloomThreshProg);
+      if (kawaseProg) gl.deleteProgram(kawaseProg);
       // Existing cleanup
       gl.deleteTexture(tex);
       gl.deleteBuffer(quadBuf);
