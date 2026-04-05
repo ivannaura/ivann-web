@@ -222,7 +222,7 @@ vec3 applyColorGrade(vec3 c, ColorGrade grade) {
   float highlightW = smoothstep(0.65, 1.0, lum);
   float midW = 1.0 - shadowW - highlightW;
   vec3 graded = c;
-  graded = mix(graded, graded * (grade.shadows / max(grade.shadows, vec3(0.01))) * 1.2, shadowW * 0.4);
+  graded = mix(graded, grade.shadows * 1.2, shadowW * 0.4);
   graded *= mix(vec3(1.0), grade.midtones, midW * 0.3);
   graded = mix(graded, graded * grade.highlights, highlightW * 0.25);
   return graded;
