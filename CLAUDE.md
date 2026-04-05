@@ -20,7 +20,7 @@ Awwwards-quality immersive website for IVANN AURA, a Colombian pianist and live 
 
 ```
 layout.tsx
- ├── Preloader             (cinematic SplitText entrance + decorative bar + scale exit)
+ ├── Preloader             (cinematic SplitText entrance + decorative bar + iris-close exit + audio primer)
  ├── MagneticButtons       (global .magnetic-btn hover effect provider)
  └── SmoothScroll          (Lenis + GSAP single RAF loop)
       └── page.tsx
@@ -47,15 +47,15 @@ layout.tsx
 | `SharedAudioContext` | `lib/shared-audio-context.ts` | Ref-counted singleton AudioContext (iOS Safari 4-context limit) |
 | `MicroSounds` | `lib/micro-sounds.ts` | Web Audio oscillators: hover/click/whoosh (shared AudioContext) |
 | `ScrollStoryOverlay` | `ui/ScrollStoryOverlay.tsx` | 20+ story beats with GSAP SplitText per-char/word reveals |
-| `usePianoScroll` | `hooks/usePianoScroll.ts` | Physics-based keyboard/click scroll: momentum accumulator + friction decay + rhythm detection |
-| `PianoIndicator` | `ui/PianoIndicator.tsx` | Frequency-reactive equalizer: bass→center, mids→mid, highs→outer bars |
-| `Navigation` | `ui/Navigation.tsx` | Fixed nav, scroll progress, native `<dialog>`, cached querySelector |
-| `CustomCursor` | `ui/CustomCursor.tsx` | GPU-composited transform cursor + viewport mouseleave/mouseenter |
-| `MagneticButtons` | `providers/MagneticButtons.tsx` | Global `.magnetic-btn` hover effect (desktop, reduced-motion aware) |
-| `Preloader` | `ui/Preloader.tsx` | Cinematic preloader: SplitText reveal + decorative bar + scale exit |
-| `SmoothScroll` | `providers/SmoothScroll.tsx` | Lenis + GSAP single RAF loop (lerp 0.08, autoRaf false, typed LenisRef) |
-| `Contact` | `sections/Contact.tsx` | GSAP ScrollTrigger entrance + SplitText heading + mailto: form + validation |
-| `Footer` | `ui/Footer.tsx` | GSAP SplitText entrance + real social links + micro-sounds |
+| `usePianoScroll` | `hooks/usePianoScroll.ts` | Physics-based keyboard/click scroll: momentum accumulator + friction decay + rhythm detection + M key mute |
+| `PianoIndicator` | `ui/PianoIndicator.tsx` | Frequency-reactive equalizer: wave cascade stagger + idle breathing animation |
+| `Navigation` | `ui/Navigation.tsx` | Fixed nav, GPU scaleX progress bar, native `<dialog>` with CSS entrance/exit animations |
+| `CustomCursor` | `ui/CustomCursor.tsx` | GPU-composited transform cursor + scale-based ring hover + scroll velocity stretch |
+| `MagneticButtons` | `providers/MagneticButtons.tsx` | Global `.magnetic-btn` hover effect + mouseout reset (desktop, reduced-motion aware) |
+| `Preloader` | `ui/Preloader.tsx` | Cinematic preloader: SplitText reveal + decorative bar + iris-close exit + audio primer |
+| `SmoothScroll` | `providers/SmoothScroll.tsx` | Lenis + GSAP single RAF loop (lerp 0.08, vinyl easing, autoRaf false) |
+| `Contact` | `sections/Contact.tsx` | GSAP ScrollTrigger entrance + SplitText heading + mailto: form + animated success state |
+| `Footer` | `ui/Footer.tsx` | GSAP SplitText entrance (staggered AURA heading) + real social links + micro-sounds |
 
 ### Deleted (previously dead code)
 
@@ -78,7 +78,7 @@ User scroll/key/click → addImpulse(normalizedVelocity)
                     energy += impulse
                     energy *= FRICTION (0.985/frame)
                               ��
-              playbackRate = lerp(0.25, 1.0, energy)
+              playbackRate = lerp(0.25, 1.0, pow(energy, 0.7))  // exponential curve
               volume = smoothstep(0, 0.15, energy) * 0.7
                               ↓
                     preservesPitch = false
@@ -109,7 +109,7 @@ Bands available via `getFrequencyBands()` → `{ bass, mids, highs }` (all 0-1).
 
 ## Scroll → Video Pipeline (GSAP ScrollTrigger + matchMedia)
 
-1. Lenis smooth-scrolls the page (`lerp: 0.08`, `autoRaf: false`)
+1. Lenis smooth-scrolls the page (`lerp: 0.08`, `easing: exponential ease-out` for vinyl feel, `autoRaf: false`)
 2. GSAP ticker drives Lenis (`gsap.ticker.add → lenis.raf`) — single RAF loop
 3. `gsap.matchMedia()` wraps ScrollTrigger with responsive breakpoints:
    - Desktop: `scrub: 1.5` (vinyl feel)
@@ -135,9 +135,11 @@ Bands available via `getFrequencyBands()` → `{ bass, mids, highs }` (all 0-1).
 - `SplitText.create()` within GSAP context — auto-reverted on cleanup
 - Timeline with `">-0.3"` overlap for cascading multi-target reveals
 - Desktop: blur filter + longer durations; Mobile: no blur + snappier timing
-- Exit: GSAP timeline reverse (progress > 0.8), chars slide back behind mask
-- `data-depth` parallax on select beats (hero=1.2, stats=0.8, climax=1.3, closing=1.1)
-- `data-reactive` sound-responsive letter-spacing on high-energy beats (energy > 0.3, mids band)
+- Exit: split beats → GSAP timeline reverse (progress > 0.8); non-split beats → CSS opacity fade (1→0 over progress 0.8-1.0)
+- `data-depth` parallax on select beats (hero=1.2, stats=0.8, climax=1.3, closing=1.1) — uses CSS `translate` (not `transform`) to avoid GSAP conflicts
+- `data-reactive` sound-responsive letter-spacing (continuous with `energy * bands.mids * 0.08`, no threshold gate)
+- Act transition echo: `brightness()` filter dims text ~30% at peak when `actTransition > 0.3`
+- CTA cursor hover: `onMouseEnter/onMouseLeave` sets cursor variant via `useUIStore.getState()`
 - Stable keys: `${beat.frameStart}-${beat.frameEnd}` (not array index)
 
 ## Unified WebGL2 Cinema (5-Pass Multi-FBO Pipeline)
@@ -192,7 +194,7 @@ FBOs: FBO_A (full, cinema output), FBO_B (half, bloom downsample), FBO_B2 (half,
 
 ### Particle System (1100 on High, 500 on Mid)
 - 1000 ambient + 100 cursor trail particles (zero-GC: pre-allocated Float32Array, `bufferSubData`, resetParticle in-place)
-- CPU-side 48×20 luminance grid (FBO readback every 10 frames) → gradient force on velocity
+- CPU-side 48×20 luminance grid (async PBO readback every 10 frames, 1-interval latency) → gradient force on velocity
 - Cursor trail: spawn at mouse position, shorter life (60 frames), brighter white → act highlight color
 - Act burst: 50 particles at boundary, 2× size, high initial velocity, 40 frame life
 - Bass size+opacity pulse (size leads opacity by 2 frames for "pop then glow")
@@ -201,6 +203,7 @@ FBOs: FBO_A (full, cinema output), FBO_B (half, bloom downsample), FBO_B2 (half,
 - **Bass screen shake**: ±1.5px random translate on bass > 0.7, ref-based (no re-render), gated by reduced-motion
 - **Dynamic letterbox**: 2.39:1 bars animate with mood (calm → thicker, intense → thinner, ±15% range)
 - **Act transition tracking**: `actTransition` uniform spikes to 1.0 at boundary, decays 0.95/frame
+- **Mobile haptic**: `navigator.vibrate([15, 30, 15])` at act boundaries (Android progressive enhancement)
 - **Velocity normalization**: 5000 px/s saturation (was 2000)
 
 ### Dynamic Narrative Mood
@@ -211,10 +214,38 @@ Exported as `getMoodCPU()` for shared use (ScrollVideoPlayer letterbox, page.tsx
 
 Falls back to raw `<video>` element if WebGL2 unavailable or Low tier. Canvas sized to viewport with DPR capping.
 
+## Keyboard Scroll Momentum (usePianoScroll)
+
+Physics-based keyboard/click scroll with rhythm detection. Each interaction adds energy to a momentum accumulator; a lazy rAF loop converts energy into smooth scroll with friction-based deceleration.
+
+```
+Keypress/Click → energy += impulse (modulated by rhythm)
+                     ↓
+               energy *= FRICTION (0.955/frame)
+                     ↓
+          scrollDelta = energy * VELOCITY_SCALE (8 px/frame)
+          lenis.scrollTo(scroll + delta)
+                     ↓
+          ScrollTrigger detects velocity → AudioMomentum reacts
+```
+
+**Rhythm Detection** (3 gears via inter-tap interval):
+
+| Gear | Interval | Impulse | Feel |
+|------|----------|---------|------|
+| Isolated tap | > 400ms | `IMPULSE_BASE` (0.12) | Gentle push, ~200px travel |
+| Rhythmic tapping | 100-400ms | `× RHYTHM_BONUS` (1.6) | Momentum builds |
+| Key held (repeat) | < 50ms | `× HOLD_DAMPEN` (0.3) | Sustained controlled scroll |
+
+Constants: `MAX_ENERGY=1.0`, `STOP_THRESHOLD=0.005`, rAF loop self-terminates when idle.
+Only letter keys a-z trigger (WCAG 2.1.4). No `e.preventDefault()` (preserves screen reader shortcuts).
+M key = mute toggle shortcut (keyboard-only users). Click on `[data-cinema]` = same impulse system.
+Respects `prefers-reduced-motion: reduce` (entire system disabled).
+
 ## Micro-Interaction Sounds
 
 `micro-sounds.ts` — Zero-download Web Audio oscillator system (shared AudioContext):
-- `playHover()`: Random C major pentatonic note (sine, 150ms decay, vol 0.025)
+- `playHover()`: Random non-repeating C major pentatonic note (sine, 150ms decay, vol 0.025)
 - `playClick()`: C4 + octave harmonic (300ms, vol 0.04)
 - `playWhoosh()`: Sawtooth sweep 400→80Hz through lowpass filter (150ms)
 - Throttled: whoosh max 1/sec, hover debounced by browser event rate
@@ -309,6 +340,7 @@ npm run typecheck    # TypeScript check (tsc --noEmit)
 - CinemaGL: all shaders use `precision highp float;` — mismatched precision between vertex/fragment causes link failure
 - CinemaGL: `createProgramFromSources` detaches and deletes shaders after linking (prevents shader object leaks)
 - CinemaGL: `lumPixels` Uint8Array pre-allocated once (not per readPixels call)
+- CinemaGL: luminance grid uses async PBO readback (`PIXEL_PACK_BUFFER` + `getBufferSubData`) — no GPU pipeline stall
 - CinemaGL: Kawase bloom result FBO dynamically selected based on `KAWASE_ITERATIONS % 2` (ping-pong correctness)
 - CinemaGL: `texImage2D` guarded by `lastVideoTime` — skips upload when video frame unchanged
 - AudioMomentum: `play()` Promise callback guards against destroyed instance (`if (!this.running) return`)
@@ -319,9 +351,11 @@ npm run typecheck    # TypeScript check (tsc --noEmit)
 - ScrollVideoPlayer: `audioMuted` applied to freshly created AudioMomentum via ref (React effect ordering)
 - ScrollVideoPlayer: bass shake via `shakeRef` (ref-based transform on sticky div, no re-render)
 - ScrollVideoPlayer: dynamic letterbox bars (4vh `--bg-void` divs, scaleY varies with mood)
-- ScrollStoryOverlay: `data-reactive` letter-spacing cached in `dataset.baseSpacing` (prevents unbounded growth)
-- ScrollStoryOverlay: timeline exit guard `tl.totalProgress() < 1 && progress <= 0.8` (prevents fighting entry)
-- Page: atmospheric haze div with `--haze-color` CSS property driven by progress
+- ScrollStoryOverlay: `data-reactive` letter-spacing is continuous (`energy * bands.mids * 0.08`), no threshold gate
+- ScrollStoryOverlay: exit guard simplified to `progress <= 0.8` (removed `tl.totalProgress() < 1` which caused fast-scroll glitches)
+- ScrollStoryOverlay: non-split beats exit via CSS opacity fade on ref style (not GSAP)
+- ScrollStoryOverlay: parallax uses CSS `translate` property (not `transform`) to avoid GSAP composition conflicts
+- Page: atmospheric haze div with `--haze-color` CSS property driven by continuous mood interpolation (getMoodCPU)
 - Page: `displayBands` state uses shallow equality check (0.01 threshold) to avoid re-renders
 - Navigation: `aria-controls="mobile-menu"` on hamburger, `id="mobile-menu"` on dialog
 - Navigation: mobile social links have `aria-label` for screen readers
@@ -329,5 +363,23 @@ npm run typecheck    # TypeScript check (tsc --noEmit)
 - Reduced-motion CSS: only `animation-*` properties are overridden; transitions preserved for focus/hover
 - `setMicroSoundsMuted` called from ScrollVideoPlayer only (not duplicated in Navigation)
 - `<video>` and `<canvas>` have `aria-hidden="true"` (decorative, content conveyed by overlay text)
+- Navigation: scroll progress bar uses `transform: scaleX()` + `transformOrigin: left` (GPU composited, not `width%`)
+- Navigation: logo bar height offsets are fixed values `[1.12, 1.24, 1.30, 1.18, 1.08]` (not `Math.random()` in useMemo)
+- Navigation: mobile dialog entrance via CSS `@starting-style`, exit via `.dialog-closing` class (no JS animation)
+- CustomCursor: ring hover uses CSS `scale: "1.5"` (not width/height change)
+- CustomCursor: scroll velocity → ring directional stretch `scaleY(1 + velocity * 0.3)` capped at 1.4
+- MagneticButtons: `mouseout` delegation resets button transform and clears currentBtn on leave (prevents stuck state)
+- PianoIndicator: wave cascade with per-bar `transitionDelay: Math.abs(i - 2) * 20` ms (center → outward)
+- PianoIndicator: idle breathing via `@keyframes piano-idle` with staggered delays when `!isActive`
+- Preloader: iris-close exit via `clipPath: "circle(0% at 50% 50%)"` + content scale-down for depth
+- Preloader: `playClick()` audio primer on name reveal complete (primes shared AudioContext for iOS)
+- Preloader: reduced-motion users bypass exit animation (dismiss immediately)
+- Contact: success state animated via GSAP (circle `back.out(1.7)` + staggered text slide-up)
+- AudioMomentum: playbackRate uses exponential curve `Math.pow(energy, 0.7)` before lerp (vinyl-like slowdown)
+- MicroSounds: `playHover()` tracks `lastNoteIndex` with do-while to prevent consecutive same notes
+- Footer: AURA heading uses `querySelectorAll("[data-brand]")` with staggered SplitText entrance
+- SmoothScroll: custom easing `Math.min(1, 1.001 - Math.pow(2, -10 * t))` (exponential ease-out, vinyl feel)
+- ScrollVideoPlayer: mobile haptic `navigator.vibrate([15, 30, 15])` at act boundaries (progressive enhancement)
+- usePianoScroll: M key toggles mute (keyboard-only users), fires `onMuteToggle` callback
 - Error boundary: `src/app/error.tsx` for Next.js App Router error handling
 - See `docs/CONVENTIONS.md` for full technical conventions
