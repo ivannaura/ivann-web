@@ -24,7 +24,7 @@ export default function SmoothScroll({ children }: SmoothScrollProps) {
 
   useEffect(() => {
     // Disable GSAP's lag smoothing — Lenis handles frame timing
-    gsap.ticker.lagSmoothing(0);
+    gsap.ticker.lagSmoothing(500, 33);
 
     // Drive Lenis from GSAP's ticker (single unified RAF loop)
     const tickerCallback = (time: number) => {
@@ -47,6 +47,7 @@ export default function SmoothScroll({ children }: SmoothScrollProps) {
         autoRaf: false,
         wheelMultiplier: 1.2,
         touchMultiplier: 0.8,
+        gestureOrientation: "vertical",
         syncTouch: true,
         easing: (t: number) => Math.min(1, 1.001 - Math.pow(2, -10 * t)),
       }}
