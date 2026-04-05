@@ -45,20 +45,25 @@ export default function PianoIndicator({ energy, bands }: PianoIndicatorProps) {
       className="fixed bottom-8 left-8 z-[997] flex items-end gap-3 transition-opacity duration-700"
       style={{ opacity: isActive ? 1 : 0.4 }}
     >
-      {/* Equalizer bars — frequency-reactive */}
+      {/* Equalizer bars — frequency-reactive, cascade stagger from center */}
       <div className="flex items-end gap-[2px] h-5">
-        {barHeights.map((h, i) => (
-          <div
-            key={i}
-            className="w-[2px] rounded-[1px] transition-all duration-150"
-            style={{
-              height: `${h * (20 + energy * 80)}%`,
-              background: isGold
-                ? "var(--aura-gold)"
-                : "var(--text-muted)",
-            }}
-          />
-        ))}
+        {barHeights.map((h, i) => {
+          // Cascade delay: center bar (2) = 0ms, adjacent (1,3) = 20ms, outer (0,4) = 40ms
+          const cascadeDelay = Math.abs(i - 2) * 20;
+          return (
+            <div
+              key={i}
+              className="w-[2px] rounded-[1px] transition-all duration-150"
+              style={{
+                height: `${h * (20 + energy * 80)}%`,
+                transitionDelay: `${cascadeDelay}ms`,
+                background: isGold
+                  ? "var(--aura-gold)"
+                  : "var(--text-muted)",
+              }}
+            />
+          );
+        })}
       </div>
 
       {/* Hint text */}
