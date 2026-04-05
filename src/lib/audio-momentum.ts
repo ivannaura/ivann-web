@@ -22,9 +22,6 @@ const DRIFT_THRESHOLD = 3.0;
 const BASS_END = 3;
 const MIDS_END = 30;
 
-// EMA alpha for frequency bands — lower = smoother (less jitter)
-const BAND_ALPHA = 0.35;
-
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -217,10 +214,14 @@ export class AudioMomentum {
     this.bands.mids = midsSum / ((MIDS_END - BASS_END) * 255);
     this.bands.highs = highsSum / ((len - MIDS_END) * 255);
 
-    // EMA smoothing: smoothed = lerp(smoothed, raw, alpha)
-    this.smoothBands.bass = lerp(this.smoothBands.bass, this.bands.bass, BAND_ALPHA);
-    this.smoothBands.mids = lerp(this.smoothBands.mids, this.bands.mids, BAND_ALPHA);
-    this.smoothBands.highs = lerp(this.smoothBands.highs, this.bands.highs, BAND_ALPHA);
+    // Asymmetric EMA: fast attack (0.6), slow release (0.15) — piano dynamics
+    const ATTACK_ALPHA = 0.6;
+    const RELEASE_ALPHA = 0.15;
+    const asymmetric = (smoothed: number, raw: number) =>
+      lerp(smoothed, raw, raw > smoothed ? ATTACK_ALPHA : RELEASE_ALPHA);
+    this.smoothBands.bass = asymmetric(this.smoothBands.bass, this.bands.bass);
+    this.smoothBands.mids = asymmetric(this.smoothBands.mids, this.bands.mids);
+    this.smoothBands.highs = asymmetric(this.smoothBands.highs, this.bands.highs);
   }
 
   /** Pause loop and audio when tab goes to background. */
