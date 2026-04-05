@@ -4,6 +4,7 @@ import { useMemo, useRef, useLayoutEffect, useEffect } from "react";
 import gsap from "gsap";
 import { SplitText } from "gsap/SplitText";
 import type { FrequencyBands } from "@/lib/audio-momentum";
+import { useUIStore } from "@/stores/useUIStore";
 
 if (typeof window !== "undefined") {
   gsap.registerPlugin(SplitText);
@@ -411,6 +412,8 @@ const STORY_BEATS: StoryBeat[] = [
             color: "var(--aura-gold)",
             borderColor: "var(--aura-gold)",
           }}
+          onMouseEnter={() => useUIStore.getState().setCursorVariant("hover")}
+          onMouseLeave={() => useUIStore.getState().setCursorVariant("default")}
         >
           Contrata el Show
         </a>
