@@ -1,8 +1,15 @@
 // ---------------------------------------------------------------------------
 // CinemaGL — Unified WebGL2 renderer for scroll-driven video cinema
-// Single context rendering pipeline:
-//   Pass 1: Video post-processing (vignette, chromatic aberration, grain, bloom)
-//   Pass 2: Luminance-reactive particles (additive blending, energy-responsive)
+// Multi-pass rendering pipeline:
+//   Pass 1: Video post-processing → FBO_A (vignette, chromatic aberration, grain, bloom)
+//   Pass 2: Bloom + Composite (Tasks 4-5, uses FBO_B/B2/D)
+//   Pass 3: Blit FBO_A → screen (temporary until composite pass added)
+//   Pass 4: Luminance-reactive particles (additive blending on screen)
+//
+// Tier system:
+//   high — full FBO pipeline (A + B + B2 + D), all post-processing
+//   mid  — reduced FBO pipeline (A + B + B2), no detail FBO
+//   low  — direct to screen (no FBOs), reduced-motion or weak GPU
 //
 // Reactive uniforms:
 //   u_bass / u_mids / u_highs — real-time frequency bands from AnalyserNode
@@ -13,6 +20,89 @@
 // ---------------------------------------------------------------------------
 
 import type { FrequencyBands } from './audio-momentum';
+
+// ---------------------------------------------------------------------------
+// Tier detection
+// ---------------------------------------------------------------------------
+
+export type CinemaTier = 'high' | 'mid' | 'low';
+
+export function detectTier(gl: WebGL2RenderingContext): CinemaTier {
+  const maxTexUnits = gl.getParameter(gl.MAX_TEXTURE_IMAGE_UNITS);
+  const renderer = (gl.getParameter(gl.RENDERER) || '') as string;
+  const deviceMemory = (navigator as any).deviceMemory ?? 8;
+  const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  if (reducedMotion) return 'low';
+  if (maxTexUnits >= 8 && deviceMemory >= 4 && !/Mali-4|Adreno 3|PowerVR SGX/i.test(renderer)) {
+    return 'high';
+  }
+  return 'mid';
+}
+
+// ---------------------------------------------------------------------------
+// FBO helpers
+// ---------------------------------------------------------------------------
+
+interface FBO {
+  framebuffer: WebGLFramebuffer;
+  texture: WebGLTexture;
+  width: number;
+  height: number;
+}
+
+function createFBO(gl: WebGL2RenderingContext, w: number, h: number): FBO | null {
+  const framebuffer = gl.createFramebuffer();
+  const texture = gl.createTexture();
+  if (!framebuffer || !texture) return null;
+
+  gl.bindTexture(gl.TEXTURE_2D, texture);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, w, h, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+
+  gl.bindFramebuffer(gl.FRAMEBUFFER, framebuffer);
+  gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, texture, 0);
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+
+  return { framebuffer, texture, width: w, height: h };
+}
+
+function resizeFBO(gl: WebGL2RenderingContext, fbo: FBO, w: number, h: number): void {
+  fbo.width = w;
+  fbo.height = h;
+  gl.bindTexture(gl.TEXTURE_2D, fbo.texture);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, w, h, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+}
+
+function destroyFBO(gl: WebGL2RenderingContext, fbo: FBO): void {
+  gl.deleteFramebuffer(fbo.framebuffer);
+  gl.deleteTexture(fbo.texture);
+}
+
+// ---------------------------------------------------------------------------
+// Program creation helper
+// ---------------------------------------------------------------------------
+
+function createProgramFromSources(
+  gl: WebGL2RenderingContext, vertSrc: string, fragSrc: string
+): WebGLProgram | null {
+  const vs = compile(gl, gl.VERTEX_SHADER, vertSrc);
+  const fs = compile(gl, gl.FRAGMENT_SHADER, fragSrc);
+  if (!vs || !fs) return null;
+  const prog = gl.createProgram();
+  if (!prog) return null;
+  gl.attachShader(prog, vs);
+  gl.attachShader(prog, fs);
+  gl.linkProgram(prog);
+  if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) {
+    console.warn('CinemaGL: program link failed:', gl.getProgramInfoLog(prog));
+    return null;
+  }
+  return prog;
+}
 
 // ---------------------------------------------------------------------------
 // Shaders — Cinema (video post-processing)
@@ -178,6 +268,19 @@ void main() {
 }`;
 
 // ---------------------------------------------------------------------------
+// Shaders — Blit (passthrough for FBO → screen)
+// ---------------------------------------------------------------------------
+
+const BLIT_FRAG = `#version 300 es
+precision mediump float;
+in vec2 v_uv;
+uniform sampler2D u_tex;
+out vec4 fragColor;
+void main() {
+  fragColor = texture(u_tex, v_uv);
+}`;
+
+// ---------------------------------------------------------------------------
 // Particle state (CPU-side physics)
 // ---------------------------------------------------------------------------
 
@@ -227,6 +330,7 @@ export interface CinemaGLParams {
   mouseX: number;   // pixel coords on canvas
   mouseY: number;
   velocity: number;  // normalized 0-1
+  actTransition: number; // 0-1, peaks at act boundaries
 }
 
 export interface CinemaGL {
@@ -238,6 +342,8 @@ export interface CinemaGL {
   destroy(): void;
   /** True if the WebGL context was lost (render is a no-op, fall back to raw video). */
   readonly lost: boolean;
+  /** Current rendering tier (may downgrade at runtime if GPU is slow). */
+  readonly tier: CinemaTier;
 }
 
 export function initCinemaGL(canvas: HTMLCanvasElement): CinemaGL | null {
@@ -401,14 +507,54 @@ export function initCinemaGL(canvas: HTMLCanvasElement): CinemaGL | null {
   let lastVideoTime = -1; // guard against redundant texImage2D uploads
 
   // ---------------------------------------------------------------------------
+  // Tier detection + FBO infrastructure
+  // ---------------------------------------------------------------------------
+  const tier = detectTier(gl);
+
+  // FBOs — only for mid+ tiers
+  let fboA: FBO | null = null;
+  let fboB: FBO | null = null;
+  let fboB2: FBO | null = null;
+  let fboD: FBO | null = null;
+
+  if (tier !== 'low') {
+    fboA = createFBO(gl, w, h);
+    fboB = createFBO(gl, Math.ceil(w / 2), Math.ceil(h / 2));
+    fboB2 = createFBO(gl, Math.ceil(w / 2), Math.ceil(h / 2));
+    if (tier === 'high') {
+      fboD = createFBO(gl, w, h);
+    }
+    if (!fboA || !fboB || !fboB2 || (tier === 'high' && !fboD)) {
+      console.warn('CinemaGL: FBO creation failed, falling back');
+      [fboA, fboB, fboB2, fboD].forEach(f => f && destroyFBO(gl, f));
+      fboA = fboB = fboB2 = fboD = null;
+    }
+  }
+  const effectiveTier: CinemaTier = fboA ? tier : 'low';
+
+  // Blit program (passthrough FBO → screen)
+  const blitProg = createProgramFromSources(gl, CINEMA_VERT, BLIT_FRAG);
+  const blitUTex = blitProg ? gl.getUniformLocation(blitProg, "u_tex") : null;
+
+  // ---------------------------------------------------------------------------
+  // Runtime performance monitoring
+  // ---------------------------------------------------------------------------
+  let frameTimeSum = 0;
+  let frameTimeCount = 0;
+  let runtimeTier = effectiveTier;
+
+  // ---------------------------------------------------------------------------
   // Render pipeline
   // ---------------------------------------------------------------------------
   return {
     get lost() { return contextLost; },
+    get tier() { return runtimeTier; },
 
     render(params) {
       const { video, time, energy, progress, bands, mouseX, mouseY, velocity } = params;
       if (contextLost || video.readyState < 2) return;
+
+      const frameStart = performance.now();
 
       // Upload video texture only when frame changed (avoids redundant GPU upload)
       gl.activeTexture(gl.TEXTURE0);
@@ -418,7 +564,14 @@ export function initCinemaGL(canvas: HTMLCanvasElement): CinemaGL | null {
         lastVideoTime = video.currentTime;
       }
 
-      // --- Pass 1: Cinema post-processing ---
+      // --- Pass 1: Cinema → FBO_A (or screen if low tier) ---
+      if (fboA) {
+        gl.bindFramebuffer(gl.FRAMEBUFFER, fboA.framebuffer);
+        gl.viewport(0, 0, fboA.width, fboA.height);
+      } else {
+        gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+        gl.viewport(0, 0, w, h);
+      }
       gl.disable(gl.BLEND);
       gl.useProgram(cinemaProg);
       gl.uniform1f(cUTime, time);
@@ -431,6 +584,20 @@ export function initCinemaGL(canvas: HTMLCanvasElement): CinemaGL | null {
       gl.uniform1f(cUVelocity, velocity);
       gl.bindVertexArray(cinemaVAO);
       gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+
+      // --- Bloom + Composite passes will be inserted here in Tasks 4-5 ---
+
+      // Blit FBO_A → screen (temporary until composite pass is added)
+      if (fboA && blitProg) {
+        gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+        gl.viewport(0, 0, w, h);
+        gl.useProgram(blitProg);
+        gl.activeTexture(gl.TEXTURE1);
+        gl.bindTexture(gl.TEXTURE_2D, fboA.texture);
+        gl.uniform1i(blitUTex, 1);
+        gl.bindVertexArray(cinemaVAO);
+        gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+      }
 
       // --- Pass 2: Particles (additive blending on top) ---
       const dt = lastTime ? Math.min(time - lastTime, 0.05) : 0.016;
@@ -481,6 +648,8 @@ export function initCinemaGL(canvas: HTMLCanvasElement): CinemaGL | null {
       gl.uniform1f(pUHighs, bands.highs);
       gl.uniform2f(pUMouse, mouseX, mouseY); // pixel coords for particles
       gl.uniform1i(pUVideoTex, 0);
+      gl.activeTexture(gl.TEXTURE0);
+      gl.bindTexture(gl.TEXTURE_2D, tex);
 
       gl.bindBuffer(gl.ARRAY_BUFFER, particleBuf);
       gl.bufferSubData(gl.ARRAY_BUFFER, 0, particleData);
@@ -489,6 +658,20 @@ export function initCinemaGL(canvas: HTMLCanvasElement): CinemaGL | null {
 
       gl.bindVertexArray(null);
       gl.disable(gl.BLEND);
+
+      // Runtime auto-downgrade
+      const frameTime = performance.now() - frameStart;
+      frameTimeSum += frameTime;
+      frameTimeCount++;
+      if (frameTimeCount >= 10) {
+        const avg = frameTimeSum / frameTimeCount;
+        if (avg > 20 && runtimeTier === 'high') {
+          runtimeTier = 'mid';
+          if (fboD) { destroyFBO(gl, fboD); fboD = null; }
+        }
+        frameTimeSum = 0;
+        frameTimeCount = 0;
+      }
     },
 
     resize(newW, newH) {
@@ -497,10 +680,19 @@ export function initCinemaGL(canvas: HTMLCanvasElement): CinemaGL | null {
       canvas.width = w;
       canvas.height = h;
       gl.viewport(0, 0, w, h);
+
+      if (fboA) resizeFBO(gl, fboA, w, h);
+      if (fboB) resizeFBO(gl, fboB, Math.ceil(w / 2), Math.ceil(h / 2));
+      if (fboB2) resizeFBO(gl, fboB2, Math.ceil(w / 2), Math.ceil(h / 2));
+      if (fboD) resizeFBO(gl, fboD, w, h);
     },
 
     destroy() {
       canvas.removeEventListener("webglcontextlost", onContextLost);
+      // FBO cleanup
+      [fboA, fboB, fboB2, fboD].forEach(f => f && destroyFBO(gl, f));
+      if (blitProg) gl.deleteProgram(blitProg);
+      // Existing cleanup
       gl.deleteTexture(tex);
       gl.deleteBuffer(quadBuf);
       gl.deleteBuffer(particleBuf);
