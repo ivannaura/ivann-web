@@ -6,6 +6,9 @@ import { useEffect } from "react";
  * Global magnetic button effect — elements with .magnetic-btn class
  * subtly follow the cursor within their bounding box.
  * Desktop only, respects prefers-reduced-motion.
+ *
+ * Uses mousemove for tracking + mouseout (bubbles, unlike mouseleave)
+ * for resetting transform when cursor exits a button.
  */
 export default function MagneticButtons() {
   useEffect(() => {
@@ -29,10 +32,27 @@ export default function MagneticButtons() {
       btn.style.transform = `translate(${x * strength}px, ${y * strength}px)`;
     };
 
+    // mouseout bubbles (unlike mouseleave), so event delegation works.
+    // Fires when cursor leaves a .magnetic-btn for any other element.
+    const onOut = (e: MouseEvent) => {
+      if (!currentBtn) return;
+      const related = e.relatedTarget as HTMLElement | null;
+      // If relatedTarget is still inside the same button, ignore
+      if (related && currentBtn.contains(related)) return;
+      const leaving = (e.target as HTMLElement).closest<HTMLElement>(".magnetic-btn");
+      if (leaving === currentBtn) {
+        currentBtn.style.transform = "";
+        currentBtn = null;
+        cachedRect = null;
+      }
+    };
+
     document.addEventListener("mousemove", onMove, { passive: true });
+    document.addEventListener("mouseout", onOut, { passive: true });
 
     return () => {
       document.removeEventListener("mousemove", onMove);
+      document.removeEventListener("mouseout", onOut);
       if (currentBtn) currentBtn.style.transform = "";
     };
   }, []);
