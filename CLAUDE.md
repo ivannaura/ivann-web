@@ -47,7 +47,7 @@ layout.tsx
 | `SharedAudioContext` | `lib/shared-audio-context.ts` | Ref-counted singleton AudioContext (iOS Safari 4-context limit) |
 | `MicroSounds` | `lib/micro-sounds.ts` | Web Audio oscillators: hover/click/whoosh (shared AudioContext) |
 | `ScrollStoryOverlay` | `ui/ScrollStoryOverlay.tsx` | 20+ story beats with GSAP SplitText per-char/word reveals |
-| `usePianoScroll` | `hooks/usePianoScroll.ts` | Letter keys (a-z) / click → scroll (respects prefers-reduced-motion) |
+| `usePianoScroll` | `hooks/usePianoScroll.ts` | Physics-based keyboard/click scroll: momentum accumulator + friction decay + rhythm detection |
 | `PianoIndicator` | `ui/PianoIndicator.tsx` | Frequency-reactive equalizer: bass→center, mids→mid, highs→outer bars |
 | `Navigation` | `ui/Navigation.tsx` | Fixed nav, scroll progress, native `<dialog>`, cached querySelector |
 | `CustomCursor` | `ui/CustomCursor.tsx` | GPU-composited transform cursor + viewport mouseleave/mouseenter |
