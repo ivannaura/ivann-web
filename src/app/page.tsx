@@ -17,10 +17,14 @@ const VIDEO_SRC = "/videos/flamenco-graded.mp4";
 const AUDIO_SRC = "/audio/flamenco.m4a";
 
 export default function Home() {
-  usePianoScroll({ enabled: true });
-
   const [currentFrame, setCurrentFrame] = useState(0);
   const [soundMuted, setSoundMuted] = useState(false);
+
+  const handleSoundToggle = useCallback(() => {
+    setSoundMuted((prev) => !prev);
+  }, []);
+
+  usePianoScroll({ enabled: true, onMuteToggle: handleSoundToggle });
 
   // Progress ref for atmospheric haze color
   const progressRef = useRef(0);
@@ -98,10 +102,6 @@ export default function Home() {
 
   const handleProgressChange = useCallback((p: number) => {
     progressRef.current = p;
-  }, []);
-
-  const handleSoundToggle = useCallback(() => {
-    setSoundMuted((prev) => !prev);
   }, []);
 
   return (

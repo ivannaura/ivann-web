@@ -19,6 +19,8 @@ const REPEAT_THRESHOLD = 50; // ms — intervals below this = held key
 interface UsePianoScrollOptions {
   /** Enable/disable the scroll-on-keypress/click system */
   enabled?: boolean;
+  /** Callback when M key is pressed to toggle mute */
+  onMuteToggle?: () => void;
 }
 
 /**
@@ -29,7 +31,7 @@ interface UsePianoScrollOptions {
  * detected by ScrollTrigger → AudioMomentum reacts automatically.
  */
 export function usePianoScroll(options: UsePianoScrollOptions = {}) {
-  const { enabled = true } = options;
+  const { enabled = true, onMuteToggle } = options;
   const lenis = useLenis();
 
   // Physics state — refs to avoid re-renders
@@ -40,6 +42,9 @@ export function usePianoScroll(options: UsePianoScrollOptions = {}) {
   // Stable ref to lenis so the rAF loop always has the latest instance
   const lenisRef = useRef(lenis);
   lenisRef.current = lenis;
+  // Stable ref to mute toggle callback
+  const muteToggleRef = useRef(onMuteToggle);
+  muteToggleRef.current = onMuteToggle;
 
   // --- Physics loop (starts on demand, stops when idle) ---
   useEffect(() => {
@@ -99,6 +104,13 @@ export function usePianoScroll(options: UsePianoScrollOptions = {}) {
       if (!/^[a-zA-Z]$/.test(e.key)) return;
       const tag = (e.target as HTMLElement)?.tagName;
       if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
+
+      // M key = mute toggle shortcut (keyboard-only users)
+      if (e.key === "m" || e.key === "M") {
+        muteToggleRef.current?.();
+        return;
+      }
+
       // No e.preventDefault() — preserves screen reader browse-mode shortcuts
       addImpulse();
     };
