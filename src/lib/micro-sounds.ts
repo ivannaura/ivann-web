@@ -64,8 +64,8 @@ let lastNoteIndex = -1;
 
 /** Soft piano-like tone on hover (random non-repeating note from pentatonic scale). */
 export function playHover(): void {
-  // C major pentatonic in octave 5-6: C5, D5, E5, G5, A5, C6
-  const notes = [523, 587, 659, 784, 880, 1047];
+  // E Phrygian compatible in octave 5-6: E5, F5, A5, B5, C6, E6
+  const notes = [659, 698, 880, 988, 1047, 1319];
   let idx: number;
   do {
     idx = Math.floor(Math.random() * notes.length);
