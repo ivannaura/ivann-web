@@ -517,15 +517,23 @@ const STORY_BEATS: StoryBeat[] = [
           AURA
         </h2>
         <div className="flex gap-6 mt-8 justify-center">
-          {["YouTube", "Instagram", "Spotify"].map((platform) => (
-            <span
-              key={platform}
+          {[
+            { name: "Instagram", href: "https://www.instagram.com/ivannaura" },
+            { name: "Spotify", href: "https://open.spotify.com/artist/ivannaura" },
+            { name: "YouTube", href: "https://www.youtube.com/@ivannaura" },
+            { name: "TikTok", href: "https://www.tiktok.com/@ivannaura" },
+          ].map((platform) => (
+            <a
+              key={platform.name}
+              href={platform.href}
+              target="_blank"
+              rel="noopener noreferrer"
               data-stagger
-              className="text-[0.6rem] tracking-[0.2em] uppercase"
+              className="pointer-events-auto hover:text-[var(--aura-gold)] transition-colors text-[0.6rem] tracking-[0.2em] uppercase"
               style={{ color: "var(--text-muted)" }}
             >
-              {platform}
-            </span>
+              {platform.name}
+            </a>
           ))}
         </div>
         <p
