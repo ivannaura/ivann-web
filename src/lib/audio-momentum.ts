@@ -70,6 +70,7 @@ export class AudioMomentum {
   private freqData: Uint8Array<ArrayBuffer> | null = null;
   private bands: FrequencyBands = { bass: 0, mids: 0, highs: 0 };
   private smoothBands: FrequencyBands = { bass: 0, mids: 0, highs: 0 };
+  private lastTime: number = 0;
 
   // ---- Public API ---------------------------------------------------------
 
@@ -249,6 +250,7 @@ export class AudioMomentum {
   private startLoop(): void {
     if (this.running) return;
     this.running = true;
+    this.lastTime = performance.now();
     this.rafId = requestAnimationFrame(this.update);
   }
 
@@ -256,8 +258,11 @@ export class AudioMomentum {
   private update = (): void => {
     if (!this.running) return;
 
-    // --- friction decay ---
-    this.energy *= FRICTION;
+    // --- delta-time friction decay ---
+    const now = performance.now();
+    const dt = Math.min((now - this.lastTime) / 16.667, 3);
+    this.lastTime = now;
+    this.energy *= Math.pow(FRICTION, dt);
     if (this.energy < 0.001) this.energy = 0;
 
     // --- frequency analysis (runs even when muted for visual reactivity) ---
