@@ -33,9 +33,9 @@ export default function Footer() {
       const mm = gsap.matchMedia();
 
       mm.add("(prefers-reduced-motion: no-preference)", () => {
-        // Large branding reveal
-        const brand = footer.querySelector<HTMLElement>("[data-brand]");
-        if (brand) {
+        // Large branding reveal — both IVANN and AURA headings
+        const brands = footer.querySelectorAll<HTMLElement>("[data-brand]");
+        brands.forEach((brand, i) => {
           const split = SplitText.create(brand, { type: "chars" });
           gsap.from(split.chars, {
             yPercent: 100,
@@ -43,13 +43,14 @@ export default function Footer() {
             stagger: 0.03,
             duration: 0.8,
             ease: "power3.out",
+            delay: i * 0.15, // stagger the second heading
             scrollTrigger: {
               trigger: brand,
               start: "top 90%",
               once: true,
             },
           });
-        }
+        });
 
         // Stagger the grid columns
         const reveals = footer.querySelectorAll<HTMLElement>("[data-reveal]");
@@ -112,6 +113,7 @@ export default function Footer() {
                 IVANN
               </h2>
               <h2
+                data-brand
                 className="text-[clamp(3rem,8vw,7rem)] font-extralight leading-[0.9] tracking-[0.05em]"
                 style={{ color: "var(--aura-gold)" }}
               >
