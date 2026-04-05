@@ -106,8 +106,7 @@ export default function CustomCursor() {
         ref={ringRef}
         className="cursor-ring hidden md:block"
         style={{
-          width: isHover ? "60px" : "40px",
-          height: isHover ? "60px" : "40px",
+          scale: isHover ? "1.5" : "1",
           borderColor: isHover
             ? "rgba(201, 168, 76, 0.5)"
             : "rgba(201, 168, 76, 0.2)",
