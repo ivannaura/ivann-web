@@ -4,8 +4,8 @@ export default function sitemap(): MetadataRoute.Sitemap {
   return [
     {
       url: "https://ivannaura.vercel.app",
-      lastModified: new Date("2026-04-02"),
-      changeFrequency: "monthly",
+      lastModified: new Date(),
+      changeFrequency: "weekly",
       priority: 1,
     },
   ];
