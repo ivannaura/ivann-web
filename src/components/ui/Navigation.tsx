@@ -37,33 +37,39 @@ export default function Navigation({
   useEffect(() => {
     // Cache section elements once — no querySelector per scroll frame
     let sectionEls: (Element | null)[] | null = null;
+    let ticking = false;
 
     const onScroll = () => {
-      const y = window.scrollY;
-      setScrolled(y > 80);
+      if (ticking) return;
+      ticking = true;
+      requestAnimationFrame(() => {
+        const y = window.scrollY;
+        setScrolled(y > 80);
 
-      const docHeight = document.documentElement.scrollHeight - window.innerHeight;
-      setScrollProgress(docHeight > 0 ? y / docHeight : 0);
+        const docHeight = document.documentElement.scrollHeight - window.innerHeight;
+        setScrollProgress(docHeight > 0 ? y / docHeight : 0);
 
-      if (!sectionEls) {
-        sectionEls = NAV_ITEMS.map((item) => document.querySelector(item.href));
-      }
+        if (!sectionEls) {
+          sectionEls = NAV_ITEMS.map((item) => document.querySelector(item.href));
+        }
 
-      let found = false;
-      for (let i = sectionEls.length - 1; i >= 0; i--) {
-        const section = sectionEls[i];
-        if (section) {
-          const rect = section.getBoundingClientRect();
-          if (rect.top <= window.innerHeight * 0.4) {
-            setActiveSection(i);
-            found = true;
-            break;
+        let found = false;
+        for (let i = sectionEls.length - 1; i >= 0; i--) {
+          const section = sectionEls[i];
+          if (section) {
+            const rect = section.getBoundingClientRect();
+            if (rect.top <= window.innerHeight * 0.4) {
+              setActiveSection(i);
+              found = true;
+              break;
+            }
           }
         }
-      }
-      if (!found && y < window.innerHeight * 0.3) {
-        setActiveSection(0);
-      }
+        if (!found && y < window.innerHeight * 0.3) {
+          setActiveSection(0);
+        }
+        ticking = false;
+      });
     };
     window.addEventListener("scroll", onScroll, { passive: true });
     return () => window.removeEventListener("scroll", onScroll);
@@ -323,7 +329,7 @@ export default function Navigation({
           {/* Mobile hamburger */}
           <button
             ref={hamburgerRef}
-            className="md:hidden relative z-[1001] w-10 h-10 flex flex-col items-center justify-center gap-[5px] rounded-full transition-all duration-300 hover:bg-white/5"
+            className="md:hidden relative z-[1001] w-11 h-11 flex flex-col items-center justify-center gap-[5px] rounded-full transition-all duration-300 hover:bg-white/5"
             onClick={toggleMenu}
             aria-label="Menu"
             aria-expanded={menuOpen}
@@ -415,6 +421,44 @@ export default function Navigation({
               </a>
             ))}
           </div>
+
+          {/* Mobile sound toggle */}
+          <button
+            onClick={toggleSoundMuted}
+            className="mt-8 w-11 h-11 flex items-center justify-center rounded-full transition-all duration-300 hover:bg-white/5 outline-none focus-visible:ring-1 focus-visible:ring-[var(--aura-gold)]"
+            aria-label={soundMuted ? "Activar sonido" : "Silenciar sonido"}
+          >
+            {soundMuted ? (
+              <svg
+                aria-hidden="true"
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="var(--text-muted)"
+                strokeWidth="1.5"
+              >
+                <path d="M11 5L6 9H2v6h4l5 4V5z" />
+                <line x1="23" y1="9" x2="17" y2="15" />
+                <line x1="17" y1="9" x2="23" y2="15" />
+              </svg>
+            ) : (
+              <svg
+                aria-hidden="true"
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke={audioActive ? "var(--aura-gold)" : "var(--text-muted)"}
+                strokeWidth="1.5"
+                className="transition-colors duration-300"
+              >
+                <path d="M11 5L6 9H2v6h4l5 4V5z" />
+                <path d="M15.54 8.46a5 5 0 010 7.07" />
+                <path d="M19.07 4.93a10 10 0 010 14.14" />
+              </svg>
+            )}
+          </button>
         </div>
       </dialog>
 
