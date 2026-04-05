@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import gsap from "gsap";
 import { SplitText } from "gsap/SplitText";
+import { playClick } from "@/lib/micro-sounds";
 
 if (typeof window !== "undefined") {
   gsap.registerPlugin(SplitText);
@@ -27,7 +28,7 @@ export default function Preloader() {
 
     const dismiss = () => {
       setDismissed(true);
-      dismissTimeout = setTimeout(() => setHidden(true), 100);
+      dismissTimeout = setTimeout(() => setHidden(true), 1100);
     };
 
     const ctx = gsap.context(() => {
@@ -43,13 +44,26 @@ export default function Preloader() {
       // Master timeline
       const tl = gsap.timeline({
         onComplete: () => {
-          // Exit: scale up + fade out
+          // Reduced-motion: skip animation, dismiss immediately
+          if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+            dismiss();
+            return;
+          }
+
+          // Exit: cinematic iris-close — circle collapses to center, revealing page
           gsap.to(container, {
-            opacity: 0,
-            scale: 1.05,
-            duration: 0.6,
-            ease: "power2.in",
+            clipPath: "circle(0% at 50% 50%)",
+            duration: 1.0,
+            ease: "power3.inOut",
             onComplete: dismiss,
+          });
+
+          // Simultaneously scale content down for parallax depth
+          gsap.to([nameEl, subtitleEl, barEl.parentElement], {
+            scale: 0.95,
+            opacity: 0.5,
+            duration: 1.0,
+            ease: "power2.in",
           });
         },
       });
@@ -60,6 +74,7 @@ export default function Preloader() {
         stagger: 0.04,
         duration: 0.8,
         ease: "power3.out",
+        onComplete: () => playClick(), // Audio primer — primes AudioContext for iOS
       });
 
       // 2. Progress bar grows
