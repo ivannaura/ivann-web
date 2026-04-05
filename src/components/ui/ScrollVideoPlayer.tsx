@@ -394,7 +394,7 @@ export default function ScrollVideoPlayer({
           trigger: container,
           start: "top top",
           end: "bottom bottom",
-          scrub: reduced ? true : isDesktop ? 1.5 : 2,
+          scrub: reduced ? true : isDesktop ? 1.5 : 1,
           onUpdate: (self) => {
             progressRef.current = self.progress;
             const targetTime = self.progress * durationRef.current;
