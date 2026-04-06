@@ -48,7 +48,7 @@ const STORY_BEATS: StoryBeat[] = [
       <div className="text-center">
         <p
           data-split="words"
-          className="text-xs tracking-[0.4em] uppercase"
+          className="text-xs tracking-[0.4em] uppercase text-cinema"
           style={{ color: "var(--text-muted)" }}
         >
           Scroll para descubrir
@@ -68,7 +68,7 @@ const STORY_BEATS: StoryBeat[] = [
           data-split="chars"
           data-split-mask="words"
           data-split-stagger="0.04"
-          className="text-[clamp(3rem,8vw,8rem)] font-extralight tracking-[0.3em] leading-none text-cinema"
+          className="text-[clamp(3rem,8vw,8rem)] font-extralight tracking-[0.3em] leading-none text-cinema font-display"
           style={{ color: "var(--text-primary)" }}
         >
           IVANN
@@ -77,7 +77,7 @@ const STORY_BEATS: StoryBeat[] = [
           data-split="chars"
           data-split-mask="words"
           data-split-stagger="0.04"
-          className="text-[clamp(3rem,8vw,8rem)] font-extralight tracking-[0.3em] leading-none mt-2 text-cinema"
+          className="text-[clamp(3rem,8vw,8rem)] font-extralight tracking-[0.3em] leading-none mt-2 text-cinema font-display"
           style={{ color: "var(--aura-gold)" }}
         >
           AURA
@@ -95,7 +95,7 @@ const STORY_BEATS: StoryBeat[] = [
       <p
         data-split="chars"
         data-split-stagger="0.02"
-        className="text-[clamp(0.6rem,1.2vw,0.9rem)] tracking-[0.4em] uppercase"
+        className="text-[clamp(0.6rem,1.2vw,0.9rem)] tracking-[0.4em] uppercase text-cinema"
         style={{ color: "var(--text-muted)" }}
       >
         Live Experience
@@ -111,7 +111,7 @@ const STORY_BEATS: StoryBeat[] = [
       <div className="flex flex-col items-center gap-2">
         <span
           aria-hidden="true"
-          className="text-[9px] tracking-[0.3em] uppercase animate-pulse"
+          className="text-[11px] tracking-[0.3em] uppercase animate-pulse text-cinema"
           style={{ color: "var(--text-muted)" }}
         >
           Scroll
@@ -136,7 +136,7 @@ const STORY_BEATS: StoryBeat[] = [
           data-reactive
           data-split="words"
           data-split-stagger="0.06"
-          className="text-[clamp(1rem,2.5vw,1.8rem)] italic font-light leading-relaxed"
+          className="text-[clamp(1rem,2.5vw,1.8rem)] italic font-light leading-relaxed text-cinema"
           style={{ color: "var(--text-secondary)" }}
         >
           &ldquo;Si Beethoven estuviera vivo, usaría la tecnología
@@ -145,7 +145,7 @@ const STORY_BEATS: StoryBeat[] = [
         <p
           data-split="chars"
           data-split-stagger="0.02"
-          className="text-[0.6em] mt-3 tracking-[0.2em] uppercase"
+          className="text-[clamp(11px,1.5vw,13px)] mt-3 tracking-[0.2em] uppercase text-cinema"
           style={{ color: "var(--text-muted)" }}
         >
           — IVANN AURA
@@ -159,7 +159,7 @@ const STORY_BEATS: StoryBeat[] = [
     frameStart: 135,
     frameEnd: 170,
     content: (
-      <div className="flex gap-12 md:gap-20" data-depth="0.8">
+      <div className="flex flex-wrap justify-center gap-4 md:gap-12 lg:gap-20" data-depth="0.8">
         {[
           { num: "200+", label: "SHOWS" },
           { num: "15+", label: "AÑOS" },
@@ -168,13 +168,13 @@ const STORY_BEATS: StoryBeat[] = [
         ].map((stat) => (
           <div key={stat.label} data-stagger className="text-center">
             <span
-              className="text-[clamp(1.5rem,4vw,3.5rem)] font-extralight block"
+              className="text-[clamp(1.5rem,4vw,3.5rem)] font-extralight block text-cinema"
               style={{ color: "var(--text-primary)" }}
             >
               {stat.num}
             </span>
             <span
-              className="text-[9px] tracking-[0.25em] uppercase block mt-1"
+              className="text-[11px] tracking-[0.25em] uppercase block mt-1 text-cinema"
               style={{ color: "var(--text-muted)" }}
             >
               {stat.label}
@@ -193,7 +193,7 @@ const STORY_BEATS: StoryBeat[] = [
       <p
         data-split="chars"
         data-split-stagger="0.02"
-        className="text-[clamp(0.7rem,1.5vw,1.1rem)] tracking-[0.15em] font-light"
+        className="text-[clamp(0.7rem,1.5vw,1.1rem)] tracking-[0.15em] font-light text-cinema"
         style={{ color: "var(--text-secondary)" }}
       >
         Pianista · Compositor · Visionario
@@ -211,7 +211,7 @@ const STORY_BEATS: StoryBeat[] = [
       <span
         data-split="chars"
         data-split-stagger="0.02"
-        className="text-[10px] tracking-[0.4em] uppercase font-mono"
+        className="text-[11px] tracking-[0.4em] uppercase font-mono text-cinema"
         style={{ color: "var(--aura-gold)" }}
       >
         01 — La Experiencia
@@ -228,7 +228,7 @@ const STORY_BEATS: StoryBeat[] = [
         <h3
           data-split="chars"
           data-split-stagger="0.02"
-          className="text-[clamp(1rem,2vw,1.5rem)] font-light"
+          className="text-[clamp(1rem,2vw,1.5rem)] font-light text-cinema"
           style={{ color: "var(--text-primary)" }}
         >
           Ivan Darío Arias
@@ -236,7 +236,7 @@ const STORY_BEATS: StoryBeat[] = [
         <p
           data-split="words"
           data-split-stagger="0.02"
-          className="text-[clamp(0.65rem,1vw,0.8rem)] leading-relaxed"
+          className="text-[clamp(0.65rem,1vw,0.8rem)] leading-relaxed text-cinema"
           style={{ color: "var(--text-muted)" }}
         >
           Nacido en Medellín, Colombia. Graduado del Conservatorio de Bellas
@@ -257,7 +257,7 @@ const STORY_BEATS: StoryBeat[] = [
         data-split="chars"
         data-split-mask="words"
         data-split-stagger="0.03"
-        className="text-[clamp(1.2rem,3vw,2.5rem)] font-extralight italic"
+        className="text-[clamp(1.2rem,3vw,2.5rem)] font-extralight italic text-cinema font-display"
         style={{ color: "var(--text-primary)" }}
       >
         Cada nota es un universo
@@ -275,7 +275,7 @@ const STORY_BEATS: StoryBeat[] = [
       <span
         data-split="chars"
         data-split-stagger="0.02"
-        className="text-[10px] tracking-[0.4em] uppercase font-mono"
+        className="text-[11px] tracking-[0.4em] uppercase font-mono text-cinema"
         style={{ color: "var(--aura-gold)" }}
       >
         02 — El Show
@@ -288,7 +288,7 @@ const STORY_BEATS: StoryBeat[] = [
     frameStart: 290,
     frameEnd: 345,
     content: (
-      <div className="flex gap-4 md:gap-6 pointer-events-auto">
+      <div className="flex flex-wrap justify-center gap-3 md:gap-6 pointer-events-auto">
         {[
           { icon: "♪", title: "Piano de Cola", desc: "Steinway & Sons" },
           { icon: "◇", title: "Producción Visual", desc: "LED, lasers, mapping" },
@@ -306,13 +306,13 @@ const STORY_BEATS: StoryBeat[] = [
           >
             <span className="text-lg block mb-1">{item.icon}</span>
             <span
-              className="text-[0.75rem] font-medium block"
+              className="text-[0.75rem] font-medium block text-cinema"
               style={{ color: "var(--text-primary)" }}
             >
               {item.title}
             </span>
             <span
-              className="text-[0.6rem] block mt-0.5"
+              className="text-[clamp(11px,1.5vw,13px)] block mt-0.5 text-cinema"
               style={{ color: "var(--text-muted)" }}
             >
               {item.desc}
@@ -331,7 +331,7 @@ const STORY_BEATS: StoryBeat[] = [
       <p
         data-split="words"
         data-split-stagger="0.04"
-        className="text-[clamp(1rem,2.5vw,2rem)] font-extralight max-w-[700px] text-center leading-relaxed"
+        className="text-[clamp(1rem,2.5vw,2rem)] font-extralight max-w-[700px] text-center leading-relaxed text-cinema font-display"
         style={{ color: "var(--text-primary)" }}
       >
         Una experiencia que desafía los sentidos
@@ -349,7 +349,7 @@ const STORY_BEATS: StoryBeat[] = [
       <span
         data-split="chars"
         data-split-stagger="0.02"
-        className="text-[10px] tracking-[0.4em] uppercase font-mono"
+        className="text-[11px] tracking-[0.4em] uppercase font-mono text-cinema"
         style={{ color: "var(--aura-gold)" }}
       >
         03 — Música
@@ -362,7 +362,7 @@ const STORY_BEATS: StoryBeat[] = [
     frameStart: 380,
     frameEnd: 435,
     content: (
-      <div className="flex gap-6 md:gap-8">
+      <div className="flex flex-wrap justify-center gap-4 md:gap-8">
         {[
           { year: "2023", title: "Apocalypsis", color: "#6B1520" },
           { year: "2020", title: "Romantique", color: "#C9A84C" },
@@ -378,13 +378,13 @@ const STORY_BEATS: StoryBeat[] = [
               }}
             />
             <span
-              className="text-[0.7rem] font-medium block"
+              className="text-[0.7rem] font-medium block text-cinema"
               style={{ color: "var(--text-primary)" }}
             >
               {album.title}
             </span>
             <span
-              className="text-[0.55rem] block"
+              className="text-[11px] block text-cinema"
               style={{ color: "var(--text-muted)" }}
             >
               {album.year}
@@ -406,7 +406,7 @@ const STORY_BEATS: StoryBeat[] = [
         data-split="chars"
         data-split-mask="words"
         data-split-stagger="0.03"
-        className="text-[clamp(1.2rem,3vw,2.5rem)] font-extralight italic"
+        className="text-[clamp(1.2rem,3vw,2.5rem)] font-extralight italic text-cinema font-display"
         style={{ color: "var(--text-primary)" }}
       >
         El fuego se hace música
@@ -425,7 +425,7 @@ const STORY_BEATS: StoryBeat[] = [
         data-split="chars"
         data-split-mask="words"
         data-split-stagger="0.025"
-        className="text-[clamp(1.5rem,4vw,3.5rem)] font-extralight tracking-[0.15em] text-center text-cinema"
+        className="text-[clamp(1.5rem,4vw,3.5rem)] font-extralight tracking-[0.15em] text-center text-cinema font-display"
         style={{ color: "var(--text-primary)" }}
       >
         VIVE LA EXPERIENCIA
@@ -453,7 +453,7 @@ const STORY_BEATS: StoryBeat[] = [
           Contrata el Show
         </a>
         <p
-          className="text-[0.65rem] mt-4 tracking-[0.15em]"
+          className="text-[0.65rem] mt-4 tracking-[0.15em] text-cinema"
           style={{ color: "var(--text-muted)" }}
         >
           <a href="mailto:ivannprensa@gmail.com" className="pointer-events-auto hover:text-[var(--aura-gold)] transition-colors duration-300">ivannprensa@gmail.com</a>
@@ -476,7 +476,7 @@ const STORY_BEATS: StoryBeat[] = [
         data-split="chars"
         data-split-mask="words"
         data-split-stagger="0.035"
-        className="text-[clamp(1.3rem,3vw,2.5rem)] font-extralight italic tracking-wide"
+        className="text-[clamp(1.3rem,3vw,2.5rem)] font-extralight italic tracking-wide text-cinema font-display"
         style={{ color: "var(--text-primary)" }}
       >
         Cuando el silencio habla
@@ -492,7 +492,7 @@ const STORY_BEATS: StoryBeat[] = [
       <p
         data-split="words"
         data-split-stagger="0.04"
-        className="text-[clamp(0.75rem,1.3vw,1rem)] font-light leading-relaxed max-w-[500px]"
+        className="text-[clamp(0.75rem,1.3vw,1rem)] font-light leading-relaxed max-w-[500px] text-cinema"
         style={{ color: "var(--text-secondary)" }}
       >
         La música que queda no se escucha — se siente.
@@ -509,7 +509,7 @@ const STORY_BEATS: StoryBeat[] = [
       <span
         data-split="chars"
         data-split-stagger="0.02"
-        className="text-[10px] tracking-[0.4em] uppercase font-mono"
+        className="text-[11px] tracking-[0.4em] uppercase font-mono text-cinema"
         style={{ color: "var(--aura-gold)" }}
       >
         04 — Prensa & Redes
@@ -526,7 +526,7 @@ const STORY_BEATS: StoryBeat[] = [
         <p
           data-split="words"
           data-split-stagger="0.04"
-          className="text-[clamp(0.8rem,1.5vw,1.1rem)] font-light italic leading-relaxed"
+          className="text-[clamp(0.8rem,1.5vw,1.1rem)] font-light italic leading-relaxed text-cinema"
           style={{ color: "var(--text-secondary)" }}
         >
           Más de 200 shows han demostrado que cuando la música clásica se
@@ -535,7 +535,7 @@ const STORY_BEATS: StoryBeat[] = [
         <p
           data-split="chars"
           data-split-stagger="0.03"
-          className="text-[0.65rem] mt-4 tracking-[0.15em]"
+          className="text-[0.65rem] mt-4 tracking-[0.15em] text-cinema"
           style={{ color: "var(--text-muted)" }}
         >
           Solo se puede vivir.
@@ -556,7 +556,7 @@ const STORY_BEATS: StoryBeat[] = [
           data-split="chars"
           data-split-mask="words"
           data-split-stagger="0.04"
-          className="text-[clamp(2rem,6vw,5rem)] font-extralight tracking-[0.3em] text-cinema"
+          className="text-[clamp(2rem,6vw,5rem)] font-extralight tracking-[0.3em] text-cinema font-display"
           style={{ color: "var(--text-primary)" }}
         >
           IVANN
@@ -565,7 +565,7 @@ const STORY_BEATS: StoryBeat[] = [
           data-split="chars"
           data-split-mask="words"
           data-split-stagger="0.04"
-          className="text-[clamp(2rem,6vw,5rem)] font-extralight tracking-[0.3em] text-cinema"
+          className="text-[clamp(2rem,6vw,5rem)] font-extralight tracking-[0.3em] text-cinema font-display"
           style={{ color: "var(--aura-gold)" }}
         >
           AURA
@@ -584,7 +584,7 @@ const STORY_BEATS: StoryBeat[] = [
               rel="noopener noreferrer"
               aria-label={platform.ariaLabel}
               data-stagger
-              className="pointer-events-auto hover:text-[var(--aura-gold)] transition-colors text-[0.6rem] tracking-[0.2em] uppercase"
+              className="pointer-events-auto hover:text-[var(--aura-gold)] transition-colors text-[11px] tracking-[0.2em] uppercase text-cinema"
               style={{ color: "var(--text-muted)" }}
             >
               {platform.name}
@@ -594,7 +594,7 @@ const STORY_BEATS: StoryBeat[] = [
         <p
           data-split="chars"
           data-split-stagger="0.02"
-          className="text-[0.55rem] tracking-[0.3em] uppercase mt-6"
+          className="text-[11px] tracking-[0.3em] uppercase mt-6 text-cinema"
           style={{ color: "var(--text-muted)" }}
         >
           Medellín — Bogotá — El Mundo

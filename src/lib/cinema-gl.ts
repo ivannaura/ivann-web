@@ -1157,7 +1157,7 @@ export function initCinemaGL(canvas: HTMLCanvasElement): CinemaGL | null {
         if (lifeFrac > 0.8) alpha = (1 - lifeFrac) / 0.2;
         else if (lifeFrac < 0.3) alpha = lifeFrac / 0.3;
         else alpha = 1;
-        alpha *= 0.3 + energy * 0.5;
+        alpha *= 0.4 + energy * 0.5;
 
         const idx = i * STRIDE;
         particleData[idx] = p.x;

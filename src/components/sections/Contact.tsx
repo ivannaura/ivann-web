@@ -293,7 +293,7 @@ export default function Contact() {
                       href={social.url}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="text-xs tracking-[0.15em] uppercase transition-colors duration-300 hover:text-[var(--aura-gold)]"
+                      className="text-xs tracking-[0.15em] uppercase transition-colors duration-300 hover:text-[var(--aura-gold)] min-h-[44px] inline-flex items-center"
                       style={{ color: "var(--text-muted)" }}
                       onMouseEnter={() => { setCursorVariant("hover"); playHover(); }}
                       onMouseLeave={() => setCursorVariant("default")}
@@ -319,7 +319,9 @@ export default function Contact() {
                   className="w-16 h-16 rounded-full flex items-center justify-center mb-6"
                   style={{ border: "1px solid var(--aura-gold-dim)" }}
                 >
-                  <span style={{ color: "var(--aura-gold)" }}>✓</span>
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ color: "var(--aura-gold)" }}>
+                    <path d="M5 13l4 4L19 7" />
+                  </svg>
                 </div>
                 <h3
                   data-success-heading
@@ -374,7 +376,7 @@ export default function Contact() {
                     aria-describedby={errors.name ? "contact-name-error" : undefined}
                   />
                   {errors.name && (
-                    <p id="contact-name-error" className="text-[10px] mt-1" style={{ color: "var(--crimson)" }}>
+                    <p id="contact-name-error" className="text-xs mt-1" style={{ color: "#DC4A4A" }}>
                       {errors.name}
                     </p>
                   )}
@@ -403,7 +405,7 @@ export default function Contact() {
                     aria-describedby={errors.email ? "contact-email-error" : undefined}
                   />
                   {errors.email && (
-                    <p id="contact-email-error" className="text-[10px] mt-1" style={{ color: "var(--crimson)" }}>
+                    <p id="contact-email-error" className="text-xs mt-1" style={{ color: "#DC4A4A" }}>
                       {errors.email}
                     </p>
                   )}
@@ -471,7 +473,7 @@ export default function Contact() {
                     aria-describedby={errors.message ? "contact-message-error" : undefined}
                   />
                   {errors.message && (
-                    <p id="contact-message-error" className="text-[10px] mt-1" style={{ color: "var(--crimson)" }}>
+                    <p id="contact-message-error" className="text-xs mt-1" style={{ color: "#DC4A4A" }}>
                       {errors.message}
                     </p>
                   )}
@@ -480,7 +482,7 @@ export default function Contact() {
                 <div data-reveal>
                   <button
                     type="submit"
-                    className="magnetic-btn px-10 py-4 text-xs tracking-[0.3em] uppercase transition-all duration-500 rounded-sm hover:bg-[var(--aura-gold)] hover:text-[var(--bg-void)]"
+                    className="magnetic-btn px-10 py-4 text-xs tracking-[0.3em] uppercase transition-all duration-500 rounded-sm hover:bg-[var(--aura-gold)] hover:text-[var(--bg-void)] focus-visible:ring-1 focus-visible:ring-[var(--aura-gold)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg-surface)]"
                     style={{
                       border: "1px solid var(--aura-gold-dim)",
                       color: "var(--aura-gold)",
@@ -496,6 +498,15 @@ export default function Contact() {
           </div>
         </div>
       </div>
+
+      {/* Bottom gradient separator */}
+      <div
+        className="absolute bottom-0 left-0 right-0 h-px"
+        style={{
+          background:
+            "linear-gradient(to right, transparent, var(--aura-gold-dim), transparent)",
+        }}
+      />
     </section>
   );
 }

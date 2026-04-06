@@ -336,7 +336,7 @@ export default function ScrollVideoPlayer({
 
       // Dynamic letterbox (CSS scale property — avoids string template for transform)
       const mood = getMoodCPU(progressRef.current);
-      const barScale = Math.max(0.5, Math.min(1.5, 1.3 - mood * 0.4));
+      const barScale = Math.max(0.3, Math.min(2.0, 1.6 - mood * 0.8));
       if (letterboxTopRef.current) {
         letterboxTopRef.current.style.scale = `1 ${barScale}`;
       }

@@ -245,13 +245,17 @@ export default function Footer() {
               &ldquo;La música es un mágico vehículo
               <br />
               que nos transporta al universo.&rdquo;
+              <footer
+                className="mt-4"
+              >
+                <cite
+                  className="text-[10px] tracking-[0.2em] not-italic"
+                  style={{ color: "var(--aura-gold-dim)" }}
+                >
+                  — IVANN AURA
+                </cite>
+              </footer>
             </blockquote>
-            <span
-              className="text-[10px] tracking-[0.2em] mt-4"
-              style={{ color: "var(--aura-gold-dim)" }}
-            >
-              — IVANN AURA
-            </span>
           </div>
         </div>
 

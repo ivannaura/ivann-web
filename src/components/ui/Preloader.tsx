@@ -153,6 +153,19 @@ export default function Preloader() {
         pointerEvents: dismissed ? "none" : "auto",
       }}
     >
+      {/* Subtle grain texture overlay */}
+      <div
+        aria-hidden="true"
+        style={{
+          position: "absolute",
+          inset: 0,
+          pointerEvents: "none",
+          opacity: 0.03,
+          backgroundImage:
+            "url(\"data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='1'/%3E%3C/svg%3E\")",
+          backgroundRepeat: "repeat",
+        }}
+      />
       {/* Name — masked char reveal */}
       <h1
         ref={nameRef}
@@ -160,6 +173,7 @@ export default function Preloader() {
           fontSize: "clamp(1.5rem, 4vw, 2.5rem)",
           letterSpacing: "0.35em",
           fontWeight: 200,
+          fontFamily: "var(--font-display)",
           color: "var(--text-primary)",
           marginBottom: 24,
         }}
@@ -198,7 +212,7 @@ export default function Preloader() {
       <p
         ref={subtitleRef}
         style={{
-          fontSize: "clamp(9px, 1.5vw, 11px)",
+          fontSize: "clamp(11px, 1.5vw, 13px)",
           letterSpacing: "0.3em",
           textTransform: "uppercase",
           color: "var(--text-muted)",

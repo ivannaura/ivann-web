@@ -7,7 +7,9 @@ import { playHover, playClick } from "@/lib/micro-sounds";
 
 const NAV_ITEMS = [
   { label: "Inicio", href: "#top", num: "01" },
-  { label: "Contacto", href: "#contacto", num: "02" },
+  { label: "Espectáculo", href: "#espectaculo", num: "02" },
+  { label: "Música", href: "#musica", num: "03" },
+  { label: "Contacto", href: "#contacto", num: "04" },
 ];
 
 interface NavigationProps {
