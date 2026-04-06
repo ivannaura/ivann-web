@@ -103,7 +103,7 @@ User scroll/key/click → addImpulse(normalizedVelocity)
 Constants: `FRICTION=0.985`, `MIN_RATE=0.5`, `MAX_RATE=1.0`, `MAX_VOLUME=0.7`, `PLAY_THRESHOLD=0.05`, `STOP_THRESHOLD=0.02`, `DRIFT_THRESHOLD=3.0s`
 Proportional impulse: `amount = 0.1 + normalizedVelocity * 0.25` (gentle scroll → 0.1, fling → 0.35)
 
-Delta-time friction: `Math.pow(FRICTION, dt)` where `dt = (now - lastTime) / 16.667` — consistent behavior across frame rates.
+Delta-time friction: `Math.exp(LN_FRICTION * dt)` where `dt = (now - lastTime) / 16.667` — consistent behavior across frame rates.
 Sync crossfade: gain ramp to 0 before `currentTime` snap, then ramp back up (avoids audible pop).
 Drift correction: `drift * 0.1 * dt` (delta-time scaled).
 
@@ -113,7 +113,7 @@ Both AudioMomentum and MicroSounds share a single AudioContext via `shared-audio
 
 ### Frequency Analysis (AnalyserNode)
 
-AudioMomentum connects `MediaElementSource → AnalyserNode → GainNode → destination` on the shared context. `fftSize=256` → 128 bins. Bands averaged + asymmetric EMA smoothed (`ATTACK_ALPHA=0.6`, `RELEASE_ALPHA=0.15`, `smoothingTimeConstant=0.6`). Frequency analysis gated: early return when `energy <= 0 && !wasPlaying`.
+AudioMomentum connects `MediaElementSource → AnalyserNode → GainNode → destination` on the shared context. `fftSize=256` → 128 bins. `getFloatFrequencyData` (full dB precision, normalized to 0-1 via `(dB - DB_MIN) * DB_RANGE_INV`). Bands averaged with unrolled loops + dt-corrected asymmetric EMA (`1 - Math.pow(1 - α, dt)`, attack=0.6, release=0.15). Analysis runs every 2nd frame via `analyseSkip` counter. Frequency analysis gated: early return when `energy <= 0 && !wasPlaying`.
 - **Bass** (bins 0-3, ~0-516Hz): Piano body, low octaves
 - **Mids** (bins 3-30, ~516-5160Hz): Melody, main piano
 - **Highs** (bins 30-128, ~5160Hz+): Harmonics, shimmer, applause
@@ -210,7 +210,7 @@ FBOs: FBO_A (full, cinema output), FBO_B (half, bloom downsample), FBO_B2 (half,
 - **Cursor spotlight**: Quadratic falloff, tinted with act highlight color
 
 ### Particle System (1100 on High, 500 on Mid)
-- 1000 ambient + 100 cursor trail particles (zero-GC: pre-allocated Float32Array, `bufferSubData`, resetParticle in-place). Named constants: `PARTICLE_DAMPING`, `PARTICLE_CURSOR_RADIUS`, etc. Velocity damping delta-time corrected: `Math.pow(PARTICLE_DAMPING, dt * 60)`. Shader detach after linking (6 `detachShader` calls). Context restored handler.
+- 1000 ambient + 100 cursor trail particles (zero-GC: pre-allocated Float32Array, `bufferSubData`, resetParticle in-place). Named constants: `PARTICLE_DAMPING`, `PARTICLE_CURSOR_RADIUS`, etc. Velocity damping hoisted outside loop: `Math.exp(LN_DAMPING_60 * dt)`. Cursor attraction uses squared-distance check before `Math.sqrt`. Shader detach after linking (6 `detachShader` calls). Context restored handler.
 - CPU-side 48×20 luminance grid (async PBO readback every 10 frames, 1-interval latency) → gradient force on velocity
 - Cursor trail: spawn at mouse position, shorter life (60 frames), brighter white → act highlight color
 - Act burst: 50 particles at boundary, 2× size, high initial velocity, 40 frame life
@@ -269,10 +269,12 @@ Respects `prefers-reduced-motion: reduce` (entire system disabled).
 - `playClick()`: E4+E5 (330+659) harmonic (300ms, vol 0.04), 100ms throttle
 - `playWhoosh()`: Sawtooth sweep 400→80Hz through lowpass filter (150ms)
 - Throttled: whoosh max 1/sec, click 100ms, hover debounced by browser event rate
-- Oscillator `onended` disconnect for cleanup
+- **Pre-allocated GainNode pools**: NoteVoice pool (4 voices) + WhooshVoice pool (2 voices) — only OscillatorNodes created per call (single-use by Web Audio spec). Graceful drop when all voices busy.
+- Oscillator `onended` disconnect for cleanup (GainNodes persist in pool)
+- Pool reset on AudioContext change; full cleanup in `destroyMicroSounds()`
 - Runtime `prefers-reduced-motion` listener (responds to OS toggle without reload)
 - Used in: Navigation, Contact, Footer (hover/click interactions)
-- `destroyMicroSounds()` called on page unmount to release shared AudioContext ref
+- `destroyMicroSounds()` called on page unmount to release pools + shared AudioContext ref
 - Respects `soundMuted` and `prefers-reduced-motion`
 
 ## Design Tokens (CSS Custom Properties)
@@ -352,26 +354,30 @@ npm run typecheck    # TypeScript check (tsc --noEmit)
 
 ## Known Bugs & Performance Issues
 
-> Full catalog with code examples: `docs/plans/2026-04-06-optimization-tricks.md` (30 tricks, 5 priority tiers)
+> Full catalog with code examples: `docs/plans/2026-04-06-optimization-tricks.md` (44 tricks, 5 priority tiers)
 
-### Bugs (confirmed by multiple research agents)
-- **Asymmetric EMA not dt-corrected** (`audio-momentum.ts:223`): Fixed alpha `ATTACK=0.6`/`RELEASE=0.15` applied without `1-(1-α)^dt` correction. At 144Hz smoothing is 2.4× more aggressive than at 60Hz. Causes inconsistent visual reactivity across displays.
-- **`Math.pow(DAMPING, dt*60)` inside particle loop** (`cinema-gl.ts`): Called 1100× per frame despite `dt` being constant per frame. Should be hoisted outside the loop.
-- **3 separate RAF loops**: ScrollVideoPlayer, AudioMomentum, and CustomCursor each run their own `requestAnimationFrame`. Causes ordering dependency (1-frame audio latency) and 2 redundant rAF registrations.
+### Bugs — FIXED (commit a337269)
+- ~~**Asymmetric EMA not dt-corrected**~~ → `1 - Math.pow(1 - α, dt)` correction applied (`audio-momentum.ts`)
+- ~~**`Math.pow(DAMPING, dt*60)` inside particle loop**~~ → Hoisted outside loop as `Math.exp(LN_DAMPING_60 * dt)` (`cinema-gl.ts`)
 
-### GC Pressure (hot path allocations)
-- **String templates every frame**: `translate(${x}px, ${y}px)` in CustomCursor, shake transform, letterbox scaleY — ~600 strings/sec
-- **sampleLumGrad return objects**: Returns `{gx, gy}` for each of 1100 particles — 66,000 short-lived objects/sec
-- **Asymmetric EMA closure**: Arrow function re-created every `updateFrequencyBands()` call
+### GC Pressure — FIXED (commit a337269)
+- ~~**String templates every frame**~~ → CSS `style.translate`/`style.scale` properties (CustomCursor, ScrollVideoPlayer)
+- ~~**sampleLumGrad return objects**~~ → Pre-allocated `_gradResult` reusable object (`cinema-gl.ts`)
+- ~~**Asymmetric EMA closure**~~ → Inlined into `updateFrequencyBands()` with local vars (`audio-momentum.ts`)
 
-### Optimization Patterns (pending implementation)
-- `Math.pow(CONST, dt)` → `Math.exp(LN_CONST * dt)` with precomputed `LN_CONST = Math.log(CONST)` (11 call sites across 5 files)
-- `getByteFrequencyData` → `getFloatFrequencyData` for smoother shader-driving precision
-- `audio.volume` per frame → route through existing GainNode
+### Performance — IMPLEMENTED (commit a337269)
+- `Math.pow(CONST, dt)` → `Math.exp(LN_CONST * dt)` with precomputed constants (11 call sites across 5 files)
+- `getByteFrequencyData` → `getFloatFrequencyData` with dB→0-1 normalization (`audio-momentum.ts`)
+- `audio.volume` per frame → `GainNode.gain.setTargetAtTime()` with JND 0.005 threshold (`audio-momentum.ts`)
+- `glColorMask(true, true, true, false)` on 3 opaque passes, restored before particles (`cinema-gl.ts`)
+- `texStorage2D` immutable FBO textures with delete+recreate on resize (`cinema-gl.ts`)
+- Squared-distance cursor check avoids `Math.sqrt` for out-of-radius particles (`cinema-gl.ts`)
+- Frequency analysis every 2nd frame via `analyseSkip` counter (`audio-momentum.ts`)
+- Pre-allocated NoteVoice (4) + WhooshVoice (2) GainNode pools (`micro-sounds.ts`)
+
+### Remaining (not yet implemented)
+- **3 separate RAF loops**: ScrollVideoPlayer, AudioMomentum, and CustomCursor each run their own `requestAnimationFrame`. Should coalesce into GSAP ticker.
 - JND idle gating: skip WebGL rendering when energy ≈ 0 and no user interaction
-- `glColorMask(true, true, true, false)` on opaque passes (25% bandwidth save)
-- `texStorage2D` + `texSubImage2D` for immutable FBO textures
-- `invalidateFramebuffer()` after each FBO pass (tile-based mobile GPUs)
 
 ## Conventions
 
@@ -382,7 +388,7 @@ npm run typecheck    # TypeScript check (tsc --noEmit)
 - Story beats in ScrollStoryOverlay use these frame indices for timing
 - Mobile menu uses native `<dialog>` with `showModal()` for WCAG-compliant focus management
 - Cursor variants: `"default" | "hover" | "hidden"` (no `"text"` — removed as unused)
-- CustomCursor uses `transform: translate()` not `left`/`top` (GPU compositing)
+- CustomCursor uses CSS `style.translate` property (not `transform: translate()`) for GPU compositing without string allocation
 - Scrollbar hidden on `html` element (not `body`) for Lenis compatibility
 - Section entrance animations use GSAP ScrollTrigger + `data-reveal` attributes (not CSS `.reveal-up`)
 - Contact line animation uses GSAP + `data-line` (not CSS `.line-grow`)
@@ -399,14 +405,17 @@ npm run typecheck    # TypeScript check (tsc --noEmit)
 - CinemaGL: luminance grid uses async PBO readback (`PIXEL_PACK_BUFFER` + `getBufferSubData`) — no GPU pipeline stall
 - CinemaGL: Kawase bloom result FBO dynamically selected based on `KAWASE_ITERATIONS % 2` (ping-pong correctness)
 - CinemaGL: `texImage2D` guarded by `lastVideoTime` — skips upload when video frame unchanged
+- CinemaGL: FBO textures use `texStorage2D` (immutable) — resize via delete+recreate, with no-op guard on same dimensions
+- CinemaGL: `glColorMask(true,true,true,false)` on cinema/bloom/composite passes, restored `(true,true,true,true)` before additive particles
+- CinemaGL: `sampleLumGrad` returns pre-allocated `_gradResult` object (zero-alloc per particle per frame)
 - AudioMomentum: `play()` Promise callback guards against destroyed instance (`if (!this.running) return`)
-- MicroSounds: `getCtx()` re-acquires if shared AudioContext was closed
+- MicroSounds: `getCtx()` re-acquires if shared AudioContext was closed; resets voice pools on context change
 - CinemaGL: `webglcontextlost` / `webglcontextrestored` events tracked — render skips when context lost
 - CinemaGL: all `gl.create*()` calls null-checked (no `!` non-null assertions on losable GL objects)
 - SharedAudioContext: `releaseAudioContext()` guards against negative refCount
 - ScrollVideoPlayer: `audioMuted` applied to freshly created AudioMomentum via ref (React effect ordering)
 - ScrollVideoPlayer: bass shake via `shakeRef` (ref-based transform on sticky div, no re-render)
-- ScrollVideoPlayer: dynamic letterbox bars (4vh `--bg-void` divs, scaleY varies with mood)
+- ScrollVideoPlayer: dynamic letterbox bars (4vh `--bg-void` divs, `style.scale` varies with mood — CSS scale property, not transform)
 - ScrollStoryOverlay: `data-reactive` letter-spacing is continuous (`energy * bands.mids * 0.08`), no threshold gate
 - ScrollStoryOverlay: exit guard simplified to `progress <= 0.8` (removed `tl.totalProgress() < 1` which caused fast-scroll glitches)
 - ScrollStoryOverlay: non-split beats exit via CSS opacity fade on ref style (not GSAP)
@@ -433,7 +442,7 @@ npm run typecheck    # TypeScript check (tsc --noEmit)
 - Contact: success state animated via GSAP (circle `back.out(1.7)` + staggered text slide-up)
 - AudioMomentum: playbackRate uses exponential curve `Math.pow(energy, 0.7)` before lerp (vinyl-like slowdown)
 - AudioMomentum: `setMuted()` uses GainNode gain ramp (not `audio.muted`) to preserve AnalyserNode signal for visual reactivity
-- AudioMomentum: logarithmic volume `Math.pow(volume, 2)` for natural perception
+- AudioMomentum: logarithmic volume `Math.pow(volume, 2)` routed through `GainNode.gain.setTargetAtTime()` with JND 0.005 threshold (not `audio.volume`)
 - MicroSounds: `playHover()` tracks `lastNoteIndex` with do-while to prevent consecutive same notes
 - Footer: AURA heading uses `querySelectorAll("[data-brand]")` with staggered SplitText entrance
 - Footer: 44px min touch targets on social links, handles visible on mobile (`opacity-60 md:opacity-0`)
@@ -456,7 +465,7 @@ npm run typecheck    # TypeScript check (tsc --noEmit)
 - Page: hidden `<h1>` for SEO, haze computation gated by progress delta, `tabIndex={-1}` on `<main>`
 - CSS: `overscroll-behavior: none` on html, `.text-cinema` text-shadow utility, `content-visibility: auto` on Contact/Footer
 - CSS: global `input:focus-visible` ring style
-- **Delta-time correction pattern**: `Math.pow(CONSTANT, dt)` where `dt = (now - lastTime) / 16.667` — applied in audio-momentum, usePianoScroll, ScrollVideoPlayer, CustomCursor, cinema-gl particles
+- **Delta-time correction pattern**: `Math.exp(LN_CONSTANT * dt)` where `LN_CONSTANT = Math.log(c)` precomputed at module level, `dt = (now - lastTime) / 16.667` — applied in audio-momentum, usePianoScroll, ScrollVideoPlayer, CustomCursor, cinema-gl particles
 - **Touch targets**: all interactive elements meet 44px minimum (WCAG 2.5.5)
 - **Safe area insets**: applied in Navigation, PianoIndicator (`env(safe-area-inset-*)`)
 - See `docs/CONVENTIONS.md` for full technical conventions

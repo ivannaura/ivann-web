@@ -3,6 +3,8 @@
 > Mathematical, physical, and logical optimization tricks applicable to the scroll-driven cinema renderer.
 > Inspired by game development traditions (Quake III fast inverse sqrt, Doom sector tricks, etc.)
 
+**Implementation status:** Critical + High-value tricks implemented in commit `a337269` (2026-04-06). See inline ✅/⬚ markers.
+
 **Pipeline context:**
 ```
 Video → Pass 1: Cinema (CA + vignette + grain) → FBO_A
