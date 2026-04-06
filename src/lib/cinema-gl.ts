@@ -29,8 +29,12 @@ export { getMoodCPU } from './mood';
 // ---------------------------------------------------------------------------
 const PARTICLE_DAMPING = 0.98;
 const PARTICLE_CURSOR_RADIUS = 300;
+const PARTICLE_CURSOR_RADIUS_SQ = PARTICLE_CURSOR_RADIUS * PARTICLE_CURSOR_RADIUS;
 const PARTICLE_LUM_FORCE = 25;
 const PARTICLE_CURSOR_FORCE = 15;
+
+// Pre-computed log for hoisted damping: Math.pow(DAMPING, dt*60) = Math.exp(LN_DAMPING_60 * dt)
+const LN_DAMPING_60 = Math.log(PARTICLE_DAMPING) * 60;
 
 // ---------------------------------------------------------------------------
 // Tier detection
@@ -62,17 +66,22 @@ interface FBO {
   height: number;
 }
 
-function createFBO(gl: WebGL2RenderingContext, w: number, h: number): FBO | null {
-  const framebuffer = gl.createFramebuffer();
+function createFBOTexture(gl: WebGL2RenderingContext, w: number, h: number): WebGLTexture | null {
   const texture = gl.createTexture();
-  if (!framebuffer || !texture) return null;
-
+  if (!texture) return null;
   gl.bindTexture(gl.TEXTURE_2D, texture);
-  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, w, h, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+  gl.texStorage2D(gl.TEXTURE_2D, 1, gl.RGBA8, w, h);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+  return texture;
+}
+
+function createFBO(gl: WebGL2RenderingContext, w: number, h: number): FBO | null {
+  const framebuffer = gl.createFramebuffer();
+  const texture = createFBOTexture(gl, w, h);
+  if (!framebuffer || !texture) return null;
 
   gl.bindFramebuffer(gl.FRAMEBUFFER, framebuffer);
   gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, texture, 0);
@@ -81,11 +90,19 @@ function createFBO(gl: WebGL2RenderingContext, w: number, h: number): FBO | null
   return { framebuffer, texture, width: w, height: h };
 }
 
+/** Resize FBO by deleting and recreating its immutable texStorage2D texture. */
 function resizeFBO(gl: WebGL2RenderingContext, fbo: FBO, w: number, h: number): void {
+  if (fbo.width === w && fbo.height === h) return; // no-op if size unchanged
   fbo.width = w;
   fbo.height = h;
-  gl.bindTexture(gl.TEXTURE_2D, fbo.texture);
-  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, w, h, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+  gl.deleteTexture(fbo.texture);
+  const newTex = createFBOTexture(gl, w, h);
+  if (newTex) {
+    fbo.texture = newTex;
+    gl.bindFramebuffer(gl.FRAMEBUFFER, fbo.framebuffer);
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, newTex, 0);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+  }
 }
 
 function destroyFBO(gl: WebGL2RenderingContext, fbo: FBO): void {
@@ -722,6 +739,9 @@ export function initCinemaGL(canvas: HTMLCanvasElement): CinemaGL | null {
   const tier = detectTier(gl);
 
   // FBOs — only for mid+ tiers
+  // Note: no depth/stencil attachments on any FBO (color-only), so
+  // gl.invalidateFramebuffer(gl.FRAMEBUFFER, [gl.DEPTH_STENCIL_ATTACHMENT])
+  // is not needed — there are no depth/stencil buffers to invalidate.
   let fboA: FBO | null = null;
   let fboB: FBO | null = null;
   let fboB2: FBO | null = null;
@@ -816,6 +836,9 @@ export function initCinemaGL(canvas: HTMLCanvasElement): CinemaGL | null {
     lumPBOPending = true;
   }
 
+  // Reusable gradient result object — avoids allocating {gx, gy} per particle per frame
+  const _gradResult = { gx: 0, gy: 0 };
+
   function sampleLumGrad(px: number, py: number): { gx: number; gy: number } {
     const gxIdx = Math.floor((px / w) * (GRID_W - 1));
     const gyIdx = Math.floor((py / h) * (GRID_H - 1));
@@ -824,10 +847,9 @@ export function initCinemaGL(canvas: HTMLCanvasElement): CinemaGL | null {
     const left = Math.max(idx - 1, 0);
     const down = Math.min(idx + GRID_W, lumGrid.length - 1);
     const up = Math.max(idx - GRID_W, 0);
-    return {
-      gx: (lumGrid[right] - lumGrid[left]) * 0.5,
-      gy: (lumGrid[down] - lumGrid[up]) * 0.5,
-    };
+    _gradResult.gx = (lumGrid[right] - lumGrid[left]) * 0.5;
+    _gradResult.gy = (lumGrid[down] - lumGrid[up]) * 0.5;
+    return _gradResult;
   }
 
   let lastActIndex = 0;
@@ -924,6 +946,7 @@ export function initCinemaGL(canvas: HTMLCanvasElement): CinemaGL | null {
         gl.viewport(0, 0, w, h);
       }
       gl.disable(gl.BLEND);
+      gl.colorMask(true, true, true, false); // Skip alpha writes on opaque passes
       gl.useProgram(cinemaProg);
       gl.uniform1f(cUTime, time);
       gl.uniform1f(cUEnergy, energy);
@@ -940,6 +963,7 @@ export function initCinemaGL(canvas: HTMLCanvasElement): CinemaGL | null {
       if (fboA && fboB && bloomThreshProg) {
         gl.bindFramebuffer(gl.FRAMEBUFFER, fboB.framebuffer);
         gl.viewport(0, 0, fboB.width, fboB.height);
+        gl.colorMask(true, true, true, false); // Skip alpha writes on opaque passes
         gl.useProgram(bloomThreshProg);
         gl.activeTexture(gl.TEXTURE1);
         gl.bindTexture(gl.TEXTURE_2D, fboA.texture);
@@ -977,6 +1001,7 @@ export function initCinemaGL(canvas: HTMLCanvasElement): CinemaGL | null {
         gl.bindFramebuffer(gl.FRAMEBUFFER, null);
         gl.viewport(0, 0, w, h);
         gl.disable(gl.BLEND);
+        gl.colorMask(true, true, true, false); // Skip alpha writes on opaque passes
         gl.useProgram(compositeProg);
 
         // Bind cinema texture (FBO_A)
@@ -1083,6 +1108,9 @@ export function initCinemaGL(canvas: HTMLCanvasElement): CinemaGL | null {
       lastTime = time;
       const speed = 0.05 + energy * 0.95;
 
+      // Hoisted: damping is constant for all particles within a frame
+      const damping = Math.exp(LN_DAMPING_60 * dt);
+
       for (let i = 0; i < particleCount; i++) {
         const p = particles[i];
         p.life -= dt * speed;
@@ -1098,18 +1126,18 @@ export function initCinemaGL(canvas: HTMLCanvasElement): CinemaGL | null {
           p.vy += grad.gy * LUMINANCE_FORCE * energy * dt;
         }
 
-        // Cursor attraction (as velocity force)
+        // Cursor attraction (as velocity force) — squared-distance check first
         const toCursorX = mouseX - p.x;
         const toCursorY = mouseY - p.y;
-        const cursorDist = Math.sqrt(toCursorX * toCursorX + toCursorY * toCursorY) + 1;
-        if (cursorDist < PARTICLE_CURSOR_RADIUS) {
+        const cursorDistSq = toCursorX * toCursorX + toCursorY * toCursorY;
+        if (cursorDistSq < PARTICLE_CURSOR_RADIUS_SQ) {
+          const cursorDist = Math.sqrt(cursorDistSq) + 1;
           const pull = (1 - cursorDist / PARTICLE_CURSOR_RADIUS) * CURSOR_FORCE * energy;
           p.vx += (toCursorX / cursorDist) * pull * dt;
           p.vy += (toCursorY / cursorDist) * pull * dt;
         }
 
-        // Velocity damping (delta-time corrected: PARTICLE_DAMPING^(dt*60))
-        const damping = Math.pow(PARTICLE_DAMPING, dt * 60);
+        // Velocity damping (delta-time corrected, hoisted above loop)
         p.vx *= damping;
         p.vy *= damping;
 
@@ -1138,6 +1166,7 @@ export function initCinemaGL(canvas: HTMLCanvasElement): CinemaGL | null {
         particleData[idx + 3] = p.size * (0.7 + energy * 0.6);
       }
 
+      gl.colorMask(true, true, true, true); // Restore alpha writes for additive particle blend
       gl.enable(gl.BLEND);
       gl.blendFunc(gl.SRC_ALPHA, gl.ONE); // additive = glowing
 

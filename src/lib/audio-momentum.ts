@@ -16,11 +16,24 @@ const PLAY_THRESHOLD = 0.05;
 const STOP_THRESHOLD = 0.02;
 const DRIFT_THRESHOLD = 3.0;
 
+// Precomputed ln(FRICTION) for exp-based decay: Math.exp(LN_FRICTION * dt)
+const LN_FRICTION = Math.log(FRICTION);
+
 // Frequency band boundaries (bin indices for fftSize=256 → 128 bins)
 // Sample rate 44100Hz → each bin ≈ 172Hz
 // Bass: 0–2 (~0-516Hz piano body, low octaves), Mids: 3–29 (~516-5160Hz melody, main piano), Highs: 30–128 (~5160Hz+ harmonics, shimmer, applause)
 const BASS_END = 3;
 const MIDS_END = 30;
+
+// Precomputed band normalization divisors (unrolled summation)
+const BASS_NORM = 1 / BASS_END;
+const MIDS_NORM = 1 / (MIDS_END - BASS_END);
+const HIGHS_NORM = 1 / (128 - MIDS_END);
+
+// Float frequency data dB range constants
+const DB_MIN = -100;
+const DB_MAX = -30;
+const DB_RANGE_INV = 1 / (DB_MAX - DB_MIN);
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -64,11 +77,13 @@ export class AudioMomentum {
   private analyser: AnalyserNode | null = null;
   private sourceNode: MediaElementAudioSourceNode | null = null;
   private gainNode: GainNode | null = null;
-  private freqData: Uint8Array<ArrayBuffer> | null = null;
+  private freqData: Float32Array<ArrayBuffer> | null = null;
   private bands: FrequencyBands = { bass: 0, mids: 0, highs: 0 };
   private smoothBands: FrequencyBands = { bass: 0, mids: 0, highs: 0 };
   private lastTime: number = 0;
   private isMuted = false;
+  private lastTargetGain = 0;
+  private analyseSkip = 0;
 
   // ---- Public API ---------------------------------------------------------
 
@@ -77,6 +92,7 @@ export class AudioMomentum {
     this.audio = new Audio(audioSrc);
     this.audio.preload = 'auto';
     this.audio.loop = false;
+    this.audio.volume = 1; // permanent — volume routed through GainNode
 
     // Disable pitch correction — playbackRate changes produce vinyl slowdown.
     // preservesPitch is baseline since Dec 2023 — no vendor prefixes needed.
@@ -118,7 +134,7 @@ export class AudioMomentum {
     if (this.gainNode && this.audioCtx) {
       const now = this.audioCtx.currentTime;
       this.gainNode.gain.cancelScheduledValues(now);
-      this.gainNode.gain.setTargetAtTime(muted ? 0 : 1, now, 0.05);
+      this.gainNode.gain.setTargetAtTime(muted ? 0 : this.lastTargetGain, now, 0.05);
     }
   }
 
@@ -176,6 +192,8 @@ export class AudioMomentum {
       this.analyser = this.audioCtx.createAnalyser();
       this.analyser.fftSize = 256;
       this.analyser.smoothingTimeConstant = 0.6;
+      this.analyser.minDecibels = DB_MIN;
+      this.analyser.maxDecibels = DB_MAX;
 
       this.sourceNode = this.audioCtx.createMediaElementSource(this.audio);
       this.gainNode = this.audioCtx.createGain();
@@ -183,7 +201,7 @@ export class AudioMomentum {
       this.analyser.connect(this.gainNode);
       this.gainNode.connect(this.audioCtx.destination);
 
-      this.freqData = new Uint8Array(this.analyser.frequencyBinCount) as Uint8Array<ArrayBuffer>;
+      this.freqData = new Float32Array(this.analyser.frequencyBinCount);
     } catch {
       // Web Audio not available — frequency bands stay at 0
       // Release the acquired context ref to keep refCount balanced
@@ -196,35 +214,39 @@ export class AudioMomentum {
     }
   }
 
-  /** Extract bass/mids/highs from frequency data. */
-  private updateFrequencyBands(): void {
+  /** Extract bass/mids/highs from float frequency data with dt-corrected smoothing. */
+  private updateFrequencyBands(dt: number): void {
     if (!this.analyser || !this.freqData) return;
     if (this.energy <= 0 && !this.wasPlaying) return;
 
-    this.analyser.getByteFrequencyData(this.freqData);
+    this.analyser.getFloatFrequencyData(this.freqData);
     const bins = this.freqData;
-    const len = bins.length; // 128
 
-    // Average each band, normalize to 0-1
-    let bassSum = 0, midsSum = 0, highsSum = 0;
-    for (let i = 0; i < len; i++) {
-      if (i < BASS_END) bassSum += bins[i];
-      else if (i < MIDS_END) midsSum += bins[i];
-      else highsSum += bins[i];
+    // Unrolled branchless band summation with dB→0-1 normalization
+    let bassSum = 0;
+    for (let i = 0; i < BASS_END; i++) {
+      bassSum += Math.max(0, Math.min(1, (bins[i] - DB_MIN) * DB_RANGE_INV));
+    }
+    let midsSum = 0;
+    for (let i = BASS_END; i < MIDS_END; i++) {
+      midsSum += Math.max(0, Math.min(1, (bins[i] - DB_MIN) * DB_RANGE_INV));
+    }
+    let highsSum = 0;
+    for (let i = MIDS_END; i < 128; i++) {
+      highsSum += Math.max(0, Math.min(1, (bins[i] - DB_MIN) * DB_RANGE_INV));
     }
 
-    this.bands.bass = bassSum / (BASS_END * 255);
-    this.bands.mids = midsSum / ((MIDS_END - BASS_END) * 255);
-    this.bands.highs = highsSum / ((len - MIDS_END) * 255);
+    this.bands.bass = bassSum * BASS_NORM;
+    this.bands.mids = midsSum * MIDS_NORM;
+    this.bands.highs = highsSum * HIGHS_NORM;
 
-    // Asymmetric EMA: fast attack (0.6), slow release (0.15) — piano dynamics
-    const ATTACK_ALPHA = 0.6;
-    const RELEASE_ALPHA = 0.15;
-    const asymmetric = (smoothed: number, raw: number) =>
-      lerp(smoothed, raw, raw > smoothed ? ATTACK_ALPHA : RELEASE_ALPHA);
-    this.smoothBands.bass = asymmetric(this.smoothBands.bass, this.bands.bass);
-    this.smoothBands.mids = asymmetric(this.smoothBands.mids, this.bands.mids);
-    this.smoothBands.highs = asymmetric(this.smoothBands.highs, this.bands.highs);
+    // Delta-time corrected asymmetric EMA: fast attack, slow release — piano dynamics
+    const attackAlpha = 1 - Math.pow(1 - 0.6, dt);
+    const releaseAlpha = 1 - Math.pow(1 - 0.15, dt);
+    const sb = this.smoothBands, rb = this.bands;
+    sb.bass = lerp(sb.bass, rb.bass, rb.bass > sb.bass ? attackAlpha : releaseAlpha);
+    sb.mids = lerp(sb.mids, rb.mids, rb.mids > sb.mids ? attackAlpha : releaseAlpha);
+    sb.highs = lerp(sb.highs, rb.highs, rb.highs > sb.highs ? attackAlpha : releaseAlpha);
   }
 
   /** Pause loop and audio when tab goes to background. */
@@ -238,9 +260,9 @@ export class AudioMomentum {
       this.running = false;
       cancelAnimationFrame(this.rafId);
     } else {
-      // Decay energy for elapsed time while hidden
+      // Decay energy for elapsed time while hidden (exp-based for perf)
       const elapsed = (performance.now() - this.hiddenAt) / 16.67;
-      this.energy *= Math.pow(FRICTION, elapsed);
+      this.energy *= Math.exp(LN_FRICTION * elapsed);
       if (this.energy < 0.001) this.energy = 0;
 
       // Resume shared AudioContext (browsers suspend on hidden tab)
@@ -262,15 +284,18 @@ export class AudioMomentum {
   private update = (): void => {
     if (!this.running) return;
 
-    // --- delta-time friction decay ---
+    // --- delta-time friction decay (exp-based for perf) ---
     const now = performance.now();
     const dt = Math.min((now - this.lastTime) / 16.667, 3);
     this.lastTime = now;
-    this.energy *= Math.pow(FRICTION, dt);
+    this.energy *= Math.exp(LN_FRICTION * dt);
     if (this.energy < 0.001) this.energy = 0;
 
-    // --- frequency analysis (runs even when muted for visual reactivity) ---
-    this.updateFrequencyBands();
+    // --- frequency analysis every 2nd frame (runs even when muted for visual reactivity) ---
+    if (++this.analyseSkip >= 2) {
+      this.analyseSkip = 0;
+      this.updateFrequencyBands(dt);
+    }
 
     // --- derived values ---
     // Exponential curve: pitch holds longer at high energy, drops dramatically
@@ -289,7 +314,6 @@ export class AudioMomentum {
       if (this.energy >= PLAY_THRESHOLD && !this.wasPlaying && !this.playPending) {
         this.syncToVideo();
         this.audio.playbackRate = rate;
-        this.audio.volume = Math.pow(volume, 2);
         this.playPending = true;
         this.audio.play().then(() => {
           if (!this.running) return; // destroyed while awaiting play()
@@ -309,8 +333,16 @@ export class AudioMomentum {
       // --- update while playing ---
       if (this.wasPlaying) {
         this.audio.playbackRate = rate;
-        this.audio.volume = Math.pow(volume, 2);
         this.checkDrift(dt);
+      }
+
+      // --- route volume through GainNode (avoids per-frame audio.volume setter) ---
+      if (this.gainNode && this.audioCtx && !this.isMuted) {
+        const targetGain = Math.pow(volume, 2);
+        if (Math.abs(this.lastTargetGain - targetGain) > 0.005) {
+          this.lastTargetGain = targetGain;
+          this.gainNode.gain.setTargetAtTime(targetGain, this.audioCtx.currentTime, 0.02);
+        }
       }
     }
 
@@ -327,7 +359,7 @@ export class AudioMomentum {
     if (this.gainNode && this.audioCtx) {
       const now = this.audioCtx.currentTime;
       this.gainNode.gain.setTargetAtTime(0, now, 0.005);
-      this.gainNode.gain.setTargetAtTime(this.isMuted ? 0 : 1, now + 0.015, 0.01);
+      this.gainNode.gain.setTargetAtTime(this.isMuted ? 0 : this.lastTargetGain, now + 0.015, 0.01);
     }
     this.audio.currentTime = t;
   }

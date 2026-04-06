@@ -3,6 +3,10 @@
 import { useEffect, useRef, useCallback } from "react";
 import { useUIStore } from "@/stores/useUIStore";
 
+// Precomputed ln constants: Math.pow(c, dt) === Math.exp(ln_c * dt)
+const LN_088 = Math.log(0.88);   // for 1 - Math.pow(1 - 0.12, dt)
+const LN_VELOCITY_DECAY = Math.log(0.9); // VELOCITY_DECAY = 0.9
+
 export default function CustomCursor() {
   const dotRef = useRef<HTMLDivElement>(null);
   const ringRef = useRef<HTMLDivElement>(null);
@@ -53,9 +57,9 @@ export default function CustomCursor() {
       scrollVelocity += delta * VELOCITY_SCALE;
     };
 
-    // Set initial off-screen position imperatively (avoids React re-render overwriting transform)
-    if (dotRef.current) dotRef.current.style.transform = "translate(-100px, -100px)";
-    if (ringRef.current) ringRef.current.style.transform = "translate(-100px, -100px)";
+    // Set initial off-screen position imperatively (avoids React re-render overwriting translate)
+    if (dotRef.current) dotRef.current.style.translate = "-100px -100px";
+    if (ringRef.current) ringRef.current.style.translate = "-100px -100px";
 
     const onMouseMove = (e: MouseEvent) => {
       mouseX = e.clientX;
@@ -66,9 +70,9 @@ export default function CustomCursor() {
         applyOpacity();
       }
 
-      // GPU-composited transform instead of left/top
+      // GPU-composited translate instead of left/top
       if (dotRef.current) {
-        dotRef.current.style.transform = `translate(${mouseX - 4}px, ${mouseY - 4}px)`;
+        dotRef.current.style.translate = `${mouseX - 4}px ${mouseY - 4}px`;
       }
     };
 
@@ -96,12 +100,12 @@ export default function CustomCursor() {
       const dt = lastTime ? Math.min((now - lastTime) / 16.667, 3) : 1;
       lastTime = now;
 
-      const lerpFactor = 1 - Math.pow(1 - 0.12, dt);
+      const lerpFactor = 1 - Math.exp(LN_088 * dt);
       ringX += (mouseX - ringX) * lerpFactor;
       ringY += (mouseY - ringY) * lerpFactor;
 
       // Decay scroll velocity smoothly each frame (dt-corrected)
-      scrollVelocity *= Math.pow(VELOCITY_DECAY, dt);
+      scrollVelocity *= Math.exp(LN_VELOCITY_DECAY * dt);
 
       // Compute scaleY stretch from absolute velocity
       const absVelocity = Math.abs(scrollVelocity);
@@ -112,9 +116,14 @@ export default function CustomCursor() {
       const stretchX = stretchY > 1 ? 1 / Math.sqrt(stretchY) : 1;
 
       if (ringRef.current) {
-        // Compose translate + velocity stretch; hover scale applied via CSS `scale` property
-        ringRef.current.style.transform =
-          `translate(${ringX - 20}px, ${ringY - 20}px) scaleX(${stretchX.toFixed(3)}) scaleY(${stretchY.toFixed(3)})`;
+        // CSS translate for position (avoids large template string);
+        // stretch in transform (composes independently of React `scale` hover prop)
+        ringRef.current.style.translate = `${ringX - 20}px ${ringY - 20}px`;
+        if (stretchY > 1) {
+          ringRef.current.style.transform = `scaleX(${stretchX}) scaleY(${stretchY})`;
+        } else {
+          ringRef.current.style.transform = '';
+        }
       }
 
       frameId = requestAnimationFrame(animateRing);

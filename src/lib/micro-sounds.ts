@@ -3,6 +3,7 @@
 // ---------------------------------------------------------------------------
 // No audio files needed. Each sound is a parametric oscillator with envelope.
 // Respects user mute preference. Uses shared AudioContext (iOS Safari limit).
+// Pre-allocated GainNode pools avoid per-call node creation on hot paths.
 // ---------------------------------------------------------------------------
 
 import { acquireAudioContext, releaseAudioContext } from './shared-audio-context';
@@ -18,6 +19,59 @@ if (typeof window !== 'undefined') {
   mq.addEventListener('change', (e) => { reducedMotion = e.matches; });
 }
 
+// ---------------------------------------------------------------------------
+// NoteVoice pool — pre-allocated GainNodes for playNote
+// ---------------------------------------------------------------------------
+interface NoteVoice { gain: GainNode; endTime: number; }
+const NOTE_POOL_SIZE = 4;
+let notePool: NoteVoice[] = [];
+let notePoolReady = false;
+let poolCtx: AudioContext | null = null;
+
+function initNotePool(ac: AudioContext): void {
+  if (notePoolReady && poolCtx === ac) return;
+  // Clean up old pool
+  notePool.forEach(v => v.gain.disconnect());
+  notePool = Array.from({ length: NOTE_POOL_SIZE }, () => {
+    const gain = ac.createGain();
+    gain.gain.value = 0;
+    gain.connect(ac.destination);
+    return { gain, endTime: 0 };
+  });
+  notePoolReady = true;
+  poolCtx = ac;
+}
+
+// ---------------------------------------------------------------------------
+// WhooshVoice pool — pre-allocated filter + gain chains for playWhoosh
+// ---------------------------------------------------------------------------
+interface WhooshVoice { filter: BiquadFilterNode; gain: GainNode; endTime: number; }
+const WHOOSH_POOL_SIZE = 2;
+let whooshPool: WhooshVoice[] = [];
+let whooshPoolReady = false;
+
+function initWhooshPool(ac: AudioContext): void {
+  if (whooshPoolReady && poolCtx === ac) return;
+  // Clean up old pool
+  whooshPool.forEach(v => { v.filter.disconnect(); v.gain.disconnect(); });
+  whooshPool = Array.from({ length: WHOOSH_POOL_SIZE }, () => {
+    const filter = ac.createBiquadFilter();
+    const gain = ac.createGain();
+    filter.type = 'lowpass';
+    filter.Q.value = 1;
+    gain.gain.value = 0;
+    filter.connect(gain);
+    gain.connect(ac.destination);
+    return { filter, gain, endTime: 0 };
+  });
+  whooshPoolReady = true;
+  // poolCtx is already set by initNotePool or will be set here
+  poolCtx = ac;
+}
+
+// ---------------------------------------------------------------------------
+// Shared AudioContext accessor
+// ---------------------------------------------------------------------------
 function getCtx(): AudioContext | null {
   if (reducedMotion || muted) return null;
   // Re-acquire if previous context was closed (shared context lifecycle)
@@ -27,30 +81,45 @@ function getCtx(): AudioContext | null {
   if (!ctx) {
     ctx = acquireAudioContext();
   }
+  // Reset pools if context changed
+  if (ctx !== poolCtx) {
+    notePoolReady = false;
+    notePool = [];
+    whooshPoolReady = false;
+    whooshPool = [];
+  }
   return ctx;
 }
 
+// ---------------------------------------------------------------------------
 // Piano-like note: sine wave with fast attack, medium decay
+// Uses NoteVoice pool — only OscillatorNode is created fresh (single-use by spec)
+// ---------------------------------------------------------------------------
 function playNote(freq: number, duration: number, volume: number = 0.04): void {
   const ac = getCtx();
   if (!ac) return;
 
-  const osc = ac.createOscillator();
-  const gain = ac.createGain();
+  initNotePool(ac);
 
+  // Find an expired voice
+  const voice = notePool.find(v => ac.currentTime >= v.endTime);
+  if (!voice) return; // All busy — gracefully drop
+
+  const osc = ac.createOscillator();
   osc.type = 'sine';
   osc.frequency.value = freq;
 
   const now = ac.currentTime;
-  gain.gain.setValueAtTime(0, now);
-  gain.gain.linearRampToValueAtTime(volume, now + 0.01);     // fast attack
-  gain.gain.exponentialRampToValueAtTime(0.001, now + duration); // natural decay
+  voice.gain.gain.cancelScheduledValues(now);
+  voice.gain.gain.setValueAtTime(0, now);
+  voice.gain.gain.linearRampToValueAtTime(volume, now + 0.01);     // fast attack
+  voice.gain.gain.exponentialRampToValueAtTime(0.001, now + duration); // natural decay
 
-  osc.connect(gain);
-  gain.connect(ac.destination);
+  osc.connect(voice.gain);
   osc.start(now);
   osc.stop(now + duration);
-  osc.onended = () => { osc.disconnect(); gain.disconnect(); };
+  voice.endTime = now + duration;
+  osc.onended = () => { osc.disconnect(); };
 }
 
 // ---------------------------------------------------------------------------
@@ -93,12 +162,14 @@ export function playWhoosh(): void {
   const ac = getCtx();
   if (!ac) return;
 
-  const osc = ac.createOscillator();
-  const gain = ac.createGain();
-  const filter = ac.createBiquadFilter();
+  initWhooshPool(ac);
 
+  // Find an expired voice
+  const voice = whooshPool.find(v => ac.currentTime >= v.endTime);
+  if (!voice) return; // All busy — gracefully drop
+
+  const osc = ac.createOscillator();
   osc.type = 'sawtooth';
-  filter.type = 'lowpass';
 
   const now = ac.currentTime;
   // Frequency sweep down (wind-like)
@@ -106,25 +177,37 @@ export function playWhoosh(): void {
   osc.frequency.exponentialRampToValueAtTime(80, now + 0.15);
 
   // Filter follows
-  filter.frequency.setValueAtTime(2000, now);
-  filter.frequency.exponentialRampToValueAtTime(200, now + 0.15);
-  filter.Q.value = 1;
+  voice.filter.frequency.cancelScheduledValues(now);
+  voice.filter.frequency.setValueAtTime(2000, now);
+  voice.filter.frequency.exponentialRampToValueAtTime(200, now + 0.15);
 
   // Volume envelope
-  gain.gain.setValueAtTime(0, now);
-  gain.gain.linearRampToValueAtTime(0.015, now + 0.02);
-  gain.gain.exponentialRampToValueAtTime(0.001, now + 0.15);
+  voice.gain.gain.cancelScheduledValues(now);
+  voice.gain.gain.setValueAtTime(0, now);
+  voice.gain.gain.linearRampToValueAtTime(0.015, now + 0.02);
+  voice.gain.gain.exponentialRampToValueAtTime(0.001, now + 0.15);
 
-  osc.connect(filter);
-  filter.connect(gain);
-  gain.connect(ac.destination);
+  osc.connect(voice.filter);
   osc.start(now);
   osc.stop(now + 0.2);
-  osc.onended = () => { osc.disconnect(); filter.disconnect(); gain.disconnect(); };
+  voice.endTime = now + 0.2;
+  osc.onended = () => { osc.disconnect(); };
 }
 
-/** Release shared AudioContext reference. */
+/** Release shared AudioContext reference and clean up pools. */
 export function destroyMicroSounds(): void {
+  // Disconnect note pool
+  notePool.forEach(v => v.gain.disconnect());
+  notePool = [];
+  notePoolReady = false;
+
+  // Disconnect whoosh pool
+  whooshPool.forEach(v => { v.filter.disconnect(); v.gain.disconnect(); });
+  whooshPool = [];
+  whooshPoolReady = false;
+
+  poolCtx = null;
+
   if (ctx) {
     releaseAudioContext();
     ctx = null;

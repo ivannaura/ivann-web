@@ -8,6 +8,7 @@ import { useLenis } from "lenis/react";
 // ---------------------------------------------------------------------------
 const IMPULSE_BASE = 0.12; // energy per isolated tap
 const FRICTION = 0.955; // decay per frame (~1s inertia at 60fps)
+const LN_FRICTION = Math.log(FRICTION); // precomputed for Math.exp path
 const VELOCITY_SCALE = 8; // energy → px/frame
 const RHYTHM_BONUS = 1.6; // multiplier when tapping rhythmically (< 400ms)
 const HOLD_DAMPEN = 0.3; // multiplier for held key repeat (< 50ms)
@@ -63,7 +64,7 @@ export function usePianoScroll(options: UsePianoScrollOptions = {}) {
       const now = performance.now();
       const dt = lastTimeRef.current ? Math.min((now - lastTimeRef.current) / 16.667, 3) : 1;
       lastTimeRef.current = now;
-      energyRef.current *= Math.pow(FRICTION, dt);
+      energyRef.current *= Math.exp(LN_FRICTION * dt);
 
       // Convert energy to scroll delta (dt-scaled)
       const delta = energyRef.current * VELOCITY_SCALE * dt;

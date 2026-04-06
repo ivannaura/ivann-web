@@ -11,6 +11,12 @@ if (typeof window !== "undefined") {
   gsap.registerPlugin(ScrollTrigger);
 }
 
+// Precomputed ln constants: Math.pow(c, dt) === Math.exp(ln_c * dt)
+const LN_085 = Math.log(0.85);   // for 1 - Math.pow(1 - 0.15, dt)
+const LN_092 = Math.log(0.92);   // velocity decay
+const LN_095 = Math.log(0.95);   // actTransition decay
+const LN_08 = Math.log(0.8);     // shake decay
+
 interface ScrollVideoPlayerProps {
   videoSrc: string;
   audioSrc: string;
@@ -293,12 +299,12 @@ export default function ScrollVideoPlayer({
 
       // Smooth velocity decay (exponential toward 0 when not scrolling)
       smoothVelocityRef.current +=
-        (velocityRef.current - smoothVelocityRef.current) * (1 - Math.pow(1 - 0.15, dt));
+        (velocityRef.current - smoothVelocityRef.current) * (1 - Math.exp(LN_085 * dt));
       // Decay raw velocity toward 0 each frame (cleared on scroll)
-      velocityRef.current *= Math.pow(0.92, dt);
+      velocityRef.current *= Math.exp(LN_092 * dt);
 
       // Act transition — spikes to 1.0 on act boundary, decays 0.95/frame
-      actTransitionRef.current *= Math.pow(0.95, dt);
+      actTransitionRef.current *= Math.exp(LN_095 * dt);
       const actIndex = Math.floor(progressRef.current * 8);
       if (actIndex !== lastActRef.current && actIndex > 0) {
         lastActRef.current = actIndex;
@@ -314,28 +320,28 @@ export default function ScrollVideoPlayer({
         shakeRef.current.x = (Math.random() - 0.5) * intensity * 3;
         shakeRef.current.y = (Math.random() - 0.5) * intensity * 3;
       } else {
-        shakeRef.current.x *= Math.pow(0.8, dt);
-        shakeRef.current.y *= Math.pow(0.8, dt);
+        shakeRef.current.x *= Math.exp(LN_08 * dt);
+        shakeRef.current.y *= Math.exp(LN_08 * dt);
       }
 
-      // Apply shake
+      // Apply shake (CSS translate property — avoids string template for transform)
       const sticky = stickyRef.current;
       if (sticky) {
         if (Math.abs(shakeRef.current.x) > 0.1 || Math.abs(shakeRef.current.y) > 0.1) {
-          sticky.style.transform = `translate(${shakeRef.current.x}px, ${shakeRef.current.y}px)`;
+          sticky.style.translate = `${shakeRef.current.x}px ${shakeRef.current.y}px`;
         } else {
-          sticky.style.transform = '';
+          sticky.style.translate = '';
         }
       }
 
-      // Dynamic letterbox
+      // Dynamic letterbox (CSS scale property — avoids string template for transform)
       const mood = getMoodCPU(progressRef.current);
       const barScale = Math.max(0.5, Math.min(1.5, 1.3 - mood * 0.4));
       if (letterboxTopRef.current) {
-        letterboxTopRef.current.style.transform = `scaleY(${barScale})`;
+        letterboxTopRef.current.style.scale = `1 ${barScale}`;
       }
       if (letterboxBottomRef.current) {
-        letterboxBottomRef.current.style.transform = `scaleY(${barScale})`;
+        letterboxBottomRef.current.style.scale = `1 ${barScale}`;
       }
 
       // Unified cinema render (with context-loss fallback)
@@ -498,12 +504,12 @@ export default function ScrollVideoPlayer({
         <div
           ref={letterboxTopRef}
           className="absolute top-0 left-0 right-0 z-30 pointer-events-none"
-          style={{ background: 'var(--bg-void)', height: '4vh', transformOrigin: 'top', transition: 'transform 0.3s ease-out' }}
+          style={{ background: 'var(--bg-void)', height: '4vh', transformOrigin: 'top', transition: 'scale 0.3s ease-out' }}
         />
         <div
           ref={letterboxBottomRef}
           className="absolute bottom-0 left-0 right-0 z-30 pointer-events-none"
-          style={{ background: 'var(--bg-void)', height: '4vh', transformOrigin: 'bottom', transition: 'transform 0.3s ease-out' }}
+          style={{ background: 'var(--bg-void)', height: '4vh', transformOrigin: 'bottom', transition: 'scale 0.3s ease-out' }}
         />
 
         <video
