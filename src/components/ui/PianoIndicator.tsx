@@ -64,9 +64,8 @@ export default function PianoIndicator({ energy, bands }: PianoIndicatorProps) {
                   ? "var(--aura-gold)"
                   : "var(--text-muted)",
                 // Idle breathing animation when no audio energy
-                ...(!isActive ? {
-                  animation: `piano-idle ${3 + i * 0.3}s ease-in-out ${idleDelays[i]}s infinite`,
-                } : {}),
+                animation: `piano-idle ${3 + i * 0.3}s ease-in-out ${idleDelays[i]}s infinite`,
+                animationPlayState: isActive ? 'paused' : 'running',
               }}
             />
           );

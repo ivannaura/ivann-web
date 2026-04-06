@@ -632,6 +632,7 @@ interface AnimatedBeatProps {
 function AnimatedBeat({ beat, progress, energy = 0, bands, actTransition = 0 }: AnimatedBeatProps) {
   const ref = useRef<HTMLDivElement>(null);
   const tlRef = useRef<gsap.core.Timeline | null>(null);
+  const entryCompleteRef = useRef(false);
 
   useLayoutEffect(() => {
     const el = ref.current;
@@ -705,6 +706,7 @@ function AnimatedBeat({ beat, progress, energy = 0, bands, actTransition = 0 }: 
           }
         });
 
+        tl.eventCallback("onComplete", () => { entryCompleteRef.current = true; });
         tlRef.current = tl;
       } else if (staggerTargets.length > 0) {
         // Compound elements — stagger children
@@ -752,6 +754,7 @@ function AnimatedBeat({ beat, progress, energy = 0, bands, actTransition = 0 }: 
 
     return () => {
       tlRef.current = null;
+      entryCompleteRef.current = false;
       mm.revert();
       // Explicitly revert SplitText DOM mutations — matchMedia.revert() may not
       // handle SplitText cleanup in all GSAP versions
@@ -764,8 +767,9 @@ function AnimatedBeat({ beat, progress, energy = 0, bands, actTransition = 0 }: 
     const tl = tlRef.current;
     if (!tl) return;
     if (progress <= 0.8) return;
-    // Don't reverse a timeline that hasn't started playing yet
-    if (tl.totalProgress() === 0) return;
+    // Don't reverse before entry animation has completed (prevents flicker
+    // when a beat mounts mid-progress, e.g. user scrolled past it during load)
+    if (!entryCompleteRef.current) return;
 
     const exitProgress = (progress - 0.8) / 0.2;
     tl.progress(Math.max(0, 1 - exitProgress));

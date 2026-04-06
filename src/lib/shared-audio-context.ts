@@ -63,5 +63,5 @@ export function primerAudioContext(): void {
     document.removeEventListener('click', handler);
   };
   document.addEventListener('touchstart', handler, { passive: true });
-  document.addEventListener('click', handler);
+  document.addEventListener('click', handler, { once: true });
 }

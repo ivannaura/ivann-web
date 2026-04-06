@@ -68,6 +68,7 @@ export class AudioMomentum {
   private bands: FrequencyBands = { bass: 0, mids: 0, highs: 0 };
   private smoothBands: FrequencyBands = { bass: 0, mids: 0, highs: 0 };
   private lastTime: number = 0;
+  private isMuted = false;
 
   // ---- Public API ---------------------------------------------------------
 
@@ -113,6 +114,7 @@ export class AudioMomentum {
 
   /** Mute or unmute via GainNode — preserves AnalyserNode signal for visual reactivity. */
   setMuted(muted: boolean): void {
+    this.isMuted = muted;
     if (this.gainNode && this.audioCtx) {
       const now = this.audioCtx.currentTime;
       this.gainNode.gain.cancelScheduledValues(now);
@@ -325,7 +327,7 @@ export class AudioMomentum {
     if (this.gainNode && this.audioCtx) {
       const now = this.audioCtx.currentTime;
       this.gainNode.gain.setTargetAtTime(0, now, 0.005);
-      this.gainNode.gain.setTargetAtTime(this.audio.muted ? 0 : 1, now + 0.015, 0.01);
+      this.gainNode.gain.setTargetAtTime(this.isMuted ? 0 : 1, now + 0.015, 0.01);
     }
     this.audio.currentTime = t;
   }

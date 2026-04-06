@@ -123,7 +123,7 @@ export default function Preloader() {
       tl.to({}, { duration: 0.3 });
     }, container);
 
-    // Fallback: force dismiss after 5s
+    // Fallback: force dismiss after 8s
     const fallback = setTimeout(dismiss, 8000);
 
     return () => {

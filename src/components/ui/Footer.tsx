@@ -22,6 +22,8 @@ const SOCIAL_LINKS = [
 export default function Footer() {
   const setCursorVariant = useUIStore((s) => s.setCursorVariant);
   const lenis = useLenis();
+  const lenisRef = useRef(lenis);
+  lenisRef.current = lenis;
   const footerRef = useRef<HTMLElement>(null);
 
   // GSAP entrance animation
@@ -74,7 +76,7 @@ export default function Footer() {
 
   const scrollToTop = () => {
     playClick();
-    lenis?.scrollTo(0);
+    lenisRef.current?.scrollTo(0);
   };
 
   return (

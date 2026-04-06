@@ -279,7 +279,7 @@ Respects `prefers-reduced-motion: reduce` (entire system disabled).
 
 ```
 --bg-void: #050508       --bg-surface: #0A0A10      --bg-subtle: #12121A
---text-primary: #F0EDE6  --text-secondary: #8A8A99  --text-muted: #4A4A5A
+--text-primary: #F0EDE6  --text-secondary: #8A8A99  --text-muted: #78788C
 --aura-gold: #C9A84C     --aura-gold-bright: #E8C85A  --aura-gold-dim: #8A7435
 --crimson: #6B1520       --border-subtle: rgba(255,255,255,0.06)
 ```

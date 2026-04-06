@@ -80,6 +80,7 @@ export default function CustomCursor() {
     const onMouseEnter = () => {
       visibleRef.current = true;
       applyOpacity();
+      frameId = requestAnimationFrame(animateRing);
     };
 
     let frameId = 0;
@@ -87,7 +88,6 @@ export default function CustomCursor() {
     const animateRing = () => {
       // Pause rAF work when cursor is not visible
       if (!visibleRef.current) {
-        frameId = requestAnimationFrame(animateRing);
         return;
       }
 

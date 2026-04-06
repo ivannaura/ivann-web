@@ -7,7 +7,9 @@ export default function Error({
   error: Error & { digest?: string };
   reset: () => void;
 }) {
-  console.error(error);
+  if (process.env.NODE_ENV === 'development') {
+    console.error(error);
+  }
 
   return (
     <div

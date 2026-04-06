@@ -185,7 +185,7 @@ export default function ScrollVideoPlayer({
     if (!video) return;
 
     const unlock = () => {
-      if (video.readyState < 2) {
+      if (video.readyState >= 1 && video.readyState < 4) {
         video
           .play()
           .then(() => {
@@ -263,10 +263,13 @@ export default function ScrollVideoPlayer({
   useEffect(() => {
     if (!ready) return;
 
+    let unmounted = false;
     let paused = false;
     let lastEnergy = -1;
+    const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
     const tick = () => {
+      if (unmounted) return;
       if (paused) return;
       const now = performance.now() / 1000;
 
@@ -306,7 +309,7 @@ export default function ScrollVideoPlayer({
       onActTransitionRef.current?.(actTransitionRef.current);
 
       // Bass screen shake (ref-based, no re-render)
-      if (bands.bass > 0.7 && e > 0.3) {
+      if (bands.bass > 0.7 && e > 0.3 && !reducedMotion) {
         const intensity = (bands.bass - 0.7) * 5;
         shakeRef.current.x = (Math.random() - 0.5) * intensity * 3;
         shakeRef.current.y = (Math.random() - 0.5) * intensity * 3;
@@ -376,6 +379,7 @@ export default function ScrollVideoPlayer({
     document.addEventListener("visibilitychange", onVisibility);
     renderRafRef.current = requestAnimationFrame(tick);
     return () => {
+      unmounted = true;
       document.removeEventListener("visibilitychange", onVisibility);
       cancelAnimationFrame(renderRafRef.current);
     };

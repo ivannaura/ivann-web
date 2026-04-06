@@ -21,6 +21,8 @@
 // ---------------------------------------------------------------------------
 
 import type { FrequencyBands } from './audio-momentum';
+import { getMoodCPU } from './mood';
+export { getMoodCPU } from './mood';
 
 // ---------------------------------------------------------------------------
 // Particle physics constants (extracted from inline magic numbers)
@@ -545,18 +547,9 @@ export interface CinemaGL {
 }
 
 // ---------------------------------------------------------------------------
-// CPU-side mood interpolation (mirrors GLSL getMood for bloom threshold)
+// CPU-side mood interpolation — imported from ./mood.ts
+// Re-exported above for backward compatibility with existing imports.
 // ---------------------------------------------------------------------------
-
-export function getMoodCPU(progress: number): number {
-  const moods = [0.5, 0.5, 0.6, 0.8, 0.9, 1.1, 1.2, 0.8, 0.5];
-  const t = Math.min(Math.max(progress, 0), 1) * 8;
-  const i = Math.floor(t);
-  const j = Math.min(i + 1, 8);
-  const f = t - i;
-  const s = f * f * (3 - 2 * f);
-  return moods[i] + (moods[j] - moods[i]) * s;
-}
 
 export function initCinemaGL(canvas: HTMLCanvasElement): CinemaGL | null {
   const gl = canvas.getContext("webgl2", {
@@ -605,6 +598,9 @@ export function initCinemaGL(canvas: HTMLCanvasElement): CinemaGL | null {
   gl.detachShader(cinemaProg, cinemaFS);
   if (!gl.getProgramParameter(cinemaProg, gl.LINK_STATUS)) {
     console.warn("CinemaGL: cinema program link failed:", gl.getProgramInfoLog(cinemaProg));
+    gl.deleteShader(cinemaVS);
+    gl.deleteShader(cinemaFS);
+    gl.deleteProgram(cinemaProg);
     return null;
   }
 
@@ -659,6 +655,9 @@ export function initCinemaGL(canvas: HTMLCanvasElement): CinemaGL | null {
   gl.detachShader(particleProg, particleFS);
   if (!gl.getProgramParameter(particleProg, gl.LINK_STATUS)) {
     console.warn("CinemaGL: particle program link failed:", gl.getProgramInfoLog(particleProg));
+    gl.deleteShader(particleVS);
+    gl.deleteShader(particleFS);
+    gl.deleteProgram(particleProg);
     return null;
   }
 

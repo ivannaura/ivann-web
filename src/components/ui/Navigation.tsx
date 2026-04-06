@@ -33,6 +33,8 @@ export default function Navigation({
   const setMenuOpen = useUIStore((s) => s.setMenuOpen);
   const setCursorVariant = useUIStore((s) => s.setCursorVariant);
   const lenis = useLenis();
+  const lenisRef = useRef(lenis);
+  lenisRef.current = lenis;
 
   useEffect(() => {
     // Cache section elements once — no querySelector per scroll frame
@@ -119,12 +121,12 @@ export default function Navigation({
     playClick();
     setMenuOpen(false);
     if (href === "#top") {
-      lenis?.scrollTo(0);
+      lenisRef.current?.scrollTo(0);
     } else {
       const el = document.querySelector<HTMLElement>(href);
-      if (el) lenis?.scrollTo(el);
+      if (el) lenisRef.current?.scrollTo(el);
     }
-  }, [setMenuOpen, lenis]);
+  }, [setMenuOpen]);
 
   return (
     <>
