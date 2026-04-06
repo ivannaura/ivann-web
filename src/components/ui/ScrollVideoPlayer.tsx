@@ -100,6 +100,14 @@ export default function ScrollVideoPlayer({
   const audioMutedRef = useRef(audioMuted);
   audioMutedRef.current = audioMuted;
 
+  // Reset ready state when video source changes (prevents stale readyRef)
+  useEffect(() => {
+    readyRef.current = false;
+    durationRef.current = 0;
+    setReady(false);
+    setBufferProgress(0);
+  }, [videoSrc]);
+
   const clampToBuffered = useCallback(
     (video: HTMLVideoElement, time: number): number => {
       if (!video.buffered.length) return 0;
