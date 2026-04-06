@@ -376,7 +376,7 @@ export default function Contact() {
                     aria-describedby={errors.name ? "contact-name-error" : undefined}
                   />
                   {errors.name && (
-                    <p id="contact-name-error" className="text-xs mt-1" style={{ color: "#DC4A4A" }}>
+                    <p id="contact-name-error" className="text-xs mt-1" style={{ color: "var(--error-red)" }}>
                       {errors.name}
                     </p>
                   )}
@@ -405,7 +405,7 @@ export default function Contact() {
                     aria-describedby={errors.email ? "contact-email-error" : undefined}
                   />
                   {errors.email && (
-                    <p id="contact-email-error" className="text-xs mt-1" style={{ color: "#DC4A4A" }}>
+                    <p id="contact-email-error" className="text-xs mt-1" style={{ color: "var(--error-red)" }}>
                       {errors.email}
                     </p>
                   )}
@@ -473,7 +473,7 @@ export default function Contact() {
                     aria-describedby={errors.message ? "contact-message-error" : undefined}
                   />
                   {errors.message && (
-                    <p id="contact-message-error" className="text-xs mt-1" style={{ color: "#DC4A4A" }}>
+                    <p id="contact-message-error" className="text-xs mt-1" style={{ color: "var(--error-red)" }}>
                       {errors.message}
                     </p>
                   )}

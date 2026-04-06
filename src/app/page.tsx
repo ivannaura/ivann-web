@@ -120,7 +120,7 @@ export default function Home() {
       />
       <PianoIndicator energy={displayEnergy} bands={displayBands} />
 
-      <main id="main-content" tabIndex={-1} aria-label="Contenido principal">
+      <main id="top" tabIndex={-1} aria-label="Contenido principal">
         <h1 className="sr-only">IVANN AURA — Live Experience</h1>
         <ScrollVideoPlayer
           videoSrc={VIDEO_SRC}
@@ -133,6 +133,9 @@ export default function Home() {
           onProgressChange={handleProgressChange}
           onActTransition={handleActTransition}
         >
+          {/* Navigation anchors — invisible markers at narrative waypoints */}
+          <div id="espectaculo" className="absolute left-0 w-0 h-0" style={{ top: '37%' }} aria-hidden="true" />
+          <div id="musica" className="absolute left-0 w-0 h-0" style={{ top: '47%' }} aria-hidden="true" />
           {/* Atmospheric haze — shifts color with narrative progress */}
           <div
             ref={hazeRef}

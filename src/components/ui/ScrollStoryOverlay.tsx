@@ -68,7 +68,7 @@ const STORY_BEATS: StoryBeat[] = [
           data-split="chars"
           data-split-mask="words"
           data-split-stagger="0.04"
-          className="text-[clamp(3rem,8vw,8rem)] font-extralight tracking-[0.3em] leading-none text-cinema font-display"
+          className="text-[clamp(3rem,8vw,8rem)] font-light tracking-[0.3em] leading-none text-cinema font-display"
           style={{ color: "var(--text-primary)" }}
         >
           IVANN
@@ -77,7 +77,7 @@ const STORY_BEATS: StoryBeat[] = [
           data-split="chars"
           data-split-mask="words"
           data-split-stagger="0.04"
-          className="text-[clamp(3rem,8vw,8rem)] font-extralight tracking-[0.3em] leading-none mt-2 text-cinema font-display"
+          className="text-[clamp(3rem,8vw,8rem)] font-light tracking-[0.3em] leading-none mt-2 text-cinema font-display"
           style={{ color: "var(--aura-gold)" }}
         >
           AURA
@@ -168,7 +168,7 @@ const STORY_BEATS: StoryBeat[] = [
         ].map((stat) => (
           <div key={stat.label} data-stagger className="text-center">
             <span
-              className="text-[clamp(1.5rem,4vw,3.5rem)] font-extralight block text-cinema"
+              className="text-[clamp(1.5rem,4vw,3.5rem)] font-light block text-cinema"
               style={{ color: "var(--text-primary)" }}
             >
               {stat.num}
@@ -257,7 +257,7 @@ const STORY_BEATS: StoryBeat[] = [
         data-split="chars"
         data-split-mask="words"
         data-split-stagger="0.03"
-        className="text-[clamp(1.2rem,3vw,2.5rem)] font-extralight italic text-cinema font-display"
+        className="text-[clamp(1.2rem,3vw,2.5rem)] font-light italic text-cinema font-display"
         style={{ color: "var(--text-primary)" }}
       >
         Cada nota es un universo
@@ -331,7 +331,7 @@ const STORY_BEATS: StoryBeat[] = [
       <p
         data-split="words"
         data-split-stagger="0.04"
-        className="text-[clamp(1rem,2.5vw,2rem)] font-extralight max-w-[700px] text-center leading-relaxed text-cinema font-display"
+        className="text-[clamp(1rem,2.5vw,2rem)] font-light max-w-[700px] text-center leading-relaxed text-cinema font-display"
         style={{ color: "var(--text-primary)" }}
       >
         Una experiencia que desafía los sentidos
@@ -406,7 +406,7 @@ const STORY_BEATS: StoryBeat[] = [
         data-split="chars"
         data-split-mask="words"
         data-split-stagger="0.03"
-        className="text-[clamp(1.2rem,3vw,2.5rem)] font-extralight italic text-cinema font-display"
+        className="text-[clamp(1.2rem,3vw,2.5rem)] font-light italic text-cinema font-display"
         style={{ color: "var(--text-primary)" }}
       >
         El fuego se hace música
@@ -425,7 +425,7 @@ const STORY_BEATS: StoryBeat[] = [
         data-split="chars"
         data-split-mask="words"
         data-split-stagger="0.025"
-        className="text-[clamp(1.5rem,4vw,3.5rem)] font-extralight tracking-[0.15em] text-center text-cinema font-display"
+        className="text-[clamp(1.5rem,4vw,3.5rem)] font-light tracking-[0.15em] text-center text-cinema font-display"
         style={{ color: "var(--text-primary)" }}
       >
         VIVE LA EXPERIENCIA
@@ -476,7 +476,7 @@ const STORY_BEATS: StoryBeat[] = [
         data-split="chars"
         data-split-mask="words"
         data-split-stagger="0.035"
-        className="text-[clamp(1.3rem,3vw,2.5rem)] font-extralight italic tracking-wide text-cinema font-display"
+        className="text-[clamp(1.3rem,3vw,2.5rem)] font-light italic tracking-wide text-cinema font-display"
         style={{ color: "var(--text-primary)" }}
       >
         Cuando el silencio habla
@@ -556,7 +556,7 @@ const STORY_BEATS: StoryBeat[] = [
           data-split="chars"
           data-split-mask="words"
           data-split-stagger="0.04"
-          className="text-[clamp(2rem,6vw,5rem)] font-extralight tracking-[0.3em] text-cinema font-display"
+          className="text-[clamp(2rem,6vw,5rem)] font-light tracking-[0.3em] text-cinema font-display"
           style={{ color: "var(--text-primary)" }}
         >
           IVANN
@@ -565,7 +565,7 @@ const STORY_BEATS: StoryBeat[] = [
           data-split="chars"
           data-split-mask="words"
           data-split-stagger="0.04"
-          className="text-[clamp(2rem,6vw,5rem)] font-extralight tracking-[0.3em] text-cinema font-display"
+          className="text-[clamp(2rem,6vw,5rem)] font-light tracking-[0.3em] text-cinema font-display"
           style={{ color: "var(--aura-gold)" }}
         >
           AURA

@@ -172,7 +172,7 @@ export default function Preloader() {
         style={{
           fontSize: "clamp(1.5rem, 4vw, 2.5rem)",
           letterSpacing: "0.35em",
-          fontWeight: 200,
+          fontWeight: 300,
           fontFamily: "var(--font-display)",
           color: "var(--text-primary)",
           marginBottom: 24,
