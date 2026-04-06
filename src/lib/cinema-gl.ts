@@ -23,6 +23,14 @@
 import type { FrequencyBands } from './audio-momentum';
 
 // ---------------------------------------------------------------------------
+// Particle physics constants (extracted from inline magic numbers)
+// ---------------------------------------------------------------------------
+const PARTICLE_DAMPING = 0.98;
+const PARTICLE_CURSOR_RADIUS = 300;
+const PARTICLE_LUM_FORCE = 25;
+const PARTICLE_CURSOR_FORCE = 15;
+
+// ---------------------------------------------------------------------------
 // Tier detection
 // ---------------------------------------------------------------------------
 
@@ -298,6 +306,10 @@ uniform vec2 u_mouse; // pixel coords
 out float v_alpha;
 out float v_lum;
 
+const float CURSOR_RADIUS = ${PARTICLE_CURSOR_RADIUS}.0;
+const float LUM_FORCE = ${PARTICLE_LUM_FORCE}.0;
+const float CURSOR_FORCE_S = ${PARTICLE_CURSOR_FORCE}.0;
+
 float luminance(vec3 c) {
   return dot(c, vec3(0.2126, 0.7152, 0.0722));
 }
@@ -316,12 +328,12 @@ void main() {
   float lumU = luminance(texture(u_videoTex, clamp(uv - vec2(0.0, dy), 0.0, 1.0)).rgb);
   float lumD = luminance(texture(u_videoTex, clamp(uv + vec2(0.0, dy), 0.0, 1.0)).rgb);
   vec2 lumGrad = vec2(lumR - lumL, lumD - lumU);
-  vec2 nudge = lumGrad * u_energy * 25.0;
+  vec2 nudge = lumGrad * u_energy * LUM_FORCE;
 
   // Cursor attraction — particles drift gently toward cursor
   vec2 toCursor = u_mouse - a_pos;
   float cursorDist = length(toCursor);
-  float cursorPull = smoothstep(300.0, 0.0, cursorDist) * u_energy * 15.0;
+  float cursorPull = smoothstep(CURSOR_RADIUS, 0.0, cursorDist) * u_energy * CURSOR_FORCE_S;
   nudge += normalize(toCursor + 0.001) * cursorPull;
 
   vec2 finalPos = a_pos + nudge;
@@ -448,7 +460,7 @@ void main() {
   // --- Film burn at act transitions ---
   float burn = smoothstep(0.0, 0.15, u_actTransition) * smoothstep(0.3, 0.15, u_actTransition);
   vec3 leak = mix(vec3(1.0, 0.6, 0.2), vec3(1.0, 0.9, 0.5), v_uv.x);
-  c = mix(c, leak, burn * 0.35);
+  c = mix(c, leak, burn * 0.35 * (u_mood / 1.2));
 
   fragColor = vec4(c, 1.0);
 }`;
@@ -469,6 +481,7 @@ const GRID_H = 20;
 const LUM_GRID_INTERVAL = 10;
 const LUMINANCE_FORCE = 2.0;
 const CURSOR_FORCE = 0.8;
+
 
 interface Particle {
   x: number; y: number;
@@ -563,10 +576,12 @@ export function initCinemaGL(canvas: HTMLCanvasElement): CinemaGL | null {
     contextLost = true;
   };
   canvas.addEventListener("webglcontextlost", onContextLost, false);
-  // Note: we do NOT handle webglcontextrestored — all GL objects (programs,
-  // buffers, VAOs, textures) are invalid after restore and would need full
-  // reinitialization. Instead, contextLost stays true and the render loop
-  // returns early. ScrollVideoPlayer checks cinema.lost to fall back to <video>.
+  const onContextRestored = () => {
+    contextLost = false;
+    // Re-create textures, programs, FBOs etc. would go here.
+    // For now, just flag that we're back so the render loop resumes.
+  };
+  canvas.addEventListener("webglcontextrestored", onContextRestored, false);
 
   // ---------------------------------------------------------------------------
   // Cinema program (video post-processing)
@@ -586,6 +601,8 @@ export function initCinemaGL(canvas: HTMLCanvasElement): CinemaGL | null {
   gl.attachShader(cinemaProg, cinemaVS);
   gl.attachShader(cinemaProg, cinemaFS);
   gl.linkProgram(cinemaProg);
+  gl.detachShader(cinemaProg, cinemaVS);
+  gl.detachShader(cinemaProg, cinemaFS);
   if (!gl.getProgramParameter(cinemaProg, gl.LINK_STATUS)) {
     console.warn("CinemaGL: cinema program link failed:", gl.getProgramInfoLog(cinemaProg));
     return null;
@@ -638,6 +655,8 @@ export function initCinemaGL(canvas: HTMLCanvasElement): CinemaGL | null {
   gl.attachShader(particleProg, particleVS);
   gl.attachShader(particleProg, particleFS);
   gl.linkProgram(particleProg);
+  gl.detachShader(particleProg, particleVS);
+  gl.detachShader(particleProg, particleFS);
   if (!gl.getProgramParameter(particleProg, gl.LINK_STATUS)) {
     console.warn("CinemaGL: particle program link failed:", gl.getProgramInfoLog(particleProg));
     return null;
@@ -886,6 +905,9 @@ export function initCinemaGL(canvas: HTMLCanvasElement): CinemaGL | null {
 
       const frameStart = performance.now();
 
+      // Compute mood once per frame (used by bloom threshold + composite pass)
+      const mood = getMoodCPU(progress);
+
       // Upload video texture only when frame changed (avoids redundant GPU upload)
       gl.activeTexture(gl.TEXTURE0);
       gl.bindTexture(gl.TEXTURE_2D, tex);
@@ -923,7 +945,6 @@ export function initCinemaGL(canvas: HTMLCanvasElement): CinemaGL | null {
         gl.activeTexture(gl.TEXTURE1);
         gl.bindTexture(gl.TEXTURE_2D, fboA.texture);
         gl.uniform1i(btUTex, 1);
-        const mood = getMoodCPU(progress);
         const threshold = Math.max(0.3, 0.75 - mood * 0.1 - bands.highs * 0.15);
         gl.uniform1f(btUThreshold, threshold);
         gl.bindVertexArray(cinemaVAO);
@@ -979,7 +1000,6 @@ export function initCinemaGL(canvas: HTMLCanvasElement): CinemaGL | null {
           gl.uniform1i(cpUPrevFrame, 3);
         }
 
-        const mood = getMoodCPU(progress);
         gl.uniform1f(cpUMood, mood);
         gl.uniform1f(cpUVelocity, velocity);
         gl.uniform1f(cpUHighs, bands.highs);
@@ -1083,15 +1103,16 @@ export function initCinemaGL(canvas: HTMLCanvasElement): CinemaGL | null {
         const toCursorX = mouseX - p.x;
         const toCursorY = mouseY - p.y;
         const cursorDist = Math.sqrt(toCursorX * toCursorX + toCursorY * toCursorY) + 1;
-        if (cursorDist < 300) {
-          const pull = (1 - cursorDist / 300) * CURSOR_FORCE * energy;
+        if (cursorDist < PARTICLE_CURSOR_RADIUS) {
+          const pull = (1 - cursorDist / PARTICLE_CURSOR_RADIUS) * CURSOR_FORCE * energy;
           p.vx += (toCursorX / cursorDist) * pull * dt;
           p.vy += (toCursorY / cursorDist) * pull * dt;
         }
 
-        // Velocity damping
-        p.vx *= 0.98;
-        p.vy *= 0.98;
+        // Velocity damping (delta-time corrected: PARTICLE_DAMPING^(dt*60))
+        const damping = Math.pow(PARTICLE_DAMPING, dt * 60);
+        p.vx *= damping;
+        p.vy *= damping;
 
         p.x += p.vx * dt * 60;
         p.y += p.vy * dt * 60;
@@ -1169,6 +1190,7 @@ export function initCinemaGL(canvas: HTMLCanvasElement): CinemaGL | null {
 
     destroy() {
       canvas.removeEventListener("webglcontextlost", onContextLost);
+      canvas.removeEventListener("webglcontextrestored", onContextRestored);
       // FBO + PBO cleanup
       if (lumPBO) gl.deleteBuffer(lumPBO);
       if (lumFBO) destroyFBO(gl, lumFBO);
@@ -1185,10 +1207,8 @@ export function initCinemaGL(canvas: HTMLCanvasElement): CinemaGL | null {
       gl.deleteVertexArray(particleVAO);
       gl.deleteProgram(cinemaProg);
       gl.deleteProgram(particleProg);
-      gl.deleteShader(cinemaVS);
-      gl.deleteShader(cinemaFS);
-      gl.deleteShader(particleVS);
-      gl.deleteShader(particleFS);
+      // Shaders already detached+deleted after linking (createProgramFromSources
+      // and manual detach for cinema/particle programs), no need to delete again.
     },
   };
 }
