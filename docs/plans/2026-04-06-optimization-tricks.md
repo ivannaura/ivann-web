@@ -379,6 +379,45 @@ Saves 2 texture fetches per pixel when the user isn't scrolling. On a 960×402 c
 
 ---
 
+## Phase 3 — Audio Deep Dive (2 Research Agents)
+
+> Targeted investigation into DSP math and psychoacoustic tricks specifically for the audio-visual coupling pipeline.
+
+### Agent A: Audio DSP Math
+
+| # | Trick | Impact | Description |
+|---|-------|--------|-------------|
+| 31 | **Onset detection (spectral flux)** | HIGH | Detect piano note attacks, claps, transients from existing FFT data. Half-wave rectified positive spectral differences + adaptive EMA threshold. Trigger 10-30 particle micro-bursts at musically meaningful moments instead of fixed act boundaries. Cost: ~0.01ms. |
+| 32 | **Band compander (power-law)** | HIGH | `y = x^0.6` on smoothed bands before feeding to shaders. Quiet passages (bands ~0.05) become 3× more visible (→0.148) while loud passages still have headroom. Makes acts 1, 7, 8 visually alive. Optional: mood-dependent gamma. |
+| 33 | **Spectral centroid (brightness)** | HIGH | `SC = Σ(k × |X(k)|) / Σ(|X(k)|)` — single number for timbral brightness. Drives bloom threshold more musically than raw `u_highs`. Bright arpeggios bloom; dark bass chords stay contrasty. |
+| 34 | **A-weighting + ERB combined** | MEDIUM-HIGH | Perceptual loudness curve (IEC 61672) × critical bandwidth weighting. Pre-computed 128-float LUT. Bass bins (86Hz) get 0.37× weight, mids (2.8kHz) get 1.17×. Makes visual reactivity match perceived loudness. |
+| 35 | **Zero-crossing rate (texture)** | MEDIUM | `getFloatTimeDomainData` → count sign changes → classify tonal (piano) vs noise (applause). Low ZCR → smooth flowing particles; high ZCR → jittery scattered particles. |
+| 36 | **Rate-compensated band boundaries** | LOW-MEDIUM | At `playbackRate=0.5`, FFT frequencies shift down by 2×. Scale `BASS_END` and `MIDS_END` by `1/rate` to keep musical frequency ranges consistent. |
+| 37 | **Phase vocoder: NOT recommended** | N/A | `preservesPitch=false` is the correct creative choice (vinyl slowdown). Userspace STFT would add 2-5ms latency for no benefit. |
+
+### Agent B: Psychoacoustic Tricks
+
+| # | Trick | Impact | Description |
+|---|-------|--------|-------------|
+| 38 | **Fletcher-Munson loudness weighting** | MEDIUM | Volume-dependent A-weighting — at low volume, bass is perceptually 20dB quieter but visuals treat it equally. Interpolate between full A-weighting (quiet) and flat (loud). |
+| 39 | **Temporal masking (post-masking)** | HIGH | After loud transient, ear desensitized for ~200ms. Model this to create dramatic "silence after impact" — vignette tightens, particles shrink, then bloom back. Transforms act transitions. |
+| 40 | **Frequency masking (spectral flatness)** | MEDIUM | Spectral flatness = geometric/arithmetic mean. When dominant frequency masks neighbors, boost CA and bloom to show what ear misses. Creates inverse: simple sounds → complex visuals. |
+| 41 | **Missing fundamental** | LOW-MEDIUM | Detect bass perception from harmonic pattern in mids (piano fundamentals below bin resolution). Augments bass band during low-register passages. |
+| 42 | **Rhythm/groove modeling** | VERY HIGH | Onset detection + spectral flux → tempo tracking → phase accumulator. Particles pulse with flamenco compas instead of arbitrary scroll events. The "it feels alive" factor. |
+| 43 | **AV synchrony threshold** | MEDIUM | Tighten drift correction from 1.0s → 150ms. Add fine correction tier at 40-150ms. Use the 60ms perceptual budget for 3-frame ring buffer smoothing on bands (free temporal AA). |
+| 44 | **Stereo field → directional particles** | HIGH | ChannelSplitterNode → L/R AnalyserNodes → stereo pan signal. Low piano notes drift particles left, high notes drift right. CA shifts with stereo field. |
+
+### Phase 3 Priority
+
+| Priority | Tricks | Total Effort |
+|----------|--------|-------------|
+| **P0 (do first)** | #31 Onset detection, #32 Band compander | ~6h |
+| **P1 (high value)** | #33 Spectral centroid, #34 A-weighting+ERB, #39 Temporal masking, #43 AV sync | ~12h |
+| **P2 (ambitious)** | #42 Rhythm/groove, #44 Stereo field, #35 ZCR | ~20h |
+| **P3 (polish)** | #38 Fletcher-Munson, #40 Spectral flatness, #41 Missing fundamental, #36 Rate-comp | ~10h |
+
+---
+
 *Document created: 2026-04-06*
-*Status: Phase 1 + Phase 2 complete. 30 tricks cataloged across 10 research domains.*
-*All 10 agents completed successfully.*
+*Status: Phase 1 + Phase 2 + Phase 3 complete. 44 tricks cataloged.*
+*Implementation: worktree agents dispatched for Tier 1-2 fixes.*
