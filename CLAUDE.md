@@ -350,6 +350,29 @@ npm run typecheck    # TypeScript check (tsc --noEmit)
 - `audio/flamenco.m4a` — **3.9MB, active** (momentum-driven audio)
 - `og-image.jpg` — **47KB, active** (1200x630 OG/Twitter card image)
 
+## Known Bugs & Performance Issues
+
+> Full catalog with code examples: `docs/plans/2026-04-06-optimization-tricks.md` (30 tricks, 5 priority tiers)
+
+### Bugs (confirmed by multiple research agents)
+- **Asymmetric EMA not dt-corrected** (`audio-momentum.ts:223`): Fixed alpha `ATTACK=0.6`/`RELEASE=0.15` applied without `1-(1-α)^dt` correction. At 144Hz smoothing is 2.4× more aggressive than at 60Hz. Causes inconsistent visual reactivity across displays.
+- **`Math.pow(DAMPING, dt*60)` inside particle loop** (`cinema-gl.ts`): Called 1100× per frame despite `dt` being constant per frame. Should be hoisted outside the loop.
+- **3 separate RAF loops**: ScrollVideoPlayer, AudioMomentum, and CustomCursor each run their own `requestAnimationFrame`. Causes ordering dependency (1-frame audio latency) and 2 redundant rAF registrations.
+
+### GC Pressure (hot path allocations)
+- **String templates every frame**: `translate(${x}px, ${y}px)` in CustomCursor, shake transform, letterbox scaleY — ~600 strings/sec
+- **sampleLumGrad return objects**: Returns `{gx, gy}` for each of 1100 particles — 66,000 short-lived objects/sec
+- **Asymmetric EMA closure**: Arrow function re-created every `updateFrequencyBands()` call
+
+### Optimization Patterns (pending implementation)
+- `Math.pow(CONST, dt)` → `Math.exp(LN_CONST * dt)` with precomputed `LN_CONST = Math.log(CONST)` (11 call sites across 5 files)
+- `getByteFrequencyData` → `getFloatFrequencyData` for smoother shader-driving precision
+- `audio.volume` per frame → route through existing GainNode
+- JND idle gating: skip WebGL rendering when energy ≈ 0 and no user interaction
+- `glColorMask(true, true, true, false)` on opaque passes (25% bandwidth save)
+- `texStorage2D` + `texSubImage2D` for immutable FBO textures
+- `invalidateFramebuffer()` after each FBO pass (tile-based mobile GPUs)
+
 ## Conventions
 
 - All overlay content is in Spanish
