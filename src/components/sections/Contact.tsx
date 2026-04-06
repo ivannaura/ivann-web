@@ -255,18 +255,27 @@ export default function Contact() {
                   className="text-[10px] tracking-[0.3em] uppercase block mb-2"
                   style={{ color: "var(--text-muted)" }}
                 >
-                  WhatsApp
+                  Teléfono
                 </span>
                 <a
-                  href="https://wa.me/573102254687?text=Hola%20IVANN%2C%20quiero%20saber%20más%20sobre%20tu%20show"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="magnetic-btn inline-flex items-center gap-2 text-sm transition-colors duration-300 hover:text-[var(--aura-gold)]"
+                  href="tel:+573102254687"
+                  className="text-sm transition-colors duration-300 hover:text-[var(--aura-gold)] block mb-1"
                   style={{ color: "var(--text-secondary)" }}
                   onMouseEnter={() => { setCursorVariant("hover"); playHover(); }}
                   onMouseLeave={() => setCursorVariant("default")}
                 >
                   +57 310 225 4687
+                </a>
+                <a
+                  href="https://wa.me/573102254687?text=Hola%20IVANN%2C%20quiero%20saber%20más%20sobre%20tu%20show"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="magnetic-btn inline-flex items-center gap-2 text-xs tracking-[0.1em] transition-colors duration-300 hover:text-[var(--aura-gold)]"
+                  style={{ color: "var(--text-muted)" }}
+                  onMouseEnter={() => { setCursorVariant("hover"); playHover(); }}
+                  onMouseLeave={() => setCursorVariant("default")}
+                >
+                  WhatsApp
                 </a>
               </div>
 
@@ -332,6 +341,13 @@ export default function Contact() {
                     booking@ivannaura.com
                   </a>
                 </p>
+                <button
+                  onClick={() => { setSubmitted(false); setFormState({ name: "", email: "", type: "corporativo", message: "" }); }}
+                  className="mt-6 text-xs tracking-[0.2em] uppercase transition-colors duration-300 hover:text-[var(--aura-gold)]"
+                  style={{ color: "var(--text-muted)" }}
+                >
+                  Enviar otro mensaje
+                </button>
               </div>
             ) : (
               <form onSubmit={handleSubmit} className="flex flex-col gap-8" noValidate>

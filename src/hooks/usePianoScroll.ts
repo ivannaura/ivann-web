@@ -113,6 +113,12 @@ export function usePianoScroll(options: UsePianoScrollOptions = {}) {
       // M key = mute toggle shortcut (keyboard-only users)
       if (e.key === "m" || e.key === "M") {
         muteToggleRef.current?.();
+        // Brief visual feedback for keyboard mute toggle
+        const indicator = document.getElementById("piano-indicator");
+        if (indicator) {
+          indicator.style.opacity = "1";
+          setTimeout(() => { indicator.style.opacity = ""; }, 300);
+        }
         return;
       }
 

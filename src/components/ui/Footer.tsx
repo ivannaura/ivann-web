@@ -125,7 +125,7 @@ export default function Footer() {
             <button
               onClick={scrollToTop}
               aria-label="Volver al inicio de la página"
-              className="hidden md:flex flex-col items-center gap-2 group mb-4 magnetic-btn outline-none focus-visible:ring-1 focus-visible:ring-[var(--aura-gold)] rounded-sm"
+              className="flex flex-col items-center gap-2 group mb-4 magnetic-btn outline-none focus-visible:ring-1 focus-visible:ring-[var(--aura-gold)] rounded-sm"
               onMouseEnter={() => { setCursorVariant("hover"); playHover(); }}
               onMouseLeave={() => setCursorVariant("default")}
             >
@@ -197,7 +197,7 @@ export default function Footer() {
                     {link.name}
                   </span>
                   <span
-                    className="text-xs transition-all duration-300 opacity-0 group-hover:opacity-60 translate-x-2 group-hover:translate-x-0"
+                    className="text-xs transition-all duration-300 opacity-60 md:opacity-0 md:group-hover:opacity-60 translate-x-0 md:translate-x-2 md:group-hover:translate-x-0"
                     style={{ color: "var(--text-muted)" }}
                   >
                     {link.handle}
