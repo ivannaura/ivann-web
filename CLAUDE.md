@@ -49,10 +49,10 @@ layout.tsx
 | `ScrollStoryOverlay` | `ui/ScrollStoryOverlay.tsx` | 20+ story beats with GSAP SplitText per-char/word reveals |
 | `usePianoScroll` | `hooks/usePianoScroll.ts` | Physics-based keyboard/click scroll: momentum accumulator + friction decay + rhythm detection + M key mute |
 | `PianoIndicator` | `ui/PianoIndicator.tsx` | Frequency-reactive equalizer: wave cascade stagger + idle breathing animation |
-| `Navigation` | `ui/Navigation.tsx` | Fixed nav, GPU scaleX progress bar, native `<dialog>` with CSS entrance/exit animations |
+| `Navigation` | `ui/Navigation.tsx` | Fixed nav (4 items: Inicio/Espectáculo/Música/Contacto), GPU scaleX progress bar, native `<dialog>` with CSS entrance/exit animations |
 | `CustomCursor` | `ui/CustomCursor.tsx` | GPU-composited transform cursor + scale-based ring hover + scroll velocity stretch |
 | `MagneticButtons` | `providers/MagneticButtons.tsx` | Global `.magnetic-btn` hover effect + mouseout reset (desktop, reduced-motion aware) |
-| `Preloader` | `ui/Preloader.tsx` | Cinematic preloader: SplitText reveal + decorative bar + iris-close exit + audio primer |
+| `Preloader` | `ui/Preloader.tsx` | Cinematic preloader: SplitText reveal (font-display) + decorative bar + fractal noise grain + iris-close exit + audio primer |
 | `SmoothScroll` | `providers/SmoothScroll.tsx` | Lenis + GSAP single RAF loop (lerp 0.08, vinyl easing, autoRaf false) |
 | `Contact` | `sections/Contact.tsx` | GSAP ScrollTrigger entrance + SplitText heading + mailto: form + animated success state |
 | `Footer` | `ui/Footer.tsx` | GSAP SplitText entrance (staggered AURA heading) + real social links + micro-sounds |
@@ -375,6 +375,20 @@ npm run typecheck    # TypeScript check (tsc --noEmit)
 - Frequency analysis every 2nd frame via `analyseSkip` counter (`audio-momentum.ts`)
 - Pre-allocated NoteVoice (4) + WhooshVoice (2) GainNode pools (`micro-sounds.ts`)
 
+### Design Review — FIXED (commit ba34dad)
+- ~~**Hero/Preloader not using font-display**~~ → `fontFamily: var(--font-display)` on Preloader h1 + all major headings in ScrollStoryOverlay
+- ~~**Muted text over video no text-shadow**~~ → `.text-cinema` class added to all overlay text with `--text-muted`/`--text-secondary`
+- ~~**Min font sizes 9-10px**~~ → Floor raised to 11px across all components
+- ~~**Mobile overflow stats/cards/albums**~~ → `flex-wrap justify-center` with responsive gaps
+- ~~**Validation errors illegible**~~ → 12px warm red (#DC4A4A) replacing 10px dark crimson
+- ~~**Submit button no focus-visible**~~ → `focus-visible:ring` added
+- ~~**Contact social links no touch targets**~~ → `min-h-[44px] inline-flex items-center`
+- ~~**Nav only 2 items**~~ → Expanded to 4: Inicio, Espectáculo, Música, Contacto
+- ~~**Preloader flat screen**~~ → Subtle fractal noise grain overlay (opacity 0.03)
+- ~~**Letterbox range imperceptible**~~ → Range doubled via `1.6 - mood * 0.8` formula
+- ~~**Particles invisible at rest**~~ → Ambient alpha baseline 0.3 → 0.4
+- ~~**Contact/Footer no separation**~~ → Gold gradient divider line added
+
 ### Remaining (not yet implemented)
 - **3 separate RAF loops**: ScrollVideoPlayer, AudioMomentum, and CustomCursor each run their own `requestAnimationFrame`. Should coalesce into GSAP ticker.
 - JND idle gating: skip WebGL rendering when energy ≈ 0 and no user interaction
@@ -415,7 +429,7 @@ npm run typecheck    # TypeScript check (tsc --noEmit)
 - SharedAudioContext: `releaseAudioContext()` guards against negative refCount
 - ScrollVideoPlayer: `audioMuted` applied to freshly created AudioMomentum via ref (React effect ordering)
 - ScrollVideoPlayer: bass shake via `shakeRef` (ref-based transform on sticky div, no re-render)
-- ScrollVideoPlayer: dynamic letterbox bars (4vh `--bg-void` divs, `style.scale` varies with mood — CSS scale property, not transform)
+- ScrollVideoPlayer: dynamic letterbox bars (4vh `--bg-void` divs, `style.scale` varies with mood via `1.6 - mood * 0.8` — CSS scale property, not transform)
 - ScrollStoryOverlay: `data-reactive` letter-spacing is continuous (`energy * bands.mids * 0.08`), no threshold gate
 - ScrollStoryOverlay: exit guard simplified to `progress <= 0.8` (removed `tl.totalProgress() < 1` which caused fast-scroll glitches)
 - ScrollStoryOverlay: non-split beats exit via CSS opacity fade on ref style (not GSAP)
@@ -439,11 +453,23 @@ npm run typecheck    # TypeScript check (tsc --noEmit)
 - Preloader: iris-close exit via `clipPath: "circle(0% at 50% 50%)"` + content scale-down for depth
 - Preloader: `playClick()` audio primer on name reveal complete (primes shared AudioContext for iOS)
 - Preloader: reduced-motion users bypass exit animation (dismiss immediately)
+- Preloader: fractal noise grain overlay (`feTurbulence`, opacity 0.03) for cinematic texture during load
+- Preloader: h1 uses `fontFamily: var(--font-display)` (Cormorant Garamond) — not inherited body font
+- ScrollStoryOverlay: all headings use `font-display` class (Cormorant Garamond serif)
+- ScrollStoryOverlay: all text over video uses `.text-cinema` for double text-shadow legibility
+- ScrollStoryOverlay: minimum font size 11px across all elements (no 9px/10px)
+- ScrollStoryOverlay: stats/cards/albums use `flex-wrap justify-center` with responsive gaps for mobile
+- Contact: validation errors use 12px warm red (#DC4A4A) — not 10px dark crimson
+- Contact: submit button has `focus-visible:ring` for keyboard users
+- Contact: social links have `min-h-[44px]` touch targets (matching Footer)
+- Contact: gold gradient divider at bottom for visual separation from Footer
+- Contact: success checkmark is SVG (not Unicode character) for cross-platform consistency
 - Contact: success state animated via GSAP (circle `back.out(1.7)` + staggered text slide-up)
 - AudioMomentum: playbackRate uses exponential curve `Math.pow(energy, 0.7)` before lerp (vinyl-like slowdown)
 - AudioMomentum: `setMuted()` uses GainNode gain ramp (not `audio.muted`) to preserve AnalyserNode signal for visual reactivity
 - AudioMomentum: logarithmic volume `Math.pow(volume, 2)` routed through `GainNode.gain.setTargetAtTime()` with JND 0.005 threshold (not `audio.volume`)
 - MicroSounds: `playHover()` tracks `lastNoteIndex` with do-while to prevent consecutive same notes
+- Footer: blockquote attribution uses `<footer><cite>` for proper semantics
 - Footer: AURA heading uses `querySelectorAll("[data-brand]")` with staggered SplitText entrance
 - Footer: 44px min touch targets on social links, handles visible on mobile (`opacity-60 md:opacity-0`)
 - SmoothScroll: custom easing `Math.min(1, 1.001 - Math.pow(2, -10 * t))` (exponential ease-out, vinyl feel)
