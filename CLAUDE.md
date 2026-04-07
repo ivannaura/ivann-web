@@ -423,9 +423,17 @@ Applied across 6 files (559 insertions). All CSS animations motion-gated via `@m
 - `.footer-arrow-bounce` on back-to-top hover (`@keyframes arrow-bounce-up`)
 - `.footer-bottom-bar::before` noise texture on copyright area (dual radial gold gradients)
 
+### Performance — IMPLEMENTED (session 2)
+- **CinemaGL idle gating** (`cinema-gl.ts`): After 3 frames of unchanged inputs (video frame same, energy < 0.005, velocity < 0.005, bands sum < 0.015, mouse within 2px, actTransition < 0.01), skips full 5-pass pipeline. Resumes instantly on any change.
+- **Navigation scrollProgress ref-based** (`Navigation.tsx`): Replaced `useState(scrollProgress)` with `useRef` + direct DOM manipulation on `progressBarRef` and `progressDotRef`. Eliminates ~60 re-renders/sec during scroll.
+- **getMoodCPU array hoisting** (`mood.ts`): `MOOD_KEYFRAMES` constant hoisted to module level instead of being recreated inside function on every call.
+- **Navigation transition fix** (`Navigation.tsx`): Dialog `transitionend` now waits for `propertyName === "opacity"` with idempotency guard and fallback timeout.
+- **Navigation paddingTop fix** (`Navigation.tsx`): Uses `max()` CSS function combining rem value with `env(safe-area-inset-top)`.
+- **Navigation transition-property** (`Navigation.tsx`): Changed from `transition-all` to explicit `transition-[background-color,border-color,box-shadow,padding]`.
+- **Navigation font-display** (`Navigation.tsx`): Logo text uses `fontFamily: var(--font-display)`.
+
 ### Remaining (not yet implemented)
 - **3 separate RAF loops**: ScrollVideoPlayer, AudioMomentum, and CustomCursor each run their own `requestAnimationFrame`. Should coalesce into GSAP ticker.
-- JND idle gating: skip WebGL rendering when energy ≈ 0 and no user interaction
 
 ## Conventions
 
@@ -551,4 +559,8 @@ Applied across 6 files (559 insertions). All CSS animations motion-gated via `@m
 - Footer: `.footer-arrow-bounce` animation on back-to-top hover
 - Footer: `.footer-bottom-bar::before` noise texture on copyright area
 - CSS: all new decorative animations wrapped in `@media (prefers-reduced-motion: no-preference)` block
+- CinemaGL: idle gating skips full pipeline after 3 frames of unchanged inputs (energy, velocity, bands, mouse, video frame, actTransition)
+- Navigation: scroll progress uses ref-based DOM manipulation (not useState) to avoid 60fps re-renders
+- getMoodCPU: `MOOD_KEYFRAMES` hoisted to module level (constant array, not per-call allocation)
+- Navigation: `transition-property` explicitly lists animated properties (not `transition-all`)
 - See `docs/CONVENTIONS.md` for full technical conventions
