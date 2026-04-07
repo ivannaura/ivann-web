@@ -16,13 +16,15 @@ export default function Preloader() {
   const nameRef = useRef<HTMLHeadingElement>(null);
   const subtitleRef = useRef<HTMLParagraphElement>(null);
   const barRef = useRef<HTMLDivElement>(null);
+  const batonRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const container = containerRef.current;
     const nameEl = nameRef.current;
     const subtitleEl = subtitleRef.current;
     const barEl = barRef.current;
-    if (!container || !nameEl || !subtitleEl || !barEl) return;
+    const batonEl = batonRef.current;
+    if (!container || !nameEl || !subtitleEl || !barEl || !batonEl) return;
 
     let dismissTimeout: ReturnType<typeof setTimeout>;
 
@@ -47,8 +49,10 @@ export default function Preloader() {
         mask: "words",
       });
 
-      // Split subtitle into chars
-      const subtitleSplit = SplitText.create(subtitleEl, { type: "chars" });
+      // Split subtitle into individual words for staggered reveal
+      const subtitleSplit = SplitText.create(subtitleEl, {
+        type: "words,chars",
+      });
 
       // Master timeline
       const tl = gsap.timeline({
@@ -95,6 +99,25 @@ export default function Preloader() {
         onComplete: () => playClick(), // Audio primer — primes AudioContext for iOS
       });
 
+      // 1b. Conductor's baton — gold line draws across during name reveal
+      tl.fromTo(
+        batonEl,
+        { scaleX: 0, opacity: 0 },
+        {
+          scaleX: 1,
+          opacity: 1,
+          duration: 0.9,
+          ease: "power2.inOut",
+        },
+        "-=0.6"
+      );
+      // Baton fades out gracefully
+      tl.to(batonEl, {
+        opacity: 0,
+        duration: 0.4,
+        ease: "power2.in",
+      });
+
       // 2. Progress bar grows
       tl.to(
         barEl,
@@ -103,20 +126,45 @@ export default function Preloader() {
           duration: 1.2,
           ease: "power2.inOut",
         },
-        "-=0.3"
+        "-=0.5"
       );
 
-      // 3. Subtitle chars fade in
+      // 2b. Subtle float on the title during wait — gentle y oscillation
+      tl.to(
+        nameEl,
+        {
+          y: -4,
+          duration: 1.6,
+          ease: "sine.inOut",
+          yoyo: true,
+          repeat: 1,
+        },
+        "-=1.2"
+      );
+
+      // 3. Subtitle words fade in with staggered y-offset per word
+      tl.from(
+        subtitleSplit.words,
+        {
+          opacity: 0,
+          y: 12,
+          stagger: 0.12,
+          duration: 0.5,
+          ease: "power3.out",
+        },
+        "-=1.8"
+      );
+
+      // 3b. Then individual chars within each word sharpen into place
       tl.from(
         subtitleSplit.chars,
         {
           opacity: 0,
-          y: 6,
-          stagger: 0.02,
-          duration: 0.4,
+          stagger: 0.015,
+          duration: 0.3,
           ease: "power2.out",
         },
-        "-=0.5"
+        "-=1.2"
       );
 
       // 4. Brief pause to let user read
@@ -166,6 +214,26 @@ export default function Preloader() {
           backgroundRepeat: "repeat",
         }}
       />
+
+      {/* Conductor's baton — gold line that sweeps across during name reveal */}
+      <div
+        ref={batonRef}
+        aria-hidden="true"
+        style={{
+          position: "absolute",
+          top: "calc(50% - 40px)",
+          left: "20%",
+          width: "60%",
+          height: "1px",
+          background:
+            "linear-gradient(to right, transparent, var(--aura-gold-dim), var(--aura-gold), var(--aura-gold-dim), transparent)",
+          transformOrigin: "left",
+          transform: "scaleX(0)",
+          opacity: 0,
+          pointerEvents: "none",
+        }}
+      />
+
       {/* Name — masked char reveal */}
       <h1
         ref={nameRef}
@@ -194,6 +262,7 @@ export default function Preloader() {
       >
         <div
           ref={barRef}
+          className="preloader-bar-glow"
           style={{
             position: "absolute",
             left: 0,
@@ -208,7 +277,7 @@ export default function Preloader() {
         />
       </div>
 
-      {/* Subtitle */}
+      {/* Subtitle — word-staggered reveal with interpuncts */}
       <p
         ref={subtitleRef}
         style={{
@@ -219,7 +288,7 @@ export default function Preloader() {
           marginTop: 24,
         }}
       >
-        Live Experience
+        Pianista &middot; Compositor &middot; Live Experience
       </p>
     </div>
   );

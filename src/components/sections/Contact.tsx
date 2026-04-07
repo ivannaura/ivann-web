@@ -172,7 +172,7 @@ export default function Contact() {
   };
 
   const inputBase =
-    "w-full bg-transparent border-b py-3 text-sm font-light transition-colors duration-300 focus:outline-none border-[var(--bg-subtle)] focus:border-[var(--aura-gold-dim)] text-[var(--text-primary)] placeholder:text-[var(--text-muted)]";
+    "contact-input w-full bg-transparent border-b py-3 text-sm font-light transition-colors duration-300 focus:outline-none border-[var(--bg-subtle)] focus:border-[var(--aura-gold-dim)] text-[var(--text-primary)] placeholder:text-[var(--text-muted)]";
 
   return (
     <section
@@ -216,7 +216,7 @@ export default function Contact() {
               style={{ color: "var(--text-primary)" }}
             >
               Hagamos algo{" "}
-              <span style={{ color: "var(--aura-gold)" }}>
+              <span className="gold-glow-text" style={{ color: "var(--aura-gold)" }}>
                 extraordinario
               </span>
             </h2>
@@ -353,11 +353,10 @@ export default function Contact() {
               </div>
             ) : (
               <form onSubmit={handleSubmit} className="flex flex-col gap-8" noValidate>
-                <div data-reveal>
+                <div data-reveal className="contact-field">
                   <label
                     htmlFor="contact-name"
-                    className="text-[10px] tracking-[0.3em] uppercase block mb-2"
-                    style={{ color: "var(--text-muted)" }}
+                    className={`contact-label ${formState.name ? "has-value" : ""}`}
                   >
                     Nombre
                   </label>
@@ -382,11 +381,10 @@ export default function Contact() {
                   )}
                 </div>
 
-                <div data-reveal>
+                <div data-reveal className="contact-field">
                   <label
                     htmlFor="contact-email"
-                    className="text-[10px] tracking-[0.3em] uppercase block mb-2"
-                    style={{ color: "var(--text-muted)" }}
+                    className={`contact-label ${formState.email ? "has-value" : ""}`}
                   >
                     Email
                   </label>
@@ -411,11 +409,10 @@ export default function Contact() {
                   )}
                 </div>
 
-                <div data-reveal>
+                <div data-reveal className="contact-field">
                   <label
                     htmlFor="contact-type"
-                    className="text-[10px] tracking-[0.3em] uppercase block mb-2"
-                    style={{ color: "var(--text-muted)" }}
+                    className="contact-label has-value"
                   >
                     Tipo de evento
                   </label>
@@ -450,11 +447,10 @@ export default function Contact() {
                   </div>
                 </div>
 
-                <div data-reveal>
+                <div data-reveal className="contact-field">
                   <label
                     htmlFor="contact-message"
-                    className="text-[10px] tracking-[0.3em] uppercase block mb-2"
-                    style={{ color: "var(--text-muted)" }}
+                    className={`contact-label ${formState.message ? "has-value" : ""}`}
                   >
                     Mensaje
                   </label>
@@ -482,7 +478,7 @@ export default function Contact() {
                 <div data-reveal>
                   <button
                     type="submit"
-                    className="magnetic-btn px-10 py-4 text-xs tracking-[0.3em] uppercase transition-all duration-500 rounded-sm hover:bg-[var(--aura-gold)] hover:text-[var(--bg-void)] focus-visible:ring-1 focus-visible:ring-[var(--aura-gold)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg-surface)]"
+                    className="contact-submit magnetic-btn px-10 py-4 text-xs tracking-[0.3em] uppercase transition-all duration-500 rounded-sm hover:bg-[var(--aura-gold)] hover:text-[var(--bg-void)] focus-visible:ring-1 focus-visible:ring-[var(--aura-gold)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg-surface)]"
                     style={{
                       border: "1px solid var(--aura-gold-dim)",
                       color: "var(--aura-gold)",

@@ -109,14 +109,14 @@ export default function Footer() {
               </p>
               <h2
                 data-brand
-                className="text-[clamp(3rem,8vw,7rem)] font-extralight leading-[0.9] tracking-[0.05em]"
+                className="footer-brand text-[clamp(3rem,8vw,7rem)] font-extralight leading-[0.9] tracking-[0.05em]"
                 style={{ color: "var(--text-primary)" }}
               >
                 IVANN
               </h2>
               <h2
                 data-brand
-                className="text-[clamp(3rem,8vw,7rem)] font-extralight leading-[0.9] tracking-[0.05em]"
+                className="footer-brand text-[clamp(3rem,8vw,7rem)] font-extralight leading-[0.9] tracking-[0.05em]"
                 style={{ color: "var(--aura-gold)" }}
               >
                 AURA
@@ -145,7 +145,7 @@ export default function Footer() {
                   fill="none"
                   stroke="currentColor"
                   strokeWidth="1.5"
-                  className="transition-colors duration-500 group-hover:text-[var(--bg-void)]"
+                  className="footer-arrow-bounce transition-colors duration-500 group-hover:text-[var(--bg-void)]"
                   style={{ color: "var(--aura-gold)" }}
                 >
                   <path d="M12 19V5M5 12l7-7 7 7" />
@@ -153,7 +153,7 @@ export default function Footer() {
               </div>
               <span
                 aria-hidden="true"
-                className="text-[9px] tracking-[0.3em] uppercase transition-colors duration-300 group-hover:text-[var(--aura-gold)]"
+                className="text-[11px] tracking-[0.3em] uppercase transition-colors duration-300 group-hover:text-[var(--aura-gold)]"
                 style={{ color: "var(--text-muted)" }}
               >
                 Inicio
@@ -188,15 +188,18 @@ export default function Footer() {
                   href={link.url}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="group flex items-center justify-between py-1 min-w-[44px] min-h-[44px] transition-all duration-300"
+                  className="footer-social-link group flex items-center justify-between py-1 min-w-[44px] min-h-[44px] transition-all duration-300"
                   onMouseEnter={() => { setCursorVariant("hover"); playHover(); }}
                   onMouseLeave={() => setCursorVariant("default")}
                 >
-                  <span
-                    className="text-sm font-light tracking-wide transition-colors duration-300 group-hover:text-[var(--aura-gold)]"
-                    style={{ color: "var(--text-secondary)" }}
-                  >
-                    {link.name}
+                  <span className="flex items-center gap-0">
+                    <span
+                      className="text-sm font-light tracking-wide transition-colors duration-300 group-hover:text-[var(--aura-gold)]"
+                      style={{ color: "var(--text-secondary)" }}
+                    >
+                      {link.name}
+                    </span>
+                    <span className="footer-social-line" aria-hidden="true" />
                   </span>
                   <span
                     className="text-xs transition-all duration-300 opacity-60 md:opacity-0 md:group-hover:opacity-60 translate-x-0 md:translate-x-2 md:group-hover:translate-x-0"
@@ -237,9 +240,24 @@ export default function Footer() {
           </div>
 
           {/* Quote */}
-          <div data-reveal className="flex flex-col justify-between">
+          <div data-reveal className="relative flex flex-col justify-between">
+            {/* Decorative oversized quotation marks */}
+            <span
+              aria-hidden="true"
+              className="absolute -top-6 -left-2 text-[6rem] leading-none font-display select-none pointer-events-none"
+              style={{ color: "var(--aura-gold)", opacity: 0.07 }}
+            >
+              &ldquo;
+            </span>
+            <span
+              aria-hidden="true"
+              className="absolute -bottom-2 right-0 text-[6rem] leading-none font-display select-none pointer-events-none"
+              style={{ color: "var(--aura-gold)", opacity: 0.05 }}
+            >
+              &rdquo;
+            </span>
             <blockquote
-              className="text-sm font-light italic leading-relaxed"
+              className="relative text-sm font-light italic leading-relaxed"
               style={{ color: "var(--text-secondary)" }}
             >
               &ldquo;La música es un mágico vehículo
@@ -265,9 +283,9 @@ export default function Footer() {
           style={{ background: "var(--bg-subtle)" }}
         />
 
-        <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+        <div className="footer-bottom-bar relative flex flex-col sm:flex-row items-center justify-between gap-4">
           <span
-            className="text-[10px] tracking-[0.15em]"
+            className="text-[11px] tracking-[0.15em]"
             style={{ color: "var(--text-muted)" }}
           >
             &copy; {new Date().getFullYear()} IVANN AURA — Todos los derechos reservados
@@ -275,7 +293,7 @@ export default function Footer() {
 
           <div className="flex items-center gap-4">
             <span
-              className="text-[10px] tracking-[0.15em]"
+              className="text-[11px] tracking-[0.15em]"
               style={{ color: "var(--text-muted)" }}
             >
               Medellín — Bogotá — El Mundo
@@ -285,7 +303,7 @@ export default function Footer() {
               style={{ background: "var(--aura-gold-dim)" }}
             />
             <span
-              className="text-[10px] tracking-[0.15em]"
+              className="text-[11px] tracking-[0.15em]"
               style={{ color: "var(--text-muted)" }}
             >
               Live Experience

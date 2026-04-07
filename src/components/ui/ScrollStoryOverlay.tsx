@@ -71,7 +71,12 @@ const STORY_BEATS: StoryBeat[] = [
           className="text-[clamp(3rem,8vw,8rem)] font-light tracking-[0.3em] leading-none text-cinema font-display"
           style={{ color: "var(--text-primary)" }}
         >
-          IVANN
+          {/* Letter-by-letter opacity gradient: first letter brightest, last slightly dimmed */}
+          {"IVANN".split("").map((ch, i, arr) => (
+            <span key={i} style={{ opacity: 1 - i * (0.15 / (arr.length - 1)) }}>
+              {ch}
+            </span>
+          ))}
         </p>
         <p
           data-split="chars"
@@ -80,7 +85,11 @@ const STORY_BEATS: StoryBeat[] = [
           className="text-[clamp(3rem,8vw,8rem)] font-light tracking-[0.3em] leading-none mt-2 text-cinema font-display"
           style={{ color: "var(--aura-gold)" }}
         >
-          AURA
+          {"AURA".split("").map((ch, i, arr) => (
+            <span key={i} style={{ opacity: 1 - i * (0.15 / (arr.length - 1)) }}>
+              {ch}
+            </span>
+          ))}
         </p>
       </div>
     ),
@@ -131,7 +140,22 @@ const STORY_BEATS: StoryBeat[] = [
     frameStart: 95,
     frameEnd: 130,
     content: (
-      <div className="max-w-[600px]">
+      <div className="max-w-[600px] relative">
+        {/* Decorative oversized gold opening quote mark */}
+        <span
+          aria-hidden="true"
+          className="absolute font-display select-none text-cinema"
+          style={{
+            color: "var(--aura-gold)",
+            opacity: 0.35,
+            fontSize: "clamp(3rem, 6vw, 5rem)",
+            lineHeight: 1,
+            top: "-0.35em",
+            left: "-0.15em",
+          }}
+        >
+          {"\u201C"}
+        </span>
         <p
           data-reactive
           data-split="words"
@@ -139,9 +163,24 @@ const STORY_BEATS: StoryBeat[] = [
           className="text-[clamp(1rem,2.5vw,1.8rem)] italic font-light leading-relaxed text-cinema"
           style={{ color: "var(--text-secondary)" }}
         >
-          &ldquo;Si Beethoven estuviera vivo, usaría la tecnología
-          disponible.&rdquo;
+          Si Beethoven estuviera vivo, usaría la tecnología
+          disponible.
         </p>
+        {/* Decorative oversized gold closing quote mark */}
+        <span
+          aria-hidden="true"
+          className="font-display select-none text-cinema inline-block"
+          style={{
+            color: "var(--aura-gold)",
+            opacity: 0.35,
+            fontSize: "clamp(3rem, 6vw, 5rem)",
+            lineHeight: 0,
+            marginTop: "0.1em",
+            marginLeft: "0.1em",
+          }}
+        >
+          {"\u201D"}
+        </span>
         <p
           data-split="chars"
           data-split-stagger="0.02"
@@ -161,12 +200,17 @@ const STORY_BEATS: StoryBeat[] = [
     content: (
       <div className="flex flex-wrap justify-center gap-4 md:gap-12 lg:gap-20" data-depth="0.8">
         {[
-          { num: "200+", label: "SHOWS" },
-          { num: "15+", label: "AÑOS" },
-          { num: "4", label: "ÁLBUMES" },
-          { num: "∞", label: "EMOCIONES" },
+          { num: "200+", label: "SHOWS", offset: 0 },
+          { num: "15+", label: "AÑOS", offset: 12 },
+          { num: "4", label: "ÁLBUMES", offset: -8 },
+          { num: "∞", label: "EMOCIONES", offset: 16 },
         ].map((stat) => (
-          <div key={stat.label} data-stagger className="text-center">
+          <div
+            key={stat.label}
+            data-stagger
+            className="text-center"
+            style={{ transform: `translateY(${stat.offset}px)` }}
+          >
             <span
               className="text-[clamp(1.5rem,4vw,3.5rem)] font-light block text-cinema"
               style={{ color: "var(--text-primary)" }}
@@ -208,14 +252,17 @@ const STORY_BEATS: StoryBeat[] = [
     frameStart: 183,
     frameEnd: 200,
     content: (
-      <span
-        data-split="chars"
-        data-split-stagger="0.02"
-        className="text-[11px] tracking-[0.4em] uppercase font-mono text-cinema"
-        style={{ color: "var(--aura-gold)" }}
-      >
-        01 — La Experiencia
-      </span>
+      <div className="flex flex-col items-start gap-3">
+        <span className="act-rule" style={{ margin: 0 }} aria-hidden="true" />
+        <span
+          data-split="chars"
+          data-split-stagger="0.02"
+          className="text-[11px] tracking-[0.4em] uppercase font-mono text-cinema"
+        >
+          <span style={{ color: "var(--aura-gold)" }}>01</span>
+          <span style={{ color: "var(--text-muted)" }}>{" — La Experiencia"}</span>
+        </span>
+      </div>
     ),
     position: "top-left",
     animation: "slide-left",
@@ -272,14 +319,17 @@ const STORY_BEATS: StoryBeat[] = [
     frameStart: 273,
     frameEnd: 290,
     content: (
-      <span
-        data-split="chars"
-        data-split-stagger="0.02"
-        className="text-[11px] tracking-[0.4em] uppercase font-mono text-cinema"
-        style={{ color: "var(--aura-gold)" }}
-      >
-        02 — El Show
-      </span>
+      <div className="flex flex-col items-start gap-3">
+        <span className="act-rule" style={{ margin: 0 }} aria-hidden="true" />
+        <span
+          data-split="chars"
+          data-split-stagger="0.02"
+          className="text-[11px] tracking-[0.4em] uppercase font-mono text-cinema"
+        >
+          <span style={{ color: "var(--aura-gold)" }}>02</span>
+          <span style={{ color: "var(--text-muted)" }}>{" — El Show"}</span>
+        </span>
+      </div>
     ),
     position: "top-left",
     animation: "slide-left",
@@ -346,14 +396,17 @@ const STORY_BEATS: StoryBeat[] = [
     frameStart: 363,
     frameEnd: 380,
     content: (
-      <span
-        data-split="chars"
-        data-split-stagger="0.02"
-        className="text-[11px] tracking-[0.4em] uppercase font-mono text-cinema"
-        style={{ color: "var(--aura-gold)" }}
-      >
-        03 — Música
-      </span>
+      <div className="flex flex-col items-start gap-3">
+        <span className="act-rule" style={{ margin: 0 }} aria-hidden="true" />
+        <span
+          data-split="chars"
+          data-split-stagger="0.02"
+          className="text-[11px] tracking-[0.4em] uppercase font-mono text-cinema"
+        >
+          <span style={{ color: "var(--aura-gold)" }}>03</span>
+          <span style={{ color: "var(--text-muted)" }}>{" — Música"}</span>
+        </span>
+      </div>
     ),
     position: "top-left",
     animation: "slide-left",
@@ -364,12 +417,17 @@ const STORY_BEATS: StoryBeat[] = [
     content: (
       <div className="flex flex-wrap justify-center gap-4 md:gap-8">
         {[
-          { year: "2023", title: "Apocalypsis", color: "#6B1520" },
-          { year: "2020", title: "Romantique", color: "#C9A84C" },
-          { year: "2018", title: "Piano & Fire", color: "#8B2500" },
-          { year: "2015", title: "First Light", color: "#2A4A6B" },
+          { year: "2023", title: "Apocalypsis", color: "#6B1520", rotate: -1.5 },
+          { year: "2020", title: "Romantique", color: "#C9A84C", rotate: 2 },
+          { year: "2018", title: "Piano & Fire", color: "#8B2500", rotate: -2 },
+          { year: "2015", title: "First Light", color: "#2A4A6B", rotate: 1 },
         ].map((album) => (
-          <div key={album.title} data-stagger className="text-center">
+          <div
+            key={album.title}
+            data-stagger
+            className="text-center"
+            style={{ transform: `rotate(${album.rotate}deg)` }}
+          >
             <div
               className="w-20 h-20 md:w-28 md:h-28 mb-2 border"
               style={{
@@ -425,7 +483,7 @@ const STORY_BEATS: StoryBeat[] = [
         data-split="chars"
         data-split-mask="words"
         data-split-stagger="0.025"
-        className="text-[clamp(1.5rem,4vw,3.5rem)] font-light tracking-[0.15em] text-center text-cinema font-display"
+        className="text-[clamp(1.5rem,4vw,3.5rem)] font-light tracking-[0.15em] text-center text-cinema font-display cta-underline pointer-events-auto"
         style={{ color: "var(--text-primary)" }}
       >
         VIVE LA EXPERIENCIA
@@ -506,14 +564,17 @@ const STORY_BEATS: StoryBeat[] = [
     frameStart: 556,
     frameEnd: 575,
     content: (
-      <span
-        data-split="chars"
-        data-split-stagger="0.02"
-        className="text-[11px] tracking-[0.4em] uppercase font-mono text-cinema"
-        style={{ color: "var(--aura-gold)" }}
-      >
-        04 — Prensa & Redes
-      </span>
+      <div className="flex flex-col items-start gap-3">
+        <span className="act-rule" style={{ margin: 0 }} aria-hidden="true" />
+        <span
+          data-split="chars"
+          data-split-stagger="0.02"
+          className="text-[11px] tracking-[0.4em] uppercase font-mono text-cinema"
+        >
+          <span style={{ color: "var(--aura-gold)" }}>04</span>
+          <span style={{ color: "var(--text-muted)" }}>{" — Prensa & Redes"}</span>
+        </span>
+      </div>
     ),
     position: "top-left",
     animation: "slide-left",
@@ -561,6 +622,16 @@ const STORY_BEATS: StoryBeat[] = [
         >
           IVANN
         </h2>
+        {/* Decorative thin gold line between the two names */}
+        <div
+          aria-hidden="true"
+          className="mx-auto my-3"
+          style={{
+            width: "clamp(40px, 8vw, 80px)",
+            height: "1px",
+            background: "linear-gradient(90deg, transparent, var(--aura-gold), transparent)",
+          }}
+        />
         <h2
           data-split="chars"
           data-split-mask="words"
@@ -812,6 +883,9 @@ function AnimatedBeat({ beat, progress, energy = 0, bands, actTransition = 0 }: 
     if (reactiveEls.length === 0) return;
 
     const intensity = energy * bands.mids * 0.08;
+    // Color warmth: as energy rises, text warms from white (#F0EDE6) toward gold (#C9A84C)
+    // Clamped to 0.4 max so it never fully becomes gold — just a subtle warm shift
+    const warmth = Math.min(0.4, energy * bands.mids * 0.5);
     reactiveEls.forEach(target => {
       // Use a data attribute to cache original spacing (set once)
       if (!target.dataset.baseSpacing) {
@@ -819,12 +893,19 @@ function AnimatedBeat({ beat, progress, energy = 0, bands, actTransition = 0 }: 
       }
       const base = target.dataset.baseSpacing;
       target.style.letterSpacing = `calc(${base} + ${intensity}em)`;
+      // Warm color shift: interpolate from current text color toward gold
+      if (warmth > 0.01) {
+        target.style.color = `color-mix(in srgb, var(--text-primary) ${Math.round((1 - warmth) * 100)}%, var(--aura-gold))`;
+      } else {
+        target.style.color = "";
+      }
     });
 
     return () => {
       const els = el?.querySelectorAll<HTMLElement>('[data-reactive]');
       els?.forEach(target => {
         target.style.letterSpacing = '';
+        target.style.color = '';
       });
     };
   }, [energy, bands]);

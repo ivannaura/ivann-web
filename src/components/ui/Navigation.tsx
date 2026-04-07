@@ -143,7 +143,27 @@ export default function Navigation({
             "linear-gradient(to right, var(--aura-gold-dim), var(--aura-gold), var(--aura-gold-bright))",
           opacity: scrolled ? 1 : 0,
         }}
-      />
+      >
+        {/* Leading edge particle — gold shimmer dot at the progress tip */}
+        <div
+          aria-hidden="true"
+          style={{
+            position: "absolute",
+            right: -1,
+            top: "50%",
+            width: 6,
+            height: 6,
+            borderRadius: "50%",
+            background: "var(--aura-gold-bright)",
+            transform: "translate(50%, -50%)",
+            boxShadow:
+              "0 0 6px rgba(232, 200, 90, 0.8), 0 0 14px rgba(201, 168, 76, 0.4)",
+            animation: scrolled ? "nav-progress-shimmer 1.5s ease-in-out infinite" : "none",
+            opacity: scrollProgress > 0.005 ? 1 : 0,
+            transition: "opacity 0.3s ease-out",
+          }}
+        />
+      </div>
 
       <nav
         className={`fixed top-0 left-0 right-0 z-[1000] transition-all duration-700 ${
@@ -154,11 +174,14 @@ export default function Navigation({
         style={{
           paddingTop: "env(safe-area-inset-top)",
           background: scrolled
-            ? "rgba(5, 5, 8, 0.7)"
+            ? "rgba(5, 5, 8, 0.75)"
             : "transparent",
           borderBottom: scrolled
-            ? "1px solid rgba(255,255,255,0.03)"
+            ? "1px solid rgba(201, 168, 76, 0.06)"
             : "1px solid transparent",
+          boxShadow: scrolled
+            ? "0 1px 0 0 rgba(201, 168, 76, 0.03), 0 4px 24px -4px rgba(0, 0, 0, 0.5)"
+            : "none",
         }}
       >
         <div className="max-w-[1400px] mx-auto px-8 md:px-16 flex items-center justify-between">
@@ -282,10 +305,21 @@ export default function Navigation({
               </a>
             ))}
 
+            {/* Gold diamond separator */}
             <div
-              className="w-px h-4 mx-3"
-              style={{ background: "var(--bg-subtle)" }}
-            />
+              className="mx-4 flex items-center justify-center"
+              aria-hidden="true"
+            >
+              <div
+                style={{
+                  width: 4,
+                  height: 4,
+                  background: "var(--aura-gold-dim)",
+                  transform: "rotate(45deg)",
+                  opacity: 0.5,
+                }}
+              />
+            </div>
 
             {/* Sound toggle — wired to AudioMomentum */}
             <button
@@ -487,7 +521,7 @@ export default function Navigation({
               {item.label}
             </span>
             <div
-              className="w-[6px] h-[6px] rounded-full transition-all duration-500"
+              className="relative w-[6px] h-[6px] rounded-full transition-all duration-500"
               style={{
                 background:
                   activeSection === i
@@ -496,6 +530,14 @@ export default function Navigation({
                 transform:
                   activeSection === i ? "scale(1.5)" : "scale(1)",
                 opacity: activeSection === i ? 1 : 0.3,
+                boxShadow:
+                  activeSection === i
+                    ? "0 0 6px rgba(201, 168, 76, 0.6)"
+                    : "none",
+                animation:
+                  activeSection === i
+                    ? "dot-echo 2s ease-out infinite"
+                    : "none",
               }}
             />
           </button>
