@@ -389,6 +389,40 @@ npm run typecheck    # TypeScript check (tsc --noEmit)
 - ~~**Particles invisible at rest**~~ → Ambient alpha baseline 0.3 → 0.4
 - ~~**Contact/Footer no separation**~~ → Gold gradient divider line added
 
+### Creative Enhancements — Awwwards-tier (commit 8dd0105)
+Applied across 6 files (559 insertions). All CSS animations motion-gated via `@media (prefers-reduced-motion: no-preference)`.
+
+**Preloader + Navigation:**
+- Conductor's baton: gold gradient line sweeps across during name reveal (GSAP `fromTo scaleX(0→1)`, fades out after)
+- Title float: gentle y oscillation (-4px, `yoyo: true, repeat: 1`) during progress bar fill
+- Subtitle word-stagger: SplitText `type: "words,chars"` — words stagger 0.12s, then chars sharpen at 0.015s
+- Progress bar glow: `preloader-bar-glow` class with pulsing gold box-shadow (`@keyframes preloader-bar-pulse`)
+- Nav progress particle: gold dot shimmer on progress bar leading edge (`nav-progress-shimmer` animation)
+- Gold diamond separator: 4px rotated-45deg replacing plain `w-px` divider
+- Active side dot echo: sonar pulse animation (`@keyframes dot-echo`)
+
+**ScrollStoryOverlay:**
+- Per-letter opacity gradient: `"IVANN".split("").map()` with `opacity: 1 - i * (0.15 / (arr.length - 1))`
+- Act label numbers in gold: `<span style={{ color: "var(--aura-gold)" }}>01</span>`
+- Decorative quote marks: `\u201C` positioned absolutely, 6vw, gold 35% opacity
+- Stats staggered offsets: `translateY(0/12/-8/16px)` per stat card
+- Album rotations: `rotate(-1.5/+2/-2/+1deg)` per album card
+- Gold separator between closing IVANN/AURA words
+- Audio-reactive color warmth: `color-mix(in srgb, var(--text-primary) N%, var(--aura-gold))` driven by energy
+- `.act-rule` gold accent lines before each act label (`@keyframes rule-draw-in`)
+- `.cta-underline` hover draw-in on "VIVE LA EXPERIENCIA" (CSS `::after scaleX`)
+
+**Contact + Footer:**
+- `.contact-field::after` gold gradient glow on input focus (CSS `scaleX(0→1)` transition)
+- `.contact-label` floating labels: shrink 10→9px + gold color on focus/has-value
+- `.contact-submit::before` shimmer sweep on hover (`@keyframes shimmer-sweep`)
+- `.gold-glow-text` pulsing text-shadow on "extraordinario" (`@keyframes gold-text-glow`)
+- `.footer-brand` text-stroke engraving on hover (`-webkit-text-stroke: 1px`, color transparent)
+- `.footer-social-line` extending decorative gold line (0→24px) on hover
+- Oversized gold quotation marks on blockquote (6rem, opacity 0.07/0.05)
+- `.footer-arrow-bounce` on back-to-top hover (`@keyframes arrow-bounce-up`)
+- `.footer-bottom-bar::before` noise texture on copyright area (dual radial gold gradients)
+
 ### Remaining (not yet implemented)
 - **3 separate RAF loops**: ScrollVideoPlayer, AudioMomentum, and CustomCursor each run their own `requestAnimationFrame`. Should coalesce into GSAP ticker.
 - JND idle gating: skip WebGL rendering when energy ≈ 0 and no user interaction
@@ -494,4 +528,27 @@ npm run typecheck    # TypeScript check (tsc --noEmit)
 - **Delta-time correction pattern**: `Math.exp(LN_CONSTANT * dt)` where `LN_CONSTANT = Math.log(c)` precomputed at module level, `dt = (now - lastTime) / 16.667` — applied in audio-momentum, usePianoScroll, ScrollVideoPlayer, CustomCursor, cinema-gl particles
 - **Touch targets**: all interactive elements meet 44px minimum (WCAG 2.5.5)
 - **Safe area insets**: applied in Navigation, PianoIndicator (`env(safe-area-inset-*)`)
+- Preloader: conductor's baton (gold gradient line, GSAP scaleX(0→1)) sweeps during name reveal, fades after
+- Preloader: title float during progress bar (`y: -4, yoyo: true, repeat: 1`)
+- Preloader: subtitle word-stagger via SplitText `type: "words,chars"` (words 0.12s, chars 0.015s)
+- Navigation: gold diamond separator (4px rotated-45deg) between progress bar sections
+- Navigation: active side dot sonar pulse (`@keyframes dot-echo`)
+- Navigation: gold particle dot on progress bar leading edge (`nav-progress-shimmer`)
+- ScrollStoryOverlay: per-letter opacity gradient on "IVANN" (decreasing opacity across chars)
+- ScrollStoryOverlay: act label numbers colored gold, body text default
+- ScrollStoryOverlay: decorative `\u201C` quote marks (positioned absolute, 6vw, gold 35% opacity)
+- ScrollStoryOverlay: stats have staggered translateY offsets, albums have subtle rotate offsets
+- ScrollStoryOverlay: audio-reactive color warmth via `color-mix(in srgb, var(--text-primary) N%, var(--aura-gold))`
+- ScrollStoryOverlay: `.act-rule` gold accent lines drawn before act labels (CSS `scaleX(0→1)` animation)
+- ScrollStoryOverlay: `.cta-underline` on "VIVE LA EXPERIENCIA" (hover `::after scaleX` draw-in)
+- Contact: `.contact-field::after` gold gradient glow on focus (CSS `scaleX(0→1)`)
+- Contact: `.contact-label` floating labels shrink + gold on focus/has-value
+- Contact: `.contact-submit` shimmer sweep on hover (motion-gated `@keyframes shimmer-sweep`)
+- Contact: `.gold-glow-text` pulsing text-shadow on key words (motion-gated `@keyframes gold-text-glow`)
+- Footer: `.footer-brand` text-stroke engraving effect on hover (`-webkit-text-stroke: 1px`, `color: transparent`)
+- Footer: `.footer-social-line` extending gold decorative line (0→24px) on link hover
+- Footer: oversized gold quotation marks on blockquote (6rem, opacity 0.07/0.05)
+- Footer: `.footer-arrow-bounce` animation on back-to-top hover
+- Footer: `.footer-bottom-bar::before` noise texture on copyright area
+- CSS: all new decorative animations wrapped in `@media (prefers-reduced-motion: no-preference)` block
 - See `docs/CONVENTIONS.md` for full technical conventions
