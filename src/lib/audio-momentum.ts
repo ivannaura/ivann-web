@@ -65,7 +65,6 @@ export interface FrequencyBands {
 export class AudioMomentum {
   private audio: HTMLAudioElement | null = null;
   private energy: number = 0;
-  private rafId: number = 0;
   private running: boolean = false;
   private wasPlaying: boolean = false;
   private playPending: boolean = false;
@@ -80,14 +79,13 @@ export class AudioMomentum {
   private freqData: Float32Array<ArrayBuffer> | null = null;
   private bands: FrequencyBands = { bass: 0, mids: 0, highs: 0 };
   private smoothBands: FrequencyBands = { bass: 0, mids: 0, highs: 0 };
-  private lastTime: number = 0;
   private isMuted = false;
   private lastTargetGain = 0;
   private analyseSkip = 0;
 
   // ---- Public API ---------------------------------------------------------
 
-  /** Create the audio element, configure it, and start the physics loop. */
+  /** Create the audio element, configure it. Caller drives tick() via GSAP ticker. */
   init(audioSrc: string): void {
     this.audio = new Audio(audioSrc);
     this.audio.preload = 'auto';
@@ -101,10 +99,10 @@ export class AudioMomentum {
     // Initialize Web Audio API for frequency analysis
     this.initAnalyser();
 
-    // Pause physics when tab is hidden, resume on return
+    // Handle visibility changes for energy decay while hidden
     document.addEventListener('visibilitychange', this.onVisibilityChange);
 
-    this.startLoop();
+    this.running = true;
   }
 
   /** Provide a function that returns the current video time (seconds). */
@@ -138,15 +136,77 @@ export class AudioMomentum {
     }
   }
 
-  /** Tear everything down: stop loop, release audio resources. */
+  /**
+   * Per-frame physics tick. Called externally from GSAP ticker.
+   * @param dt - delta-time normalized to 60fps (1.0 at 60fps, 2.0 at 30fps, capped at 3)
+   */
+  tick(dt: number): void {
+    if (!this.running) return;
+
+    // --- delta-time friction decay (exp-based for perf) ---
+    this.energy *= Math.exp(LN_FRICTION * dt);
+    if (this.energy < 0.001) this.energy = 0;
+
+    // --- frequency analysis every 2nd frame (runs even when muted for visual reactivity) ---
+    if (++this.analyseSkip >= 2) {
+      this.analyseSkip = 0;
+      this.updateFrequencyBands(dt);
+    }
+
+    // --- derived values ---
+    // Exponential curve: pitch holds longer at high energy, drops dramatically
+    // near zero — mimics real turntable/vinyl slowdown behavior.
+    const curved = Math.pow(Math.max(0, this.energy), 0.7);
+    const rate = lerp(MIN_RATE, MAX_RATE, curved);
+    const volume = smoothstep(0, 0.15, this.energy) * MAX_VOLUME;
+
+    if (this.audio) {
+      // Resume shared AudioContext once on first user interaction (autoplay policy)
+      if (this.energy > 0 && this.audioCtx?.state === 'suspended') {
+        resumeAudioContext();
+      }
+
+      // --- start playing ---
+      if (this.energy >= PLAY_THRESHOLD && !this.wasPlaying && !this.playPending) {
+        this.syncToVideo();
+        this.audio.playbackRate = rate;
+        this.playPending = true;
+        this.audio.play().then(() => {
+          if (!this.running) return; // destroyed while awaiting play()
+          this.wasPlaying = true;
+          this.playPending = false;
+        }).catch(() => {
+          this.playPending = false;
+        });
+      }
+
+      // --- stop playing ---
+      if (this.energy < STOP_THRESHOLD && this.wasPlaying) {
+        this.audio.pause();
+        this.wasPlaying = false;
+      }
+
+      // --- update while playing ---
+      if (this.wasPlaying) {
+        this.audio.playbackRate = rate;
+        this.checkDrift(dt);
+      }
+
+      // --- route volume through GainNode (avoids per-frame audio.volume setter) ---
+      if (this.gainNode && this.audioCtx && !this.isMuted) {
+        const targetGain = Math.pow(volume, 2);
+        if (Math.abs(this.lastTargetGain - targetGain) > 0.005) {
+          this.lastTargetGain = targetGain;
+          this.gainNode.gain.setTargetAtTime(targetGain, this.audioCtx.currentTime, 0.02);
+        }
+      }
+    }
+  }
+
+  /** Tear everything down: release audio resources. */
   destroy(): void {
     this.running = false;
     document.removeEventListener('visibilitychange', this.onVisibilityChange);
-
-    if (this.rafId) {
-      cancelAnimationFrame(this.rafId);
-      this.rafId = 0;
-    }
 
     // Disconnect Web Audio nodes before releasing audio element
     if (this.sourceNode) {
@@ -249,7 +309,7 @@ export class AudioMomentum {
     sb.highs = lerp(sb.highs, rb.highs, rb.highs > sb.highs ? attackAlpha : releaseAlpha);
   }
 
-  /** Pause loop and audio when tab goes to background. */
+  /** Handle tab visibility: pause audio when hidden, decay energy on return. */
   private onVisibilityChange = (): void => {
     if (document.hidden) {
       this.hiddenAt = performance.now();
@@ -257,8 +317,6 @@ export class AudioMomentum {
         this.audio.pause();
         this.wasPlaying = false;
       }
-      this.running = false;
-      cancelAnimationFrame(this.rafId);
     } else {
       // Decay energy for elapsed time while hidden (exp-based for perf)
       const elapsed = (performance.now() - this.hiddenAt) / 16.67;
@@ -267,87 +325,7 @@ export class AudioMomentum {
 
       // Resume shared AudioContext (browsers suspend on hidden tab)
       resumeAudioContext();
-
-      this.startLoop();
     }
-  };
-
-  /** Start the requestAnimationFrame loop (guards against double-start). */
-  private startLoop(): void {
-    if (this.running) return;
-    this.running = true;
-    this.lastTime = performance.now();
-    this.rafId = requestAnimationFrame(this.update);
-  }
-
-  /** Per-frame physics tick. Bound as arrow so it keeps `this` context. */
-  private update = (): void => {
-    if (!this.running) return;
-
-    // --- delta-time friction decay (exp-based for perf) ---
-    const now = performance.now();
-    const dt = Math.min((now - this.lastTime) / 16.667, 3);
-    this.lastTime = now;
-    this.energy *= Math.exp(LN_FRICTION * dt);
-    if (this.energy < 0.001) this.energy = 0;
-
-    // --- frequency analysis every 2nd frame (runs even when muted for visual reactivity) ---
-    if (++this.analyseSkip >= 2) {
-      this.analyseSkip = 0;
-      this.updateFrequencyBands(dt);
-    }
-
-    // --- derived values ---
-    // Exponential curve: pitch holds longer at high energy, drops dramatically
-    // near zero — mimics real turntable/vinyl slowdown behavior.
-    const curved = Math.pow(Math.max(0, this.energy), 0.7);
-    const rate = lerp(MIN_RATE, MAX_RATE, curved);
-    const volume = smoothstep(0, 0.15, this.energy) * MAX_VOLUME;
-
-    if (this.audio) {
-      // Resume shared AudioContext once on first user interaction (autoplay policy)
-      if (this.energy > 0 && this.audioCtx?.state === 'suspended') {
-        resumeAudioContext();
-      }
-
-      // --- start playing ---
-      if (this.energy >= PLAY_THRESHOLD && !this.wasPlaying && !this.playPending) {
-        this.syncToVideo();
-        this.audio.playbackRate = rate;
-        this.playPending = true;
-        this.audio.play().then(() => {
-          if (!this.running) return; // destroyed while awaiting play()
-          this.wasPlaying = true;
-          this.playPending = false;
-        }).catch(() => {
-          this.playPending = false;
-        });
-      }
-
-      // --- stop playing ---
-      if (this.energy < STOP_THRESHOLD && this.wasPlaying) {
-        this.audio.pause();
-        this.wasPlaying = false;
-      }
-
-      // --- update while playing ---
-      if (this.wasPlaying) {
-        this.audio.playbackRate = rate;
-        this.checkDrift(dt);
-      }
-
-      // --- route volume through GainNode (avoids per-frame audio.volume setter) ---
-      if (this.gainNode && this.audioCtx && !this.isMuted) {
-        const targetGain = Math.pow(volume, 2);
-        if (Math.abs(this.lastTargetGain - targetGain) > 0.005) {
-          this.lastTargetGain = targetGain;
-          this.gainNode.gain.setTargetAtTime(targetGain, this.audioCtx.currentTime, 0.02);
-        }
-      }
-    }
-
-    // schedule next frame
-    this.rafId = requestAnimationFrame(this.update);
   };
 
   /** Snap audio.currentTime to the current video position. */

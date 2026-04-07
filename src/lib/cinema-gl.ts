@@ -93,16 +93,15 @@ function createFBO(gl: WebGL2RenderingContext, w: number, h: number): FBO | null
 /** Resize FBO by deleting and recreating its immutable texStorage2D texture. */
 function resizeFBO(gl: WebGL2RenderingContext, fbo: FBO, w: number, h: number): void {
   if (fbo.width === w && fbo.height === h) return; // no-op if size unchanged
+  const newTex = createFBOTexture(gl, w, h);
+  if (!newTex) return; // keep old FBO intact on allocation failure
+  gl.deleteTexture(fbo.texture);
   fbo.width = w;
   fbo.height = h;
-  gl.deleteTexture(fbo.texture);
-  const newTex = createFBOTexture(gl, w, h);
-  if (newTex) {
-    fbo.texture = newTex;
-    gl.bindFramebuffer(gl.FRAMEBUFFER, fbo.framebuffer);
-    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, newTex, 0);
-    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-  }
+  fbo.texture = newTex;
+  gl.bindFramebuffer(gl.FRAMEBUFFER, fbo.framebuffer);
+  gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, newTex, 0);
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null);
 }
 
 function destroyFBO(gl: WebGL2RenderingContext, fbo: FBO): void {
@@ -289,7 +288,7 @@ void main() {
   float bassPulse = u_bass * 0.08;
   float vigEdge = 0.7 - mood * 0.1 + bassPulse;
   float vigCenter = 0.3 - mood * 0.05 + bassPulse;
-  c *= mix(0.2 + (1.0 - mood) * 0.15, 1.0, smoothstep(vigEdge, vigCenter, dCenter));
+  c *= mix(max(0.3, 0.2 + (1.0 - mood) * 0.15), 1.0, 1.0 - smoothstep(vigCenter, vigEdge, dCenter));
 
   // --- Cursor spotlight (quadratic falloff, act-tinted) ---
   float spot = pow(1.0 - smoothstep(0.0, 0.35, dCursor), 2.0);
@@ -299,8 +298,8 @@ void main() {
   // --- Film grain (2-octave FBM, shadow-weighted) ---
   float lum = dot(c, vec3(0.2126, 0.7152, 0.0722));
   float grainAmt = (0.03 + mood * 0.05) * (1.0 - lum * 0.5);
-  float grain = hash(uv * 800.0 + fract(u_time)) * 0.6
-              + hash2(uv * 1600.0 + fract(u_time * 1.3)) * 0.4;
+  float grain = hash(uv * 800.0 + u_time) * 0.6
+              + hash2(uv * 1600.0 + u_time * 1.3) * 0.4;
   c += (grain * 2.0 - 1.0) * grainAmt;
 
   fragColor = vec4(c, 1.0);
@@ -335,28 +334,14 @@ float luminance(vec3 c) {
 
 void main() {
   // Sample video luminance at particle position
+  // a_pos is in screen pixels (y-down), but video texture is y-up (UNPACK_FLIP_Y_WEBGL)
   vec2 uv = clamp(a_pos / u_res, 0.0, 1.0);
   uv.y = 1.0 - uv.y;
   float lum = luminance(texture(u_videoTex, uv).rgb);
 
-  // Luminance gradient — nudge particles toward bright areas
-  float dx = 20.0 / u_res.x;
-  float dy = 20.0 / u_res.y;
-  float lumR = luminance(texture(u_videoTex, clamp(uv + vec2(dx, 0.0), 0.0, 1.0)).rgb);
-  float lumL = luminance(texture(u_videoTex, clamp(uv - vec2(dx, 0.0), 0.0, 1.0)).rgb);
-  float lumU = luminance(texture(u_videoTex, clamp(uv - vec2(0.0, dy), 0.0, 1.0)).rgb);
-  float lumD = luminance(texture(u_videoTex, clamp(uv + vec2(0.0, dy), 0.0, 1.0)).rgb);
-  vec2 lumGrad = vec2(lumR - lumL, lumD - lumU);
-  vec2 nudge = lumGrad * u_energy * LUM_FORCE;
-
-  // Cursor attraction — particles drift gently toward cursor
-  vec2 toCursor = u_mouse - a_pos;
-  float cursorDist = length(toCursor);
-  float cursorPull = smoothstep(CURSOR_RADIUS, 0.0, cursorDist) * u_energy * CURSOR_FORCE_S;
-  nudge += normalize(toCursor + 0.001) * cursorPull;
-
-  vec2 finalPos = a_pos + nudge;
-  vec2 ndc = (finalPos / u_res) * 2.0 - 1.0;
+  // Position: CPU physics handles luminance gradient + cursor forces, no GPU-side nudge
+  // (avoids double-application jitter between CPU velocity and GPU displacement)
+  vec2 ndc = (a_pos / u_res) * 2.0 - 1.0;
   ndc.y *= -1.0;
   gl_Position = vec4(ndc, 0.0, 1.0);
 
@@ -468,7 +453,8 @@ void main() {
     float flare = 0.0;
     for (int i = -8; i <= 8; i++) {
       vec2 off = vec2(float(i) * 0.012, 0.0);
-      float s = texture(u_bloom, v_uv + off).r;
+      vec3 bloomSamp = texture(u_bloom, v_uv + off).rgb;
+      float s = dot(bloomSamp, vec3(0.2126, 0.7152, 0.0722));
       float w = 1.0 - abs(float(i)) / 8.0;
       flare += s * w * w;
     }
@@ -480,6 +466,9 @@ void main() {
   float burn = smoothstep(0.0, 0.15, u_actTransition) * smoothstep(0.3, 0.15, u_actTransition);
   vec3 leak = mix(vec3(1.0, 0.6, 0.2), vec3(1.0, 0.9, 0.5), v_uv.x);
   c = mix(c, leak, burn * 0.35 * (u_mood / 1.2));
+
+  // --- Reinhard tonemapping (prevents blown highlights from bloom) ---
+  c = c / (1.0 + c);
 
   fragColor = vec4(c, 1.0);
 }`;
@@ -613,10 +602,10 @@ export function initCinemaGL(canvas: HTMLCanvasElement): CinemaGL | null {
   gl.linkProgram(cinemaProg);
   gl.detachShader(cinemaProg, cinemaVS);
   gl.detachShader(cinemaProg, cinemaFS);
+  gl.deleteShader(cinemaVS);
+  gl.deleteShader(cinemaFS);
   if (!gl.getProgramParameter(cinemaProg, gl.LINK_STATUS)) {
     console.warn("CinemaGL: cinema program link failed:", gl.getProgramInfoLog(cinemaProg));
-    gl.deleteShader(cinemaVS);
-    gl.deleteShader(cinemaFS);
     gl.deleteProgram(cinemaProg);
     return null;
   }
@@ -670,10 +659,10 @@ export function initCinemaGL(canvas: HTMLCanvasElement): CinemaGL | null {
   gl.linkProgram(particleProg);
   gl.detachShader(particleProg, particleVS);
   gl.detachShader(particleProg, particleFS);
+  gl.deleteShader(particleVS);
+  gl.deleteShader(particleFS);
   if (!gl.getProgramParameter(particleProg, gl.LINK_STATUS)) {
     console.warn("CinemaGL: particle program link failed:", gl.getProgramInfoLog(particleProg));
-    gl.deleteShader(particleVS);
-    gl.deleteShader(particleFS);
     gl.deleteProgram(particleProg);
     return null;
   }
@@ -720,6 +709,7 @@ export function initCinemaGL(canvas: HTMLCanvasElement): CinemaGL | null {
   const tex = gl.createTexture();
   if (!tex) return null;
   gl.bindTexture(gl.TEXTURE_2D, tex);
+  gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
@@ -841,7 +831,8 @@ export function initCinemaGL(canvas: HTMLCanvasElement): CinemaGL | null {
 
   function sampleLumGrad(px: number, py: number): { gx: number; gy: number } {
     const gxIdx = Math.floor((px / w) * (GRID_W - 1));
-    const gyIdx = Math.floor((py / h) * (GRID_H - 1));
+    // py is screen pixels (y-down), but lumGrid was read from FBO (y-up via readPixels)
+    const gyIdx = (GRID_H - 1) - Math.floor((py / h) * (GRID_H - 1));
     const idx = gyIdx * GRID_W + gxIdx;
     const right = Math.min(idx + 1, lumGrid.length - 1);
     const left = Math.max(idx - 1, 0);
@@ -914,6 +905,14 @@ export function initCinemaGL(canvas: HTMLCanvasElement): CinemaGL | null {
   let runtimeTier = effectiveTier;
 
   // ---------------------------------------------------------------------------
+  // Idle gating — skip full pipeline when nothing has changed
+  // ---------------------------------------------------------------------------
+  const IDLE_GRACE_FRAMES = 3; // frames to render after last input change (50ms at 60fps)
+  let idleFrameCount = 0;
+  let prevIdleMouseX = 0;
+  let prevIdleMouseY = 0;
+
+  // ---------------------------------------------------------------------------
   // Render pipeline
   // ---------------------------------------------------------------------------
   return {
@@ -923,6 +922,26 @@ export function initCinemaGL(canvas: HTMLCanvasElement): CinemaGL | null {
     render(params) {
       const { video, time, energy, progress, bands, mouseX, mouseY, velocity } = params;
       if (contextLost || video.readyState < 2) return;
+
+      // Idle gating: if all inputs are static, skip rendering (canvas retains last frame)
+      const videoFrameSame = video.currentTime === lastVideoTime;
+      const inputsIdle =
+        videoFrameSame &&
+        energy < 0.005 &&
+        Math.abs(velocity) < 0.005 &&
+        bands.bass + bands.mids + bands.highs < 0.015 &&
+        Math.abs(mouseX - prevIdleMouseX) < 2 &&
+        Math.abs(mouseY - prevIdleMouseY) < 2 &&
+        (params.actTransition ?? 0) < 0.01;
+
+      if (inputsIdle) {
+        idleFrameCount++;
+        if (idleFrameCount > IDLE_GRACE_FRAMES) return;
+      } else {
+        idleFrameCount = 0;
+      }
+      prevIdleMouseX = mouseX;
+      prevIdleMouseY = mouseY;
 
       const frameStart = performance.now();
 

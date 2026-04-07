@@ -39,8 +39,16 @@ export default function Home() {
   useEffect(() => {
     let lastHazeProgress = 0;
     const id = setInterval(() => {
-      setDisplayEnergy(energyRef.current);
-      setDisplayActTransition(actTransitionRef.current);
+      // Equality guards: skip React re-render when values haven't meaningfully changed
+      // (prevents 10fps re-renders of entire component tree during idle state)
+      setDisplayEnergy(prev => {
+        const next = energyRef.current;
+        return Math.abs(prev - next) < 0.005 ? prev : next;
+      });
+      setDisplayActTransition(prev => {
+        const next = actTransitionRef.current;
+        return Math.abs(prev - next) < 0.01 ? prev : next;
+      });
       const newBands = bandsRef.current;
       setDisplayBands(prev => {
         if (Math.abs(prev.bass - newBands.bass) < 0.01 &&
@@ -120,7 +128,8 @@ export default function Home() {
       />
       <PianoIndicator energy={displayEnergy} bands={displayBands} />
 
-      <main id="top" tabIndex={-1} aria-label="Contenido principal">
+      <main id="main-content" tabIndex={-1} aria-label="Contenido principal">
+        <div id="top" />
         <h1 className="sr-only">IVANN AURA — Live Experience</h1>
         <ScrollVideoPlayer
           videoSrc={VIDEO_SRC}
@@ -154,6 +163,7 @@ export default function Home() {
           />
         </ScrollVideoPlayer>
 
+        <div className="h-[8vh] bg-gradient-to-b from-[var(--bg-void)] to-[var(--bg-surface)]" />
         <Contact />
       </main>
 

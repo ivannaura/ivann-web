@@ -67,7 +67,7 @@ export default function Preloader() {
 
             // Exit: cinematic iris-close — circle collapses to center, revealing page
             gsap.to(container, {
-              clipPath: "circle(0.01% at 50% 50%)",
+              clipPath: "circle(0% at 50% 50%)",
               duration: 1.0,
               ease: "power3.inOut",
               onComplete: dismiss,
@@ -76,14 +76,17 @@ export default function Preloader() {
             // Simultaneously scale content down for parallax depth
             gsap.to([nameEl, subtitleEl, barEl.parentElement], {
               scale: 0.95,
-              opacity: 0.5,
-              duration: 1.0,
+              opacity: 0,
+              duration: 0.6,
               ease: "power2.in",
             });
           };
 
-          if (video && video.readyState < 4) {
-            video.addEventListener("canplaythrough", proceedDismiss, { once: true });
+          // loadeddata (readyState >= 2) is sufficient for scroll-driven video —
+          // we don't need canplaythrough (readyState 4) because the video is never
+          // played continuously. canplaythrough on a 45MB video can take 5-20+ seconds.
+          if (video && video.readyState < 2) {
+            video.addEventListener("loadeddata", proceedDismiss, { once: true });
           } else {
             proceedDismiss();
           }
@@ -208,7 +211,7 @@ export default function Preloader() {
           position: "absolute",
           inset: 0,
           pointerEvents: "none",
-          opacity: 0.03,
+          opacity: 0.08,
           backgroundImage:
             "url(\"data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='1'/%3E%3C/svg%3E\")",
           backgroundRepeat: "repeat",
@@ -234,11 +237,23 @@ export default function Preloader() {
         }}
       />
 
+      {/* Ambient depth layer — subtle gold radial behind title */}
+      <div
+        aria-hidden="true"
+        style={{
+          position: "absolute",
+          inset: 0,
+          pointerEvents: "none",
+          background:
+            "radial-gradient(ellipse 60% 40% at 50% 50%, rgba(201,168,76,0.04) 0%, transparent 70%)",
+        }}
+      />
+
       {/* Name — masked char reveal */}
       <h1
         ref={nameRef}
         style={{
-          fontSize: "clamp(1.5rem, 4vw, 2.5rem)",
+          fontSize: "clamp(2.5rem, 8vw, 7rem)",
           letterSpacing: "0.35em",
           fontWeight: 300,
           fontFamily: "var(--font-display)",
@@ -246,18 +261,17 @@ export default function Preloader() {
           marginBottom: 24,
         }}
       >
-        <span style={{ color: "var(--text-primary)" }}>IVANN </span>
+        <span style={{ color: "var(--text-secondary)" }}>IVANN </span>
         <span style={{ color: "var(--aura-gold)" }}>AURA</span>
       </h1>
 
       {/* Progress bar — starts at scaleX(0) */}
       <div
         style={{
-          width: 120,
+          width: "clamp(120px, 40vw, 400px)",
           height: 1,
           background: "var(--border-subtle)",
           position: "relative",
-          overflow: "hidden",
         }}
       >
         <div

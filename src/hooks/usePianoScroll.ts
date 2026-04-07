@@ -67,8 +67,11 @@ export function usePianoScroll(options: UsePianoScrollOptions = {}) {
       energyRef.current *= Math.exp(LN_FRICTION * dt);
 
       // Convert energy to scroll delta (dt-scaled)
+      // { immediate: true } bypasses Lenis lerp — avoids double-smoothing
+      // (usePianoScroll has its own friction decay, Lenis lerp would add a second one,
+      // creating a 50+ frame catch-up tail that causes sustained video seeking load)
       const delta = energyRef.current * VELOCITY_SCALE * dt;
-      l.scrollTo(l.scroll + delta);
+      l.scrollTo(l.scroll + delta, { immediate: true });
 
       rafRef.current = requestAnimationFrame(tick);
     };

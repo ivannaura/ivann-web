@@ -95,7 +95,7 @@ const STORY_BEATS: StoryBeat[] = [
     ),
     position: "center",
     animation: "fade",
-    blendMode: "difference",
+    blendMode: "screen",
   },
   {
     frameStart: 30,
@@ -348,7 +348,7 @@ const STORY_BEATS: StoryBeat[] = [
           <div
             key={item.title}
             data-stagger
-            className="border px-4 py-3 md:px-6 md:py-4 backdrop-blur-sm"
+            className="border px-4 py-3 md:px-6 md:py-4 backdrop-blur-sm transition-transform duration-300 hover:scale-[1.03] hover:-translate-y-0.5"
             style={{
               borderColor: "var(--border-subtle)",
               background: "rgba(5,5,8,0.6)",
@@ -425,7 +425,7 @@ const STORY_BEATS: StoryBeat[] = [
           <div
             key={album.title}
             data-stagger
-            className="text-center"
+            className="text-center transition-transform duration-300 hover:scale-[1.03] hover:-translate-y-0.5"
             style={{ transform: `rotate(${album.rotate}deg)` }}
           >
             <div
@@ -491,7 +491,7 @@ const STORY_BEATS: StoryBeat[] = [
     ),
     position: "center",
     animation: "fade",
-    blendMode: "difference",
+    blendMode: "screen",
   },
   {
     frameStart: 500,
@@ -500,7 +500,7 @@ const STORY_BEATS: StoryBeat[] = [
       <div className="text-center pointer-events-auto">
         <a
           href="#contacto"
-          className="inline-block px-10 py-4 text-[0.75rem] tracking-[0.3em] uppercase border transition-all duration-300 hover:bg-[var(--aura-gold)] hover:text-[var(--bg-void)] hover:border-[var(--aura-gold)]"
+          className="inline-block px-10 py-4 text-[0.75rem] tracking-[0.3em] uppercase border transition-colors duration-300 hover:bg-[var(--aura-gold)] hover:text-[var(--bg-void)] hover:border-[var(--aura-gold)]"
           style={{
             color: "var(--aura-gold)",
             borderColor: "var(--aura-gold)",
@@ -514,7 +514,7 @@ const STORY_BEATS: StoryBeat[] = [
           className="text-[0.65rem] mt-4 tracking-[0.15em] text-cinema"
           style={{ color: "var(--text-muted)" }}
         >
-          <a href="mailto:ivannprensa@gmail.com" className="pointer-events-auto hover:text-[var(--aura-gold)] transition-colors duration-300">ivannprensa@gmail.com</a>
+          <a href="mailto:booking@ivannaura.com" className="pointer-events-auto hover:text-[var(--aura-gold)] transition-colors duration-300">booking@ivannaura.com</a>
           {" · "}
           <a href="tel:+573102254687" className="pointer-events-auto hover:text-[var(--aura-gold)] transition-colors duration-300">+57 310 225 4687</a>
         </p>
@@ -704,6 +704,7 @@ function AnimatedBeat({ beat, progress, energy = 0, bands, actTransition = 0 }: 
   const ref = useRef<HTMLDivElement>(null);
   const tlRef = useRef<gsap.core.Timeline | null>(null);
   const entryCompleteRef = useRef(false);
+  const reversedRef = useRef(false);
 
   useLayoutEffect(() => {
     const el = ref.current;
@@ -794,12 +795,14 @@ function AnimatedBeat({ beat, progress, energy = 0, bands, actTransition = 0 }: 
             break;
         }
 
-        gsap.from(staggerTargets, {
+        const staggerTl = gsap.from(staggerTargets, {
           ...fromVars,
           stagger: 0.08,
           duration: 0.5,
           ease: "power2.out",
+          onComplete: () => { entryCompleteRef.current = true; },
         });
+        tlRef.current = staggerTl as unknown as gsap.core.Timeline;
       } else {
         // Fallback — animate content container
         const fromVars: gsap.TweenVars = { opacity: 0 };
@@ -815,17 +818,20 @@ function AnimatedBeat({ beat, progress, energy = 0, bands, actTransition = 0 }: 
             break;
         }
 
-        gsap.from(el.children[0] || el, {
+        const fallbackTl = gsap.from(el.children[0] || el, {
           ...fromVars,
           duration: 0.6,
           ease: "power2.out",
+          onComplete: () => { entryCompleteRef.current = true; },
         });
+        tlRef.current = fallbackTl as unknown as gsap.core.Timeline;
       }
     });
 
     return () => {
       tlRef.current = null;
       entryCompleteRef.current = false;
+      reversedRef.current = false;
       mm.revert();
       // Explicitly revert SplitText DOM mutations — matchMedia.revert() may not
       // handle SplitText cleanup in all GSAP versions
@@ -833,17 +839,23 @@ function AnimatedBeat({ beat, progress, energy = 0, bands, actTransition = 0 }: 
     };
   }, [beat.animation]);
 
-  // GSAP exit — reverse the entry timeline as beat approaches exit
+  // GSAP exit — reverse the entry timeline when beat approaches exit.
+  // Uses tl.reverse()/tl.play() to preserve GSAP ease curves instead of
+  // linearly scrubbing tl.progress(), which produced a mechanical feel.
   useEffect(() => {
     const tl = tlRef.current;
     if (!tl) return;
-    if (progress <= 0.8) return;
     // Don't reverse before entry animation has completed (prevents flicker
     // when a beat mounts mid-progress, e.g. user scrolled past it during load)
     if (!entryCompleteRef.current) return;
 
-    const exitProgress = (progress - 0.8) / 0.2;
-    tl.progress(Math.max(0, 1 - exitProgress));
+    if (progress > 0.8 && !reversedRef.current) {
+      reversedRef.current = true;
+      tl.reverse();
+    } else if (progress <= 0.8 && reversedRef.current) {
+      reversedRef.current = false;
+      tl.play();
+    }
   }, [progress]);
 
   // CSS fade-out for non-split/non-stagger beats (e.g. scroll indicator)
@@ -870,12 +882,28 @@ function AnimatedBeat({ beat, progress, energy = 0, bands, actTransition = 0 }: 
     const depthEl = el.querySelector<HTMLElement>("[data-depth]");
     if (!depthEl) return;
     const depth = parseFloat(depthEl.dataset.depth || "1");
-    const offset = (progress - 0.5) * (depth - 1) * 60;
+    const offset = (progress - 0.5) * (depth - 1) * 150;
     depthEl.style.translate = `0 ${offset}px`;
   }, [progress]);
 
   // Sound-reactive typography — letter-spacing scales continuously with energy + mids
   // No hard threshold: gentle scroll = subtle expansion, aggressive = dramatic
+  const reactiveCleanupRef = useRef<(() => void) | null>(null);
+  const lastIntensityRef = useRef(0);
+  const lastWarmthRef = useRef(0);
+
+  // Cache getComputedStyle once on mount (avoids layout thrashing on every 10fps update)
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const reactiveEls = el.querySelectorAll<HTMLElement>('[data-reactive]');
+    reactiveEls.forEach(target => {
+      if (!target.dataset.baseSpacing) {
+        target.dataset.baseSpacing = getComputedStyle(target).letterSpacing || '0px';
+      }
+    });
+  }, []);
+
   useEffect(() => {
     const el = ref.current;
     if (!el || !bands) return;
@@ -883,17 +911,17 @@ function AnimatedBeat({ beat, progress, energy = 0, bands, actTransition = 0 }: 
     if (reactiveEls.length === 0) return;
 
     const intensity = energy * bands.mids * 0.08;
-    // Color warmth: as energy rises, text warms from white (#F0EDE6) toward gold (#C9A84C)
-    // Clamped to 0.4 max so it never fully becomes gold — just a subtle warm shift
     const warmth = Math.min(0.4, energy * bands.mids * 0.5);
+
+    // JND guard: skip DOM writes if change is imperceptible
+    if (Math.abs(intensity - lastIntensityRef.current) < 0.002 &&
+        Math.abs(warmth - lastWarmthRef.current) < 0.005) return;
+    lastIntensityRef.current = intensity;
+    lastWarmthRef.current = warmth;
+
     reactiveEls.forEach(target => {
-      // Use a data attribute to cache original spacing (set once)
-      if (!target.dataset.baseSpacing) {
-        target.dataset.baseSpacing = getComputedStyle(target).letterSpacing || '0px';
-      }
-      const base = target.dataset.baseSpacing;
+      const base = target.dataset.baseSpacing || '0px';
       target.style.letterSpacing = `calc(${base} + ${intensity}em)`;
-      // Warm color shift: interpolate from current text color toward gold
       if (warmth > 0.01) {
         target.style.color = `color-mix(in srgb, var(--text-primary) ${Math.round((1 - warmth) * 100)}%, var(--aura-gold))`;
       } else {
@@ -901,14 +929,18 @@ function AnimatedBeat({ beat, progress, energy = 0, bands, actTransition = 0 }: 
       }
     });
 
-    return () => {
-      const els = el?.querySelectorAll<HTMLElement>('[data-reactive]');
-      els?.forEach(target => {
+    reactiveCleanupRef.current = () => {
+      reactiveEls.forEach(target => {
         target.style.letterSpacing = '';
         target.style.color = '';
       });
     };
   }, [energy, bands]);
+
+  // Unmount-only cleanup for reactive typography
+  useEffect(() => {
+    return () => { reactiveCleanupRef.current?.(); };
+  }, []);
 
   // Act transition echo — subtle opacity pulse during shader film burn
   // Dims slightly when actTransition spikes (>0.3), returns as it decays

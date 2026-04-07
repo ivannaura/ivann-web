@@ -128,11 +128,10 @@ export default function RootLayout({
   return (
     <html lang="es" className={`${display.variable} ${body.variable} antialiased`}>
       <head>
-        {/*
-          Preload hints removed — <link rel="preload" as="video"> is unreliable
-          across browsers and was blocking the <video> element from loading.
-          The video's own preload="auto" handles progressive download.
-        */}
+        {/* Preload video early — starts download during HTML parsing instead of
+            waiting for React hydration + component mount. as="fetch" has universal
+            support (as="video" is spotty in Safari). */}
+        <link rel="preload" href="/videos/flamenco-graded.mp4" as="fetch" crossOrigin="anonymous" />
         <meta name="format-detection" content="telephone=no" />
         <meta name="color-scheme" content="dark" />
         {/* JSON-LD structured data */}

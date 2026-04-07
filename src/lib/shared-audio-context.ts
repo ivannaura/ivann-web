@@ -42,6 +42,7 @@ export function releaseAudioContext(): void {
     ctx.close().catch(() => {});
     ctx = null;
     refCount = 0;
+    primed = false; // reset so primerAudioContext() re-registers on next acquire (iOS)
   }
 }
 

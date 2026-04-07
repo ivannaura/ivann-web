@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useCallback } from "react";
+import gsap from "gsap";
 import { useUIStore } from "@/stores/useUIStore";
 
 // Precomputed ln constants: Math.pow(c, dt) === Math.exp(ln_c * dt)
@@ -45,7 +46,6 @@ export default function CustomCursor() {
     // Scroll velocity tracking for directional ring stretch
     let lastScrollY = window.scrollY;
     let scrollVelocity = 0;
-    const VELOCITY_DECAY = 0.9;
     const VELOCITY_SCALE = 0.003; // Normalize px/frame to 0-1 range
     const MAX_STRETCH = 0.4; // Cap scaleY addition at 1.4
     const VELOCITY_THRESHOLD = 0.02; // Minimum velocity to apply stretch
@@ -84,21 +84,15 @@ export default function CustomCursor() {
     const onMouseEnter = () => {
       visibleRef.current = true;
       applyOpacity();
-      frameId = requestAnimationFrame(animateRing);
     };
 
-    let frameId = 0;
-    let lastTime = 0;
+    // GSAP ticker callback for ring interpolation
     const animateRing = () => {
-      // Pause rAF work when cursor is not visible
-      if (!visibleRef.current) {
-        return;
-      }
+      // Skip when cursor is not visible (preserves optimization)
+      if (!visibleRef.current) return;
 
-      // Delta-time correction for frame-rate independence
-      const now = performance.now();
-      const dt = lastTime ? Math.min((now - lastTime) / 16.667, 3) : 1;
-      lastTime = now;
+      // Delta-time normalized to 60fps from GSAP ticker
+      const dt = Math.min(gsap.ticker.deltaRatio(60), 3);
 
       const lerpFactor = 1 - Math.exp(LN_088 * dt);
       ringX += (mouseX - ringX) * lerpFactor;
@@ -125,22 +119,20 @@ export default function CustomCursor() {
           ringRef.current.style.transform = '';
         }
       }
-
-      frameId = requestAnimationFrame(animateRing);
     };
 
     window.addEventListener("mousemove", onMouseMove);
     window.addEventListener("scroll", onScroll, { passive: true });
     document.documentElement.addEventListener("mouseleave", onMouseLeave);
     document.documentElement.addEventListener("mouseenter", onMouseEnter);
-    frameId = requestAnimationFrame(animateRing);
+    gsap.ticker.add(animateRing);
 
     return () => {
       window.removeEventListener("mousemove", onMouseMove);
       window.removeEventListener("scroll", onScroll);
       document.documentElement.removeEventListener("mouseleave", onMouseLeave);
       document.documentElement.removeEventListener("mouseenter", onMouseEnter);
-      cancelAnimationFrame(frameId);
+      gsap.ticker.remove(animateRing);
       document.body.style.cursor = "";
     };
   }, [applyOpacity]);

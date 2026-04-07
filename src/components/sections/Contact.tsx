@@ -69,7 +69,7 @@ export default function Contact() {
           const split = SplitText.create(heading, { type: "words,chars", mask: "words" });
           gsap.from(split.chars, {
             yPercent: 100,
-            stagger: 0.03,
+            stagger: 0.02,
             duration: 0.8,
             ease: "power3.out",
             scrollTrigger: {
@@ -211,7 +211,6 @@ export default function Contact() {
           <div className="md:col-span-5">
             <h2
               data-split-heading
-              data-reveal
               className="text-[clamp(2rem,5vw,3.5rem)] font-extralight leading-[1.1] mb-8"
               style={{ color: "var(--text-primary)" }}
             >
@@ -270,7 +269,7 @@ export default function Contact() {
                   href="https://wa.me/573102254687?text=Hola%20IVANN%2C%20quiero%20saber%20más%20sobre%20tu%20show"
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="magnetic-btn inline-flex items-center gap-2 text-xs tracking-[0.1em] transition-colors duration-300 hover:text-[var(--aura-gold)]"
+                  className="magnetic-btn min-h-[44px] inline-flex items-center gap-2 text-xs tracking-[0.1em] transition-colors duration-300 hover:text-[var(--aura-gold)]"
                   style={{ color: "var(--text-muted)" }}
                   onMouseEnter={() => { setCursorVariant("hover"); playHover(); }}
                   onMouseLeave={() => setCursorVariant("default")}
@@ -478,7 +477,7 @@ export default function Contact() {
                 <div data-reveal>
                   <button
                     type="submit"
-                    className="contact-submit magnetic-btn px-10 py-4 text-xs tracking-[0.3em] uppercase transition-all duration-500 rounded-sm hover:bg-[var(--aura-gold)] hover:text-[var(--bg-void)] focus-visible:ring-1 focus-visible:ring-[var(--aura-gold)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg-surface)]"
+                    className="contact-submit magnetic-btn px-10 py-4 text-xs tracking-[0.3em] uppercase transition-all duration-500 rounded-none hover:bg-[var(--aura-gold)] hover:text-[var(--bg-void)] focus-visible:ring-1 focus-visible:ring-[var(--aura-gold)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg-surface)]"
                     style={{
                       border: "1px solid var(--aura-gold-dim)",
                       color: "var(--aura-gold)",

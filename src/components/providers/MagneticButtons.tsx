@@ -27,6 +27,11 @@ export default function MagneticButtons() {
         cachedRect = btn ? btn.getBoundingClientRect() : null;
       }
       if (!btn || !cachedRect) return;
+      // Re-read rect if scroll has moved since last cache (Lenis smooth scroll)
+      if (rectStale) {
+        cachedRect = btn.getBoundingClientRect();
+        rectStale = false;
+      }
       const x = e.clientX - cachedRect.left - cachedRect.width / 2;
       const y = e.clientY - cachedRect.top - cachedRect.height / 2;
       btn.style.transform = `translate(${x * strength}px, ${y * strength}px)`;
@@ -47,19 +52,25 @@ export default function MagneticButtons() {
       }
     };
 
-    // Invalidate cached rect on resize (layout may have shifted)
+    // Invalidate cached rect on resize or scroll (layout may have shifted)
+    let rectStale = false;
     const onResize = () => {
       cachedRect = null;
+    };
+    const onScroll = () => {
+      rectStale = true;
     };
 
     document.addEventListener("mousemove", onMove, { passive: true });
     document.addEventListener("mouseout", onOut, { passive: true });
     window.addEventListener("resize", onResize, { passive: true });
+    window.addEventListener("scroll", onScroll, { passive: true });
 
     return () => {
       document.removeEventListener("mousemove", onMove);
       document.removeEventListener("mouseout", onOut);
       window.removeEventListener("resize", onResize);
+      window.removeEventListener("scroll", onScroll);
       if (currentBtn) currentBtn.style.transform = "";
     };
   }, []);

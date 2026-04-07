@@ -23,8 +23,9 @@ export default function Navigation({
   const soundMuted = useUIStore((s) => s.soundMuted);
   const toggleSoundMuted = useUIStore((s) => s.toggleSoundMuted);
   const [scrolled, setScrolled] = useState(false);
-  const [scrollProgress, setScrollProgress] = useState(0);
   const [activeSection, setActiveSection] = useState(0);
+  const progressBarRef = useRef<HTMLDivElement>(null);
+  const progressDotRef = useRef<HTMLDivElement>(null);
   const [logoHovered, setLogoHovered] = useState(false);
   const dialogRef = useRef<HTMLDialogElement>(null);
   const hamburgerRef = useRef<HTMLButtonElement>(null);
@@ -51,7 +52,14 @@ export default function Navigation({
         setScrolled(y > 80);
 
         const docHeight = document.documentElement.scrollHeight - window.innerHeight;
-        setScrollProgress(docHeight > 0 ? y / docHeight : 0);
+        const progress = docHeight > 0 ? y / docHeight : 0;
+        // Direct DOM manipulation — avoids full React re-render on every scroll frame
+        if (progressBarRef.current) {
+          progressBarRef.current.style.transform = `scaleX(${progress})`;
+        }
+        if (progressDotRef.current) {
+          progressDotRef.current.style.opacity = progress > 0.005 ? "1" : "0";
+        }
 
         if (!sectionEls) {
           sectionEls = NAV_ITEMS.map((item) => document.querySelector(item.href));
@@ -90,16 +98,24 @@ export default function Navigation({
     } else if (dialog.open) {
       // Animate out, then close
       dialog.classList.add("dialog-closing");
+      let closed = false;
       const onEnd = () => {
+        if (closed) return;
+        closed = true;
         dialog.classList.remove("dialog-closing");
         dialog.close();
+        dialog.removeEventListener("transitionend", onTransitionEnd);
       };
-      dialog.addEventListener("transitionend", onEnd, { once: true });
+      const onTransitionEnd = (e: TransitionEvent) => {
+        // Wait for opacity (typically the longest visual transition) to finish
+        if (e.propertyName === "opacity") onEnd();
+      };
+      dialog.addEventListener("transitionend", onTransitionEnd);
       // Fallback in case transition doesn't fire (e.g. reduced-motion)
       const fallback = setTimeout(onEnd, 300);
       return () => {
         clearTimeout(fallback);
-        dialog.removeEventListener("transitionend", onEnd);
+        dialog.removeEventListener("transitionend", onTransitionEnd);
       };
     }
   }, [menuOpen]);
@@ -134,11 +150,12 @@ export default function Navigation({
     <>
       {/* Scroll progress bar — thin gold line at very top (GPU-composited via scaleX) */}
       <div
+        ref={progressBarRef}
         aria-hidden="true"
         className="fixed top-0 left-0 w-full h-[2px] z-[1002] transition-opacity duration-500 will-change-transform"
         style={{
           transformOrigin: "left",
-          transform: `scaleX(${scrollProgress})`,
+          transform: "scaleX(0)",
           background:
             "linear-gradient(to right, var(--aura-gold-dim), var(--aura-gold), var(--aura-gold-bright))",
           opacity: scrolled ? 1 : 0,
@@ -146,6 +163,7 @@ export default function Navigation({
       >
         {/* Leading edge particle — gold shimmer dot at the progress tip */}
         <div
+          ref={progressDotRef}
           aria-hidden="true"
           style={{
             position: "absolute",
@@ -159,20 +177,20 @@ export default function Navigation({
             boxShadow:
               "0 0 6px rgba(232, 200, 90, 0.8), 0 0 14px rgba(201, 168, 76, 0.4)",
             animation: scrolled ? "nav-progress-shimmer 1.5s ease-in-out infinite" : "none",
-            opacity: scrollProgress > 0.005 ? 1 : 0,
+            opacity: 0,
             transition: "opacity 0.3s ease-out",
           }}
         />
       </div>
 
       <nav
-        className={`fixed top-0 left-0 right-0 z-[1000] transition-all duration-700 ${
+        className={`fixed top-0 left-0 right-0 z-[1000] transition-[background-color,border-color,box-shadow,padding] duration-700 ${
           scrolled
             ? "backdrop-blur-xl py-3"
             : "bg-transparent py-6"
         }`}
         style={{
-          paddingTop: "env(safe-area-inset-top)",
+          paddingTop: `max(${scrolled ? "0.75rem" : "1.5rem"}, env(safe-area-inset-top))`,
           background: scrolled
             ? "rgba(5, 5, 8, 0.75)"
             : "transparent",
@@ -237,6 +255,7 @@ export default function Navigation({
               className="text-base tracking-[0.3em] font-extralight transition-all duration-500"
               style={{
                 color: "var(--text-primary)",
+                fontFamily: "var(--font-display)",
                 letterSpacing: logoHovered ? "0.4em" : "0.3em",
               }}
             >
@@ -246,6 +265,7 @@ export default function Navigation({
               className="text-base font-extralight transition-all duration-500"
               style={{
                 color: "var(--aura-gold)",
+                fontFamily: "var(--font-display)",
                 letterSpacing: logoHovered ? "0.4em" : "0.3em",
                 opacity: logoHovered ? 1 : 0.8,
               }}
@@ -269,7 +289,7 @@ export default function Navigation({
                 onMouseLeave={() => setCursorVariant("default")}
               >
                 <span
-                  className="absolute -top-1 left-3 text-[8px] font-mono transition-all duration-300"
+                  className="absolute -top-1 left-3 text-[11px] font-mono transition-all duration-300"
                   style={{
                     color:
                       activeSection === i
@@ -379,7 +399,7 @@ export default function Navigation({
               style={{
                 background: "var(--text-primary)",
                 transform: menuOpen
-                  ? "rotate(45deg) translate(0, 3px)"
+                  ? "rotate(45deg) translate(0, 5.5px)"
                   : "none",
               }}
             />
@@ -398,7 +418,7 @@ export default function Navigation({
               style={{
                 background: "var(--text-primary)",
                 transform: menuOpen
-                  ? "rotate(-45deg) translate(0, -3px)"
+                  ? "rotate(-45deg) translate(0, -5.5px)"
                   : "none",
               }}
             />
@@ -431,8 +451,8 @@ export default function Navigation({
                 {item.num}
               </span>
               <span
-                className="text-3xl font-extralight tracking-[0.1em] uppercase transition-colors duration-300 group-hover:text-[var(--aura-gold)]"
-                style={{ color: "var(--text-primary)" }}
+                className="font-extralight tracking-[0.1em] uppercase transition-colors duration-300 group-hover:text-[var(--aura-gold)]"
+                style={{ color: "var(--text-primary)", fontSize: "clamp(2rem, 8vw, 4rem)" }}
               >
                 {item.label}
               </span>
@@ -442,7 +462,7 @@ export default function Navigation({
           <div className="mt-12 flex gap-6">
             {[
               { label: "IG", name: "Instagram", url: "https://www.instagram.com/ivannaura" },
-              { label: "SP", name: "Spotify", url: "https://open.spotify.com/artist/ivannaura" },
+              { label: "SPT", name: "Spotify", url: "https://open.spotify.com/artist/ivannaura" },
               { label: "YT", name: "YouTube", url: "https://www.youtube.com/@ivannaura" },
               { label: "TK", name: "TikTok", url: "https://www.tiktok.com/@ivannaura" },
             ].map((s) => (

@@ -71,7 +71,6 @@ export default function ScrollVideoPlayer({
   const durationRef = useRef(0);
   const energyRef = useRef(0);
   const progressRef = useRef(0);
-  const renderRafRef = useRef<number>(0);
   const momentumRef = useRef<AudioMomentum | null>(null);
   const readyRef = useRef(false);
 
@@ -84,13 +83,13 @@ export default function ScrollVideoPlayer({
   const shakeRef = useRef({ x: 0, y: 0 });
 
   // Mouse tracking for cursor → WebGL interaction
-  const mouseRef = useRef({ x: 0.5, y: 0.5 }); // normalized 0-1 of canvas
+  const mouseRef = useRef({ x: 0, y: 0 }); // DPR-scaled pixel coords (set on mousemove)
 
   // Scroll velocity tracking (smoothed for shader)
   const velocityRef = useRef(0);
+  const lastSeekTimeRef = useRef(0);
   const smoothVelocityRef = useRef(0);
   const lastWhooshRef = useRef(0); // throttle whoosh sounds
-  const lastRafTimeRef = useRef(0);
 
   // Stable callback refs
   const onFrameChangeRef = useRef(onFrameChange);
@@ -263,29 +262,29 @@ export default function ScrollVideoPlayer({
   }, []);
 
   // ---------------------------------------------------------------------------
-  // Render loop — cinema + particles + energy + frequency bands + mouse + velocity
+  // Render loop — GSAP ticker: cinema + particles + energy + frequency bands + mouse + velocity
   // ---------------------------------------------------------------------------
   const defaultBandsRef = useRef({ bass: 0, mids: 0, highs: 0 });
   useEffect(() => {
     if (!ready) return;
 
-    let unmounted = false;
-    let paused = false;
     let lastEnergy = -1;
     const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
     const tick = () => {
-      if (unmounted) return;
-      if (paused) return;
+      // Skip rendering when page is not visible (save GPU cycles)
+      if (document.hidden) return;
+
       const now = performance.now() / 1000;
 
-      // Delta-time factor: 1.0 at 60fps, 0.5 at 120fps, 2.0 at 30fps (clamped to 3)
-      const nowMs = performance.now();
-      const dt = lastRafTimeRef.current ? Math.min((nowMs - lastRafTimeRef.current) / 16.667, 3) : 1;
-      lastRafTimeRef.current = nowMs;
+      // Delta-time factor normalized to 60fps: 1.0 at 60fps, 0.5 at 120fps, 2.0 at 30fps
+      const dt = Math.min(gsap.ticker.deltaRatio(60), 3);
+
+      // Drive AudioMomentum physics from this ticker
+      const momentum = momentumRef.current;
+      momentum?.tick(dt);
 
       // Energy tracking
-      const momentum = momentumRef.current;
       const e = momentum?.getEnergy() ?? 0;
       energyRef.current = e;
       if (Math.abs(e - lastEnergy) > 0.01) {
@@ -306,7 +305,7 @@ export default function ScrollVideoPlayer({
       // Act transition — spikes to 1.0 on act boundary, decays 0.95/frame
       actTransitionRef.current *= Math.exp(LN_095 * dt);
       const actIndex = Math.floor(progressRef.current * 8);
-      if (actIndex !== lastActRef.current && actIndex > 0) {
+      if (actIndex !== lastActRef.current && actIndex >= 3) {
         lastActRef.current = actIndex;
         actTransitionRef.current = 1.0;
         // Mobile haptic feedback at act boundaries (Android only, silent fail elsewhere)
@@ -367,27 +366,11 @@ export default function ScrollVideoPlayer({
           });
         }
       }
-
-      renderRafRef.current = requestAnimationFrame(tick);
     };
 
-    // Pause render loop when tab is hidden (save GPU cycles)
-    const onVisibility = () => {
-      if (document.hidden) {
-        paused = true;
-        cancelAnimationFrame(renderRafRef.current);
-      } else {
-        paused = false;
-        renderRafRef.current = requestAnimationFrame(tick);
-      }
-    };
-
-    document.addEventListener("visibilitychange", onVisibility);
-    renderRafRef.current = requestAnimationFrame(tick);
+    gsap.ticker.add(tick);
     return () => {
-      unmounted = true;
-      document.removeEventListener("visibilitychange", onVisibility);
-      cancelAnimationFrame(renderRafRef.current);
+      gsap.ticker.remove(tick);
     };
   }, [ready]);
 
@@ -421,7 +404,12 @@ export default function ScrollVideoPlayer({
             const safeTime = clampToBuffered(video, targetTime);
             currentTimeRef.current = safeTime;
 
-            if (Math.abs(video.currentTime - safeTime) > 0.03) {
+            // Throttle seeks to ~30fps (33ms) — video.currentTime = X is expensive
+            // (triggers browser seeking machinery each call, 2-5ms per seek)
+            const seekNow = performance.now();
+            if (Math.abs(video.currentTime - safeTime) > 0.05 &&
+                seekNow - lastSeekTimeRef.current > 33) {
+              lastSeekTimeRef.current = seekNow;
               video.currentTime = safeTime;
             }
 
@@ -440,8 +428,8 @@ export default function ScrollVideoPlayer({
             onProgressChangeRef.current?.(self.progress);
 
             // Scroll velocity → shader + audio impulse
-            const rawVelocity = Math.abs(self.getVelocity());
             if (!reduced) {
+              const rawVelocity = Math.abs(self.getVelocity());
               // Normalize: 0 at rest, 1 at ~5000px/s
               velocityRef.current = Math.min(1.0, rawVelocity / 5000);
 

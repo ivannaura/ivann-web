@@ -38,7 +38,7 @@ export default function Footer() {
         // Large branding reveal — both IVANN and AURA headings
         const brands = footer.querySelectorAll<HTMLElement>("[data-brand]");
         brands.forEach((brand, i) => {
-          const split = SplitText.create(brand, { type: "chars" });
+          const split = SplitText.create(brand, { type: "words,chars", mask: "words" });
           gsap.from(split.chars, {
             yPercent: 100,
             opacity: 0,
@@ -245,14 +245,14 @@ export default function Footer() {
             <span
               aria-hidden="true"
               className="absolute -top-6 -left-2 text-[6rem] leading-none font-display select-none pointer-events-none"
-              style={{ color: "var(--aura-gold)", opacity: 0.07 }}
+              style={{ color: "var(--aura-gold)", opacity: 0.08 }}
             >
               &ldquo;
             </span>
             <span
               aria-hidden="true"
               className="absolute -bottom-2 right-0 text-[6rem] leading-none font-display select-none pointer-events-none"
-              style={{ color: "var(--aura-gold)", opacity: 0.05 }}
+              style={{ color: "var(--aura-gold)", opacity: 0.08 }}
             >
               &rdquo;
             </span>
@@ -263,7 +263,7 @@ export default function Footer() {
               &ldquo;La música es un mágico vehículo
               <br />
               que nos transporta al universo.&rdquo;
-              <footer
+              <p
                 className="mt-4"
               >
                 <cite
@@ -272,7 +272,7 @@ export default function Footer() {
                 >
                   — IVANN AURA
                 </cite>
-              </footer>
+              </p>
             </blockquote>
           </div>
         </div>
@@ -296,7 +296,7 @@ export default function Footer() {
               className="text-[11px] tracking-[0.15em]"
               style={{ color: "var(--text-muted)" }}
             >
-              Medellín — Bogotá — El Mundo
+              Medellín — Bogotá — <span style={{ color: "var(--aura-gold-dim)" }}>El Mundo</span>
             </span>
             <div
               className="w-1 h-1 rounded-full"

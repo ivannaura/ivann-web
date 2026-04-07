@@ -43,7 +43,7 @@ export default function SmoothScroll({ children }: SmoothScrollProps) {
       ref={lenisRef}
       root
       options={{
-        lerp: 0.08,
+        lerp: 0.12, // was 0.08 — faster catch-up reduces sustained video seeking load during fast scroll
         autoRaf: false,
         wheelMultiplier: 1.2,
         touchMultiplier: 0.8,
