@@ -33,7 +33,7 @@ layout.tsx
            │    ├── AudioMomentum    (physics engine: Source→Analyser→GainNode→Dest, shared AudioContext)
            │    └── ScrollStoryOverlay (20+ frame-synced story beats over video)
            │
-           ├── Contact               (GSAP ScrollTrigger entrance, mailto: form, validation)
+           ├── Contact               (GSAP ScrollTrigger entrance, API route form, validation)
            └── Footer                (GSAP SplitText entrance, real social links, micro-sounds)
 ```
 
@@ -54,7 +54,7 @@ layout.tsx
 | `MagneticButtons` | `providers/MagneticButtons.tsx` | Global `.magnetic-btn` hover effect + mouseout reset (desktop, reduced-motion aware) |
 | `Preloader` | `ui/Preloader.tsx` | Cinematic preloader: SplitText reveal (font-display) + decorative bar + fractal noise grain + iris-close exit + audio primer |
 | `SmoothScroll` | `providers/SmoothScroll.tsx` | Lenis + GSAP single RAF loop (lerp 0.08, vinyl easing, autoRaf false) |
-| `Contact` | `sections/Contact.tsx` | GSAP ScrollTrigger entrance + SplitText heading + mailto: form + animated success state |
+| `Contact` | `sections/Contact.tsx` | GSAP ScrollTrigger entrance + SplitText heading + API route form + loading/error/success states |
 | `Footer` | `ui/Footer.tsx` | GSAP SplitText entrance (staggered AURA heading) + real social links + micro-sounds |
 
 ### Added (this refactor)
@@ -64,6 +64,7 @@ layout.tsx
 - `src/app/loading.tsx` — Minimal loading state with gold gradient pulse
 - `src/app/robots.ts` — Disallows `/videos/` and `/audio/` from crawling
 - `src/app/sitemap.ts` — Weekly changeFrequency, dynamic lastModified
+- `src/app/api/contact/route.ts` — Contact form API route (POST, server-side validation)
 
 ### Deleted (previously dead code)
 
@@ -282,7 +283,7 @@ Respects `prefers-reduced-motion: reduce` (entire system disabled).
 ```
 --bg-void: #050508       --bg-surface: #0A0A10      --bg-subtle: #12121A
 --text-primary: #F0EDE6  --text-secondary: #8A8A99  --text-muted: #78788C
---aura-gold: #C9A84C     --aura-gold-bright: #E8C85A  --aura-gold-dim: #8A7435
+--aura-gold: #C9A84C     --aura-gold-bright: #E8C85A  --aura-gold-dim: #9A8240
 --crimson: #6B1520       --border-subtle: rgba(255,255,255,0.06)
 ```
 
@@ -432,8 +433,20 @@ Applied across 6 files (559 insertions). All CSS animations motion-gated via `@m
 - **Navigation transition-property** (`Navigation.tsx`): Changed from `transition-all` to explicit `transition-[background-color,border-color,box-shadow,padding]`.
 - **Navigation font-display** (`Navigation.tsx`): Logo text uses `fontFamily: var(--font-display)`.
 
+### Awwwards Audit Fixes — IMPLEMENTED (commit 33e89a6)
+- **Code splitting** (`page.tsx`): `next/dynamic({ ssr: false })` on 5 heavy client components (ScrollVideoPlayer, ScrollStoryOverlay, Contact, Footer, CustomCursor) — reduces initial bundle, enables parallel chunk loading
+- **Contact API route** (`api/contact/route.ts`, `Contact.tsx`): Server-side validation POST endpoint replacing broken `mailto:`. UI has `sending`/`submitError` states, disabled button during submit. Ready for Resend/SendGrid integration.
+- **Cursor contextual labels** (`useUIStore.ts`, `CustomCursor.tsx`): `cursorLabel` in Zustand store. Third floating element follows ring center (independent of ring scale). Labels: "Reservar" (CTA), "Enviar" (submit), "Arriba" (back-to-top), "Abrir" (social links), "Email" (booking).
+- **Album/show card visuals** (`ScrollStoryOverlay.tsx`): Album cards now have richer gradients with glow `boxShadow` + decorative vinyl-groove concentric circles. Show cards use inline SVG icons (music note, lightning bolt, wind, orbital) replacing unreliable Unicode symbols.
+- **WCAG AA contrast** (`globals.css`): `--aura-gold-dim` brightened `#8A7435` → `#9A8240` (contrast ratio 3.8:1 → 5.5:1 on `--bg-void`).
+- **Font size floor** (6 files): All `text-[9px]`/`text-[10px]` instances raised to `text-[11px]` minimum. Preloader pct text `clamp(9px,...)` → `clamp(11px,...)`. Affects Navigation side dots, mobile social links; Contact section labels; Footer section headers + cite; ScrollStoryOverlay bio + closing text.
+- **font-display headings** (`Contact.tsx`, `Footer.tsx`): Added `fontFamily: var(--font-display)` on Contact heading and Footer brand IVANN/AURA headings.
+- **Full-video preloader** (`Preloader.tsx`): `isVideoReady()` now requires `buffer >= 0.99` (was 0.9 or `canplaythrough`). Ensures buttery-smooth scroll scrubbing. Fallback timeout 45s (was 20s).
+- **Particle clustering fix** (`cinema-gl.ts`): `resize()` now scales particle positions proportionally to new canvas dimensions — fixes particles clustering in top-left when initial canvas was small.
+
 ### Remaining (not yet implemented)
 - **3 separate RAF loops**: ScrollVideoPlayer, AudioMomentum, and CustomCursor each run their own `requestAnimationFrame`. Should coalesce into GSAP ticker.
+- **Contact API email delivery**: `/api/contact` currently logs submissions. Connect to Resend/SendGrid for actual email delivery.
 
 ## Conventions
 
@@ -443,7 +456,7 @@ Applied across 6 files (559 insertions). All CSS animations motion-gated via `@m
 - Frame indices use 3fps equivalence: `frameIndex = Math.floor(videoTime * 3)`
 - Story beats in ScrollStoryOverlay use these frame indices for timing
 - Mobile menu uses native `<dialog>` with `showModal()` for WCAG-compliant focus management
-- Cursor variants: `"default" | "hover" | "hidden"` (no `"text"` — removed as unused)
+- Cursor variants: `"default" | "hover" | "hidden"` + `cursorLabel: string | null` for contextual text inside ring ("Reservar", "Enviar", "Arriba", "Abrir", "Email")
 - CustomCursor uses CSS `style.translate` property (not `transform: translate()`) for GPU compositing without string allocation
 - Scrollbar hidden on `html` element (not `body`) for Lenis compatibility
 - Section entrance animations use GSAP ScrollTrigger + `data-reveal` attributes (not CSS `.reveal-up`)
@@ -452,7 +465,7 @@ Applied across 6 files (559 insertions). All CSS animations motion-gated via `@m
 - Film grain is shader-only (CSS grain overlay removed to avoid duplication)
 - Energy state throttled: `useRef` at 60fps → `useState` at 10fps via `setInterval(100ms)`
 - Social links: real URLs with `target="_blank" rel="noopener noreferrer"`
-- Contact form: `mailto:` with pre-filled subject/body + client-side validation + `aria-describedby` error linking
+- Contact form: `POST /api/contact` with server-side validation + fetch + loading/error states + `aria-describedby` error linking
 - Programmatic scroll: use `useLenis()` from `lenis/react` — **never** `window.scrollTo/scrollBy/scrollIntoView` (conflicts with Lenis smooth scroll)
 - `color-scheme: dark` in `:root` for native form control colors
 - CinemaGL: all shaders use `precision highp float;` — mismatched precision between vertex/fragment causes link failure
@@ -563,4 +576,14 @@ Applied across 6 files (559 insertions). All CSS animations motion-gated via `@m
 - Navigation: scroll progress uses ref-based DOM manipulation (not useState) to avoid 60fps re-renders
 - getMoodCPU: `MOOD_KEYFRAMES` hoisted to module level (constant array, not per-call allocation)
 - Navigation: `transition-property` explicitly lists animated properties (not `transition-all`)
+- Code splitting: heavy client components use `next/dynamic({ ssr: false })` in `page.tsx` (ScrollVideoPlayer, ScrollStoryOverlay, Contact, Footer, CustomCursor)
+- CustomCursor: third element (`labelRef`) follows ring center for contextual text labels, uses CSS `translate` + `transform: translate(-50%,-50%)` for centering
+- CustomCursor: when `cursorLabel` is set, dot hides (scale 0), ring expands (scale 2.2), label fades in
+- Contact: `setCursorLabel` helper functions `hoverIn(label?)` / `hoverOut()` for concise event handlers
+- Contact: form submits via `POST /api/contact` with `fetch()`, not `mailto:`
+- Contact: `sending` state disables submit button with "Enviando..." text + `cursor-wait`
+- CinemaGL: `resize()` scales particle positions proportionally (`particles[i].x *= sx`) to prevent clustering
+- Preloader: full-video download required (`getBufferProgress() >= 0.99`) before iris-close exit
+- ScrollStoryOverlay: show card icons are inline SVGs (not Unicode) for cross-platform rendering
+- ScrollStoryOverlay: album cards have vinyl-groove concentric circles (3 nested `rounded-full` divs)
 - See `docs/CONVENTIONS.md` for full technical conventions
