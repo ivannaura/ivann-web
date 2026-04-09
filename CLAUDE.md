@@ -88,17 +88,18 @@ GainNode enables muting via gain ramp (instead of `audio.muted`) to preserve Ana
 
 ### Physics
 ```
-User scroll/key/click → addImpulse(normalizedVelocity)
+Scroll → setScrollVelocity(normVel)    Key/Click → addImpulse(normVel)
                               ↓
-                    impulse = lerp(0.1, 0.35, normalizedVelocity)
-                    energy += impulse
-                    energy *= Math.pow(FRICTION, dt)  // delta-time corrected
-                              ��
-              playbackRate = lerp(0.5, 1.0, pow(energy, 0.7))  // exponential curve
-              volume = smoothstep(0, 0.15, energy) * 0.7  // logarithmic: pow(vol, 2)
+  energy soft-follows velocity           energy += 0.1 + normVel * 0.25
+  (non-cumulative)                       (discrete, cumulative)
+              └─────────── energy ───────────────────┘
                               ↓
-                    preservesPitch = false
-                    (pitch drops as momentum decays = vinyl slowdown)
+              energy *= Math.exp(LN_FRICTION * dt)  // friction
+              scrollVelocity *= Math.exp(LN_FRICTION * dt * 3)  // 3x faster
+                              ↓
+              playbackRate = lerp(0.5, 1.0, pow(energy, 0.7))
+              volume = smoothstep(0, 0.15, energy) * 0.7
+              preservesPitch = false → vinyl slowdown + drift
 ```
 
 Constants: `FRICTION=0.985`, `MIN_RATE=0.5`, `MAX_RATE=1.0`, `MAX_VOLUME=0.7`, `PLAY_THRESHOLD=0.05`, `STOP_THRESHOLD=0.02`, `DRIFT_THRESHOLD=3.0s`
@@ -136,7 +137,7 @@ Bands available via `getFrequencyBands()` → `{ bass, mids, highs }` (all 0-1).
 2. GSAP ticker drives Lenis (`gsap.ticker.add → lenis.raf`) — single RAF loop
 3. `gsap.matchMedia()` wraps ScrollTrigger with responsive breakpoints:
    - Desktop: `scrub: 1.5` (vinyl feel)
-   - Mobile: `scrub: 2` (gentler for touch)
+   - Mobile: `scrub: 1` (faster touch response)
    - `prefers-reduced-motion`: `scrub: true` (instant sync, no audio impulse)
 4. `onUpdate` clamps to buffered range (finds containing range or nearest preceding), sets `video.currentTime`, reports frame changes
 5. Scroll velocity > 200px/s triggers `AudioMomentum.setScrollVelocity(normVel)` (non-cumulative, normVel = rawVelocity / 5000, disabled for reduced-motion). 200px/s threshold prevents drift→energy feedback loop.
