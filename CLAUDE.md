@@ -102,15 +102,20 @@ User scroll/key/click → addImpulse(normalizedVelocity)
 ```
 
 Constants: `FRICTION=0.985`, `MIN_RATE=0.5`, `MAX_RATE=1.0`, `MAX_VOLUME=0.7`, `PLAY_THRESHOLD=0.05`, `STOP_THRESHOLD=0.02`, `DRIFT_THRESHOLD=3.0s`
-Proportional impulse: `amount = 0.1 + normalizedVelocity * 0.25` (gentle scroll → 0.1, fling → 0.35)
+Two input modes:
+- **Scroll** (non-cumulative): `setScrollVelocity()` — energy soft-follows via `energy += (velocity - energy) * 0.4 * dt`. Prevents "enloquece" bug where 60fps addImpulse saturated energy instantly.
+- **Discrete** (cumulative): `addImpulse()` — `amount = 0.1 + normalizedVelocity * 0.25`. Used for keypress/click only.
+- Scroll velocity decays 3× faster than energy → "vinyl tail" (user stops, energy lingers).
+
+Vinyl drift: when energy lingers after scroll stops, `onScrollDrift` callback pushes Lenis scroll in last direction → visible "gradually slowing down" effect on video matching audio playbackRate slowdown.
 
 Delta-time friction: `Math.exp(LN_FRICTION * dt)` where `dt = (now - lastTime) / 16.667` — consistent behavior across frame rates.
 Sync crossfade: gain ramp to 0 before `currentTime` snap, then ramp back up (avoids audible pop).
-Drift correction: `drift * 0.1 * dt` (delta-time scaled).
+Drift correction: exponential `drift * (1 - Math.pow(0.9, dt))` — frame-rate independent.
 
 ### Shared AudioContext
 
-Both AudioMomentum and MicroSounds share a single AudioContext via `shared-audio-context.ts`. Ref-counted: `acquireAudioContext()` / `releaseAudioContext()`. iOS Safari limits to 4 AudioContexts — sharing ensures we never exceed. Fixed `sampleRate: 44100`. Includes `primerAudioContext()` for iOS — listens for first `touchstart`/`click` to resume the suspended context.
+Both AudioMomentum and MicroSounds share a single AudioContext via `shared-audio-context.ts`. Ref-counted: `acquireAudioContext()` / `releaseAudioContext()`. iOS Safari limits to 4 AudioContexts — sharing ensures we never exceed. Fixed `sampleRate: 44100`. Includes `primerAudioContext()` for iOS — both `touchstart`/`click` listeners stay alive until `ctx.resume()` actually succeeds (programmatic clicks from GSAP don't count as real user gestures on iOS).
 
 ### Frequency Analysis (AnalyserNode)
 
@@ -134,7 +139,7 @@ Bands available via `getFrequencyBands()` → `{ bass, mids, highs }` (all 0-1).
    - Mobile: `scrub: 2` (gentler for touch)
    - `prefers-reduced-motion`: `scrub: true` (instant sync, no audio impulse)
 4. `onUpdate` clamps to buffered range (finds containing range or nearest preceding), sets `video.currentTime`, reports frame changes
-5. Scroll velocity > 50px/s triggers `AudioMomentum.addImpulse(normVel)` with proportional intensity (normVel = rawVelocity / 5000, disabled for reduced-motion)
+5. Scroll velocity > 200px/s triggers `AudioMomentum.setScrollVelocity(normVel)` (non-cumulative, normVel = rawVelocity / 5000, disabled for reduced-motion). 200px/s threshold prevents drift→energy feedback loop.
 6. A rAF render loop uploads video frames to WebGL2 canvas with post-processing + particles (paused on `visibilitychange`)
 
 ## Story Beat Text Animations (GSAP SplitText)
@@ -171,7 +176,7 @@ Bands available via `getFrequencyBands()` → `{ bass, mids, highs }` (all 0-1).
 | **Mid** | Mid-range mobile | 3 | 2 | 500 | Bloom + color grade + particles. No motion blur, flare, heat |
 | **Low** | Weak GPU / reduced-motion | 0 | 0 | 0 | Raw `<video>` + text overlay |
 
-Auto-detection: `gl.MAX_TEXTURE_IMAGE_UNITS >= 8 && deviceMemory >= 4` → High. Runtime downgrade: avg frame time > 20ms for 10 frames → drop one tier.
+Auto-detection: `prefers-reduced-motion` → Low. iOS → Mid (deviceMemory always undefined). Desktop: `gl.MAX_TEXTURE_IMAGE_UNITS >= 8 && deviceMemory >= 4` → High. Runtime downgrade: avg frame time > 20ms for 10 frames → drop one tier.
 
 ### Pipeline (High Tier)
 ```
@@ -233,7 +238,7 @@ Despertar (0.5) → Entrada (0.6) → Danza (0.8) → Espectáculo (0.9) → Fue
 
 Exported as `getMoodCPU()` for shared use (ScrollVideoPlayer letterbox, page.tsx haze).
 
-Falls back to raw `<video>` element if WebGL2 unavailable or Low tier. Canvas sized to viewport with DPR capping.
+Falls back to raw `<video>` element if WebGL2 unavailable or Low tier. Canvas sized to viewport with DPR capping (2 desktop, 1.5 mobile).
 
 ## Keyboard Scroll Momentum (usePianoScroll)
 
@@ -444,6 +449,47 @@ Applied across 6 files (559 insertions). All CSS animations motion-gated via `@m
 - **Full-video preloader** (`Preloader.tsx`): `isVideoReady()` now requires `buffer >= 0.99` (was 0.9 or `canplaythrough`). Ensures buttery-smooth scroll scrubbing. Fallback timeout 45s (was 20s).
 - **Particle clustering fix** (`cinema-gl.ts`): `resize()` now scales particle positions proportionally to new canvas dimensions — fixes particles clustering in top-left when initial canvas was small.
 
+### Math/Physics Bugs — FIXED (session 3, commits 38308d8, 985b225)
+- ~~**Cursor scroll velocity accumulation**~~ → non-cumulative `= clamp(delta * scale)` (was `+=` without bound)
+- ~~**Particle life/maxLife mismatch**~~ → single `Math.random()` extracted to variable (was two independent calls)
+- ~~**sampleLumGrad NaN propagation** (critical)~~ → clamped grid indices with `Math.max(0, Math.min(max, idx))`
+- ~~**sampleLumGrad row-wrapping**~~ → column-aware neighbor sampling (was `idx ± 1` wrapping across rows)
+- ~~**Frequency band accumulated dt**~~ → EMA receives total dt across 2-frame skip (was single-frame dt)
+- ~~**Audio drift correction linear**~~ → exponential `1 - Math.pow(0.9, dt)` (was linear `0.1 * dt`)
+
+### Mobile/iOS Hardening — IMPLEMENTED (session 3, commit 38308d8)
+- Lenis `syncTouch: !isIOS` (conflicts with Safari rubber-band physics)
+- CinemaGL iOS tier cap → 'mid' (deviceMemory always undefined on iOS)
+- DPR cap 1.5 on mobile (reduces GPU fill rate on phones)
+- `dvh` letterbox bars (correct on iOS with dynamic toolbar)
+- iOS touch unlock retry (keep listener until video readyState >= 1)
+- `@media (hover: hover)` wrapping hover-only CSS (prevents stuck hover on touch)
+- `pointerType === 'touch'` detection to skip click impulse on mobile
+- PianoIndicator hint hidden on mobile, min font 11px
+- `safe-area-inset-bottom` on mobile nav dialog
+- Audio primer: listeners stay until `ctx.resume()` succeeds (not on first click)
+
+### Non-cumulative Momentum — IMPLEMENTED (session 3, commit 985b225)
+- `setScrollVelocity()` replacing per-frame `addImpulse()` for scroll
+- Energy soft-follows velocity (non-cumulative, prevents saturation)
+- Scroll velocity decays 3× faster than energy (vinyl tail)
+- Vinyl drift callback: push Lenis when energy lingers after scroll stops
+- 200px/s threshold prevents drift→energy→drift feedback loop
+- ScrollStoryOverlay: progressRef exit guard for fast-scroll-during-entry
+
+### CinemaGL Optimizations — IMPLEMENTED (session 3, worktree agents)
+- `mediump` precision in bloom/blur/particle fragment shaders (2× throughput on mobile)
+- `texSubImage2D` for subsequent video frames (skip format negotiation)
+- `requestVideoFrameCallback` guard (skip redundant uploads on 120Hz+)
+- Luminance gradient gated by `energy > 0.01`
+- Kawase blur constant uniforms hoisted outside loop (saves 12 GL calls/frame)
+
+### Preloader Improvements — IMPLEMENTED (session 3, commit 38308d8)
+- Real buffer progress tracking with percentage display
+- MutationObserver for instant video element detection (replaces setTimeout)
+- 99% buffer threshold before exit (ensures smooth scroll scrubbing)
+- 45s fallback timeout (allows full 44MB download on slow connections)
+
 ### Remaining (not yet implemented)
 - **3 separate RAF loops**: ScrollVideoPlayer, AudioMomentum, and CustomCursor each run their own `requestAnimationFrame`. Should coalesce into GSAP ticker.
 - **Contact API email delivery**: `/api/contact` currently logs submissions. Connect to Resend/SendGrid for actual email delivery.
@@ -468,12 +514,12 @@ Applied across 6 files (559 insertions). All CSS animations motion-gated via `@m
 - Contact form: `POST /api/contact` with server-side validation + fetch + loading/error states + `aria-describedby` error linking
 - Programmatic scroll: use `useLenis()` from `lenis/react` — **never** `window.scrollTo/scrollBy/scrollIntoView` (conflicts with Lenis smooth scroll)
 - `color-scheme: dark` in `:root` for native form control colors
-- CinemaGL: all shaders use `precision highp float;` — mismatched precision between vertex/fragment causes link failure
+- CinemaGL: vertex + cinema/composite frags use `precision highp float;`; bloom/blur/particle frags use `mediump` (2× throughput on mobile). Mismatched precision between vertex/fragment causes link failure
 - CinemaGL: `createProgramFromSources` detaches and deletes shaders after linking (prevents shader object leaks)
 - CinemaGL: `lumPixels` Uint8Array pre-allocated once (not per readPixels call)
 - CinemaGL: luminance grid uses async PBO readback (`PIXEL_PACK_BUFFER` + `getBufferSubData`) — no GPU pipeline stall
 - CinemaGL: Kawase bloom result FBO dynamically selected based on `KAWASE_ITERATIONS % 2` (ping-pong correctness)
-- CinemaGL: `texImage2D` guarded by `lastVideoTime` — skips upload when video frame unchanged
+- CinemaGL: video texture upload guarded by `lastVideoTime` + `requestVideoFrameCallback` (when available) — skips redundant uploads on 120Hz+ monitors. Uses `texSubImage2D` for subsequent frames (faster, format already negotiated)
 - CinemaGL: FBO textures use `texStorage2D` (immutable) — resize via delete+recreate, with no-op guard on same dimensions
 - CinemaGL: `glColorMask(true,true,true,false)` on cinema/bloom/composite passes, restored `(true,true,true,true)` before additive particles
 - CinemaGL: `sampleLumGrad` returns pre-allocated `_gradResult` object (zero-alloc per particle per frame)
@@ -484,7 +530,7 @@ Applied across 6 files (559 insertions). All CSS animations motion-gated via `@m
 - SharedAudioContext: `releaseAudioContext()` guards against negative refCount
 - ScrollVideoPlayer: `audioMuted` applied to freshly created AudioMomentum via ref (React effect ordering)
 - ScrollVideoPlayer: bass shake via `shakeRef` (ref-based transform on sticky div, no re-render)
-- ScrollVideoPlayer: dynamic letterbox bars (4vh `--bg-void` divs, `style.scale` varies with mood via `1.6 - mood * 0.8` — CSS scale property, not transform)
+- ScrollVideoPlayer: dynamic letterbox bars (4dvh `--bg-void` divs, `style.scale` varies with mood via `1.6 - mood * 0.8` — CSS scale property, not transform)
 - ScrollStoryOverlay: `data-reactive` letter-spacing is continuous (`energy * bands.mids * 0.08`), no threshold gate
 - ScrollStoryOverlay: exit guard simplified to `progress <= 0.8` (removed `tl.totalProgress() < 1` which caused fast-scroll glitches)
 - ScrollStoryOverlay: non-split beats exit via CSS opacity fade on ref style (not GSAP)
@@ -506,7 +552,7 @@ Applied across 6 files (559 insertions). All CSS animations motion-gated via `@m
 - PianoIndicator: wave cascade with per-bar `transitionDelay: Math.abs(i - 2) * 20` ms (center → outward)
 - PianoIndicator: idle breathing via `@keyframes piano-idle` with staggered delays when `!isActive`
 - Preloader: iris-close exit via `clipPath: "circle(0% at 50% 50%)"` + content scale-down for depth
-- Preloader: `playClick()` audio primer on name reveal complete (primes shared AudioContext for iOS)
+- Preloader: real buffer progress tracking with percentage display, MutationObserver for video detection
 - Preloader: reduced-motion users bypass exit animation (dismiss immediately)
 - Preloader: fractal noise grain overlay (`feTurbulence`, opacity 0.03) for cinematic texture during load
 - Preloader: h1 uses `fontFamily: var(--font-display)` (Cormorant Garamond) — not inherited body font
@@ -536,7 +582,7 @@ Applied across 6 files (559 insertions). All CSS animations motion-gated via `@m
 - Navigation: uses Zustand `toggleSoundMuted()` directly (no prop-based onSoundToggle)
 - Navigation: throttled scroll handler with rAF, 44px hamburger touch target (w-11 h-11)
 - Navigation: mobile dialog includes sound toggle
-- Preloader: extended timeout to 8s, waits for `canplaythrough`, responsive subtitle, iris-close 0.01%
+- Preloader: 45s timeout, waits for 99% buffer, responsive subtitle, iris-close 0.01%
 - CustomCursor: pauses rAF when not visible, delta-time ring lerp, delta-time scroll velocity decay
 - CustomCursor: reduced-motion → `cursor:none` gate (disabled entirely)
 - MagneticButtons: cached `getBoundingClientRect` with resize invalidation
@@ -586,4 +632,28 @@ Applied across 6 files (559 insertions). All CSS animations motion-gated via `@m
 - Preloader: full-video download required (`getBufferProgress() >= 0.99`) before iris-close exit
 - ScrollStoryOverlay: show card icons are inline SVGs (not Unicode) for cross-platform rendering
 - ScrollStoryOverlay: album cards have vinyl-groove concentric circles (3 nested `rounded-full` divs)
+- AudioMomentum: `setScrollVelocity()` for non-cumulative scroll energy; `addImpulse()` for discrete keypress/click only
+- AudioMomentum: scroll velocity decays 3× faster than energy via `Math.exp(LN_FRICTION * dt * 3)` — creates vinyl tail
+- AudioMomentum: accumulated dt for frequency analysis across 2-frame skip (`this.accumulatedDt`)
+- AudioMomentum: drift correction uses exponential `1 - Math.pow(0.9, dt)` not linear `0.1 * dt`
+- CinemaGL: `sampleLumGrad` clamps grid indices with `Math.max(0, Math.min(max, idx))` — prevents NaN from out-of-bounds particles
+- CinemaGL: `sampleLumGrad` uses column-aware neighbors (not `idx ± 1`) to prevent row-wrapping
+- CinemaGL: `spawnParticle` extracts `Math.random()` to a variable for `life`/`maxLife` (never call `Math.random()` twice for same value)
+- CinemaGL: `detectTier()` order: reduced-motion → iOS → desktop GPU capabilities
+- CinemaGL: luminance gradient computation gated by `energy > 0.01` (skip when idle)
+- CinemaGL: Kawase blur constant uniforms (texture unit, VAO) hoisted outside iteration loop
+- ScrollVideoPlayer: `onScrollDrift` callback prop for vinyl drift (page.tsx pushes Lenis)
+- ScrollVideoPlayer: `requestVideoFrameCallback` integration via `newVideoFrameRef` + `hasRVFCRef`
+- ScrollVideoPlayer: DPR capped at 1.5 on mobile (`window.innerWidth < 768`)
+- ScrollVideoPlayer: letterbox bars use `dvh` not `vh` (correct on iOS dynamic toolbar)
+- SmoothScroll: `syncTouch: !isIOS` — iOS detected at module load via UA + `maxTouchPoints > 1`
+- usePianoScroll: `pointerType === 'touch'` detection via `pointerdown` listener to skip click handler on mobile
+- PianoIndicator: hint text `hidden md:inline` (no keyboard on mobile)
+- Navigation: mobile dialog `paddingBottom: max(2rem, env(safe-area-inset-bottom))`
+- CSS: hover-only styles wrapped in `@media (hover: hover)` — prevents stuck hover on touch devices
+- CustomCursor: scroll velocity is non-cumulative (direct assignment, not `+=`)
+- SharedAudioContext: primer listeners stay alive until `ctx.resume()` promise resolves (not on first event)
+- Preloader: MutationObserver detects dynamically-imported `<video>` instead of `setTimeout` polling
+- Preloader: `getBufferProgress() >= 0.99` required before exit (full video for smooth scroll scrubbing)
+- ScrollStoryOverlay: `progressRef` tracks current progress for exit guard in entry `onComplete`
 - See `docs/CONVENTIONS.md` for full technical conventions
