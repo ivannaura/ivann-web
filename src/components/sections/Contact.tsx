@@ -30,6 +30,9 @@ export default function Contact() {
   const sectionRef = useRef<HTMLElement>(null);
   const successRef = useRef<HTMLDivElement>(null);
   const setCursorVariant = useUIStore((s) => s.setCursorVariant);
+  const setCursorLabel = useUIStore((s) => s.setCursorLabel);
+  const hoverIn = (label?: string) => { setCursorVariant("hover"); if (label) setCursorLabel(label); playHover(); };
+  const hoverOut = () => { setCursorVariant("default"); setCursorLabel(null); };
   const [formState, setFormState] = useState({
     name: "",
     email: "",
@@ -37,6 +40,8 @@ export default function Contact() {
     message: "",
   });
   const [submitted, setSubmitted] = useState(false);
+  const [sending, setSending] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
 
   // GSAP ScrollTrigger entrance — replaces IntersectionObserver + reveal-up CSS
@@ -157,18 +162,33 @@ export default function Contact() {
     return Object.keys(e).length === 0;
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!validate()) return;
 
-    // Build mailto with form data as body
-    const typeLabel = EVENT_TYPES.find((t) => t.value === formState.type)?.label ?? formState.type;
-    const subject = encodeURIComponent(`Consulta: ${typeLabel} — ${formState.name}`);
-    const body = encodeURIComponent(
-      `Nombre: ${formState.name}\nEmail: ${formState.email}\nTipo: ${typeLabel}\n\n${formState.message}`
-    );
-    window.open(`mailto:booking@ivannaura.com?subject=${subject}&body=${body}`, "_self");
-    setSubmitted(true);
+    setSending(true);
+    setSubmitError(null);
+
+    try {
+      const res = await fetch("/api/contact", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(formState),
+      });
+
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || "Error al enviar");
+      }
+
+      setSubmitted(true);
+    } catch (err) {
+      setSubmitError(
+        err instanceof Error ? err.message : "Error al enviar. Intenta de nuevo."
+      );
+    } finally {
+      setSending(false);
+    }
   };
 
   const inputBase =
@@ -194,7 +214,7 @@ export default function Contact() {
         {/* Section label */}
         <div data-reveal className="mb-16 md:mb-24">
           <span
-            className="text-[10px] tracking-[0.4em] uppercase"
+            className="text-[11px] tracking-[0.4em] uppercase"
             style={{ color: "var(--text-muted)" }}
           >
             04 — Contacto
@@ -212,7 +232,7 @@ export default function Contact() {
             <h2
               data-split-heading
               className="text-[clamp(2rem,5vw,3.5rem)] font-extralight leading-[1.1] mb-8"
-              style={{ color: "var(--text-primary)" }}
+              style={{ color: "var(--text-primary)", fontFamily: "var(--font-display)" }}
             >
               Hagamos algo{" "}
               <span className="gold-glow-text" style={{ color: "var(--aura-gold)" }}>
@@ -233,7 +253,7 @@ export default function Contact() {
             <div data-reveal className="flex flex-col gap-6">
               <div>
                 <span
-                  className="text-[10px] tracking-[0.3em] uppercase block mb-2"
+                  className="text-[11px] tracking-[0.3em] uppercase block mb-2"
                   style={{ color: "var(--text-muted)" }}
                 >
                   Management
@@ -242,8 +262,8 @@ export default function Contact() {
                   href="mailto:booking@ivannaura.com"
                   className="text-sm transition-colors duration-300 hover:text-[var(--aura-gold)]"
                   style={{ color: "var(--text-secondary)" }}
-                  onMouseEnter={() => { setCursorVariant("hover"); playHover(); }}
-                  onMouseLeave={() => setCursorVariant("default")}
+                  onMouseEnter={() => hoverIn()}
+                  onMouseLeave={hoverOut}
                 >
                   booking@ivannaura.com
                 </a>
@@ -251,7 +271,7 @@ export default function Contact() {
 
               <div>
                 <span
-                  className="text-[10px] tracking-[0.3em] uppercase block mb-2"
+                  className="text-[11px] tracking-[0.3em] uppercase block mb-2"
                   style={{ color: "var(--text-muted)" }}
                 >
                   Teléfono
@@ -260,8 +280,8 @@ export default function Contact() {
                   href="tel:+573102254687"
                   className="text-sm transition-colors duration-300 hover:text-[var(--aura-gold)] block mb-1"
                   style={{ color: "var(--text-secondary)" }}
-                  onMouseEnter={() => { setCursorVariant("hover"); playHover(); }}
-                  onMouseLeave={() => setCursorVariant("default")}
+                  onMouseEnter={() => hoverIn()}
+                  onMouseLeave={hoverOut}
                 >
                   +57 310 225 4687
                 </a>
@@ -271,8 +291,8 @@ export default function Contact() {
                   rel="noopener noreferrer"
                   className="magnetic-btn min-h-[44px] inline-flex items-center gap-2 text-xs tracking-[0.1em] transition-colors duration-300 hover:text-[var(--aura-gold)]"
                   style={{ color: "var(--text-muted)" }}
-                  onMouseEnter={() => { setCursorVariant("hover"); playHover(); }}
-                  onMouseLeave={() => setCursorVariant("default")}
+                  onMouseEnter={() => hoverIn()}
+                  onMouseLeave={hoverOut}
                 >
                   WhatsApp
                 </a>
@@ -280,7 +300,7 @@ export default function Contact() {
 
               <div>
                 <span
-                  className="text-[10px] tracking-[0.3em] uppercase block mb-2"
+                  className="text-[11px] tracking-[0.3em] uppercase block mb-2"
                   style={{ color: "var(--text-muted)" }}
                 >
                   Redes
@@ -325,22 +345,16 @@ export default function Contact() {
                 <h3
                   data-success-heading
                   className="text-xl font-light mb-3"
-                  style={{ color: "var(--text-primary)" }}
+                  style={{ color: "var(--text-primary)", fontFamily: "var(--font-display)" }}
                 >
-                  Abriendo tu correo...
+                  Mensaje enviado
                 </h3>
                 <p
                   data-success-text
                   className="text-sm"
                   style={{ color: "var(--text-secondary)" }}
                 >
-                  Si no se abrió, escríbenos directamente a{" "}
-                  <a
-                    href="mailto:booking@ivannaura.com"
-                    className="underline hover:text-[var(--aura-gold)]"
-                  >
-                    booking@ivannaura.com
-                  </a>
+                  Gracias por tu interés. Te responderemos pronto.
                 </p>
                 <button
                   onClick={() => { setSubmitted(false); setFormState({ name: "", email: "", type: "corporativo", message: "" }); }}
@@ -474,18 +488,25 @@ export default function Contact() {
                   )}
                 </div>
 
+                {submitError && (
+                  <p className="text-xs" style={{ color: "var(--error-red)" }}>
+                    {submitError}
+                  </p>
+                )}
+
                 <div data-reveal>
                   <button
                     type="submit"
-                    className="contact-submit magnetic-btn px-10 py-4 text-xs tracking-[0.3em] uppercase transition-all duration-500 rounded-none hover:bg-[var(--aura-gold)] hover:text-[var(--bg-void)] focus-visible:ring-1 focus-visible:ring-[var(--aura-gold)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg-surface)]"
+                    disabled={sending}
+                    className="contact-submit magnetic-btn px-10 py-4 text-xs tracking-[0.3em] uppercase transition-all duration-500 rounded-none hover:bg-[var(--aura-gold)] hover:text-[var(--bg-void)] focus-visible:ring-1 focus-visible:ring-[var(--aura-gold)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg-surface)] disabled:opacity-50 disabled:cursor-wait"
                     style={{
                       border: "1px solid var(--aura-gold-dim)",
                       color: "var(--aura-gold)",
                     }}
-                    onMouseEnter={() => setCursorVariant("hover")}
-                    onMouseLeave={() => setCursorVariant("default")}
+                    onMouseEnter={() => { setCursorVariant("hover"); setCursorLabel("Enviar"); }}
+                    onMouseLeave={() => { setCursorVariant("default"); setCursorLabel(null); }}
                   >
-                    Enviar
+                    {sending ? "Enviando..." : "Enviar"}
                   </button>
                 </div>
               </form>

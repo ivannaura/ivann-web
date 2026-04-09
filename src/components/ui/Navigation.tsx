@@ -472,7 +472,7 @@ export default function Navigation({
                 target="_blank"
                 rel="noopener noreferrer"
                 aria-label={s.name}
-                className="text-[10px] tracking-[0.2em] min-h-[44px] inline-flex items-center transition-colors duration-300 hover:text-[var(--aura-gold)]"
+                className="text-[11px] tracking-[0.2em] min-h-[44px] inline-flex items-center transition-colors duration-300 hover:text-[var(--aura-gold)]"
                 style={{ color: "var(--text-muted)" }}
               >
                 {s.label}
@@ -535,7 +535,7 @@ export default function Navigation({
             tabIndex={scrolled ? 0 : -1}
           >
             <span
-              className="text-[9px] tracking-[0.2em] uppercase opacity-0 group-hover:opacity-100 transition-all duration-300 translate-x-2 group-hover:translate-x-0"
+              className="text-[11px] tracking-[0.2em] uppercase opacity-0 group-hover:opacity-100 transition-all duration-300 translate-x-2 group-hover:translate-x-0"
               style={{ color: "var(--text-muted)" }}
             >
               {item.label}

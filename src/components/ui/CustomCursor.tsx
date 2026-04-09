@@ -11,24 +11,30 @@ const LN_VELOCITY_DECAY = Math.log(0.9); // VELOCITY_DECAY = 0.9
 export default function CustomCursor() {
   const dotRef = useRef<HTMLDivElement>(null);
   const ringRef = useRef<HTMLDivElement>(null);
+  const labelRef = useRef<HTMLDivElement>(null);
   const cursorVariant = useUIStore((s) => s.cursorVariant);
+  const cursorLabel = useUIStore((s) => s.cursorLabel);
 
   // All opacity is managed imperatively — never via React style props.
   // This prevents React re-renders from overwriting mouse-event-driven opacity.
   const visibleRef = useRef(false);
   const cursorVariantRef = useRef(cursorVariant);
   cursorVariantRef.current = cursorVariant;
+  const cursorLabelRef = useRef(cursorLabel);
+  cursorLabelRef.current = cursorLabel;
 
   const applyOpacity = useCallback(() => {
     const show = visibleRef.current && cursorVariantRef.current !== "hidden";
-    if (dotRef.current) dotRef.current.style.opacity = show ? "1" : "0";
+    const hasLabel = !!cursorLabelRef.current;
+    if (dotRef.current) dotRef.current.style.opacity = show && !hasLabel ? "1" : "0";
     if (ringRef.current) ringRef.current.style.opacity = show ? "0.3" : "0";
+    if (labelRef.current) labelRef.current.style.opacity = show && hasLabel ? "1" : "0";
   }, []);
 
-  // Sync Zustand cursorVariant → imperative opacity
+  // Sync Zustand cursorVariant + cursorLabel → imperative opacity
   useEffect(() => {
     applyOpacity();
-  }, [cursorVariant, applyOpacity]);
+  }, [cursorVariant, cursorLabel, applyOpacity]);
 
   useEffect(() => {
     const isMobile = window.matchMedia("(pointer: coarse)").matches;
@@ -60,6 +66,7 @@ export default function CustomCursor() {
     // Set initial off-screen position imperatively (avoids React re-render overwriting translate)
     if (dotRef.current) dotRef.current.style.translate = "-100px -100px";
     if (ringRef.current) ringRef.current.style.translate = "-100px -100px";
+    if (labelRef.current) labelRef.current.style.translate = "-100px -100px";
 
     const onMouseMove = (e: MouseEvent) => {
       mouseX = e.clientX;
@@ -119,6 +126,11 @@ export default function CustomCursor() {
           ringRef.current.style.transform = '';
         }
       }
+
+      // Label follows ring center
+      if (labelRef.current) {
+        labelRef.current.style.translate = `${ringX}px ${ringY}px`;
+      }
     };
 
     window.addEventListener("mousemove", onMouseMove);
@@ -138,6 +150,7 @@ export default function CustomCursor() {
   }, [applyOpacity]);
 
   const isHover = cursorVariant === "hover";
+  const hasLabel = !!cursorLabel;
 
   return (
     <>
@@ -145,19 +158,51 @@ export default function CustomCursor() {
         ref={dotRef}
         className="cursor-dot hidden md:block"
         style={{
-          ...(isHover ? { scale: "2" } : {}),
+          ...(isHover && !hasLabel ? { scale: "2" } : {}),
+          ...(hasLabel ? { scale: "0" } : {}),
         }}
       />
       <div
         ref={ringRef}
         className="cursor-ring hidden md:block"
         style={{
-          scale: isHover ? "1.5" : "1",
-          borderColor: isHover
-            ? "rgba(201, 168, 76, 0.5)"
-            : "rgba(201, 168, 76, 0.2)",
+          scale: hasLabel ? "2.2" : isHover ? "1.5" : "1",
+          borderColor: hasLabel
+            ? "rgba(201, 168, 76, 0.4)"
+            : isHover
+              ? "rgba(201, 168, 76, 0.5)"
+              : "rgba(201, 168, 76, 0.2)",
         }}
       />
+      {/* Cursor label — centered on ring, independent element to avoid scale inheritance */}
+      <div
+        ref={labelRef}
+        className="hidden md:block"
+        style={{
+          position: "fixed",
+          top: 0,
+          left: 0,
+          pointerEvents: "none",
+          zIndex: 99997,
+          willChange: "transform",
+          transform: "translate(-50%, -50%)",
+          opacity: 0,
+          transition: "opacity 0.2s ease-out",
+        }}
+      >
+        <span
+          style={{
+            fontSize: "9px",
+            letterSpacing: "0.18em",
+            textTransform: "uppercase" as const,
+            color: "var(--aura-gold)",
+            whiteSpace: "nowrap",
+            fontFamily: "var(--font-body)",
+          }}
+        >
+          {cursorLabel}
+        </span>
+      </div>
     </>
   );
 }

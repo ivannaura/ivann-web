@@ -1231,6 +1231,8 @@ export function initCinemaGL(canvas: HTMLCanvasElement): CinemaGL | null {
     },
 
     resize(newW, newH) {
+      const prevW = w;
+      const prevH = h;
       w = newW;
       h = newH;
       canvas.width = w;
@@ -1241,6 +1243,17 @@ export function initCinemaGL(canvas: HTMLCanvasElement): CinemaGL | null {
       if (fboB) resizeFBO(gl, fboB, Math.ceil(w / 2), Math.ceil(h / 2));
       if (fboB2) resizeFBO(gl, fboB2, Math.ceil(w / 2), Math.ceil(h / 2));
       if (fboD) resizeFBO(gl, fboD, w, h);
+
+      // Scale particle positions to new canvas size (fixes initial clustering
+      // when particles were spawned at default canvas dimensions before first resize)
+      if (prevW > 0 && prevH > 0) {
+        const sx = w / prevW;
+        const sy = h / prevH;
+        for (let i = 0; i < particles.length; i++) {
+          particles[i].x *= sx;
+          particles[i].y *= sy;
+        }
+      }
     },
 
     destroy() {

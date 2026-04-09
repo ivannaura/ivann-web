@@ -95,8 +95,9 @@ export default function Preloader() {
     const isVideoReady = (): boolean => {
       const video = videoEl || document.querySelector("video");
       if (!video) return false;
-      // Ready when 90%+ buffered or browser says canplaythrough (readyState 4)
-      return video.readyState >= 4 || getBufferProgress() >= 0.9;
+      // Wait for full download — ensures buttery-smooth scroll scrubbing
+      // with zero buffering pauses. 0.99 avoids floating-point edge cases.
+      return getBufferProgress() >= 0.99;
     };
 
     const checkReady = () => {
@@ -224,10 +225,10 @@ export default function Preloader() {
       tl.to({}, { duration: 0.3 });
     }, container);
 
-    // Fallback: force dismiss after 20s (even if video isn't fully loaded)
+    // Fallback: force dismiss after 45s (allows full 44MB download on slower connections)
     const fallback = setTimeout(() => {
       if (!exitStarted) startExit();
-    }, 20000);
+    }, 45000);
 
     return () => {
       ctx.revert();
@@ -353,7 +354,7 @@ export default function Preloader() {
         ref={pctRef}
         aria-hidden="true"
         style={{
-          fontSize: "clamp(9px, 1.2vw, 11px)",
+          fontSize: "clamp(11px, 1.2vw, 13px)",
           letterSpacing: "0.3em",
           color: "var(--text-muted)",
           marginTop: 12,

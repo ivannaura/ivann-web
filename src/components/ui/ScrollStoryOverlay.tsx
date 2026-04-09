@@ -283,7 +283,7 @@ const STORY_BEATS: StoryBeat[] = [
         <p
           data-split="words"
           data-split-stagger="0.02"
-          className="text-[clamp(0.65rem,1vw,0.8rem)] leading-relaxed text-cinema"
+          className="text-[clamp(11px,1vw,0.8rem)] leading-relaxed text-cinema"
           style={{ color: "var(--text-muted)" }}
         >
           Nacido en Medellín, Colombia. Graduado del Conservatorio de Bellas
@@ -340,10 +340,10 @@ const STORY_BEATS: StoryBeat[] = [
     content: (
       <div className="flex flex-wrap justify-center gap-3 md:gap-6 pointer-events-auto">
         {[
-          { icon: "♪", title: "Piano de Cola", desc: "Steinway & Sons" },
-          { icon: "◇", title: "Producción Visual", desc: "LED, lasers, mapping" },
-          { icon: "☆", title: "Artistas Aéreos", desc: "Trapecistas y telas" },
-          { icon: "◆", title: "Danza", desc: "Ballet y flamenco" },
+          { icon: "piano", title: "Piano de Cola", desc: "Steinway & Sons" },
+          { icon: "visual", title: "Producción Visual", desc: "LED, lasers, mapping" },
+          { icon: "aerial", title: "Artistas Aéreos", desc: "Trapecistas y telas" },
+          { icon: "dance", title: "Danza", desc: "Ballet y flamenco" },
         ].map((item) => (
           <div
             key={item.title}
@@ -354,7 +354,20 @@ const STORY_BEATS: StoryBeat[] = [
               background: "rgba(5,5,8,0.6)",
             }}
           >
-            <span className="text-lg block mb-1">{item.icon}</span>
+            <span className="block mb-1">
+              {item.icon === "piano" && (
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--aura-gold)" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
+              )}
+              {item.icon === "visual" && (
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--aura-gold)" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+              )}
+              {item.icon === "aerial" && (
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--aura-gold)" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"><path d="M9.59 4.59A2 2 0 1 1 11 8H2m10.59 11.41A2 2 0 1 0 14 16H2m15.73-8.27A2.5 2.5 0 1 1 19.5 12H2"/></svg>
+              )}
+              {item.icon === "dance" && (
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--aura-gold)" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z"/><path d="M8 12a4 4 0 0 0 8 0 4 4 0 0 0-8 0"/><line x1="12" y1="2" x2="12" y2="8"/><line x1="12" y1="16" x2="12" y2="22"/></svg>
+              )}
+            </span>
             <span
               className="text-[0.75rem] font-medium block text-cinema"
               style={{ color: "var(--text-primary)" }}
@@ -429,12 +442,18 @@ const STORY_BEATS: StoryBeat[] = [
             style={{ transform: `rotate(${album.rotate}deg)` }}
           >
             <div
-              className="w-20 h-20 md:w-28 md:h-28 mb-2 border"
+              className="w-20 h-20 md:w-28 md:h-28 mb-2 border relative overflow-hidden"
               style={{
-                background: `linear-gradient(135deg, ${album.color}, transparent)`,
-                borderColor: "var(--border-subtle)",
+                background: `linear-gradient(135deg, ${album.color} 0%, ${album.color}88 50%, rgba(5,5,8,0.85) 100%)`,
+                borderColor: `${album.color}44`,
+                boxShadow: `0 4px 20px -4px ${album.color}30`,
               }}
-            />
+            >
+              {/* Vinyl groove — decorative concentric circles */}
+              <div className="absolute rounded-full border opacity-20" style={{ inset: "20%", borderColor: album.color }} />
+              <div className="absolute rounded-full border opacity-10" style={{ inset: "35%", borderColor: album.color }} />
+              <div className="absolute rounded-full opacity-20" style={{ inset: "46%", background: album.color }} />
+            </div>
             <span
               className="text-[0.7rem] font-medium block text-cinema"
               style={{ color: "var(--text-primary)" }}
@@ -505,13 +524,13 @@ const STORY_BEATS: StoryBeat[] = [
             color: "var(--aura-gold)",
             borderColor: "var(--aura-gold)",
           }}
-          onMouseEnter={() => useUIStore.getState().setCursorVariant("hover")}
-          onMouseLeave={() => useUIStore.getState().setCursorVariant("default")}
+          onMouseEnter={() => { useUIStore.getState().setCursorVariant("hover"); useUIStore.getState().setCursorLabel("Reservar"); }}
+          onMouseLeave={() => { useUIStore.getState().setCursorVariant("default"); useUIStore.getState().setCursorLabel(null); }}
         >
           Contrata el Show
         </a>
         <p
-          className="text-[0.65rem] mt-4 tracking-[0.15em] text-cinema"
+          className="text-[11px] mt-4 tracking-[0.15em] text-cinema"
           style={{ color: "var(--text-muted)" }}
         >
           <a href="mailto:booking@ivannaura.com" className="pointer-events-auto hover:text-[var(--aura-gold)] transition-colors duration-300">booking@ivannaura.com</a>
@@ -596,7 +615,7 @@ const STORY_BEATS: StoryBeat[] = [
         <p
           data-split="chars"
           data-split-stagger="0.03"
-          className="text-[0.65rem] mt-4 tracking-[0.15em] text-cinema"
+          className="text-[11px] mt-4 tracking-[0.15em] text-cinema"
           style={{ color: "var(--text-muted)" }}
         >
           Solo se puede vivir.

@@ -21,6 +21,7 @@ const SOCIAL_LINKS = [
 
 export default function Footer() {
   const setCursorVariant = useUIStore((s) => s.setCursorVariant);
+  const setCursorLabel = useUIStore((s) => s.setCursorLabel);
   const lenis = useLenis();
   const lenisRef = useRef(lenis);
   lenisRef.current = lenis;
@@ -110,14 +111,14 @@ export default function Footer() {
               <h2
                 data-brand
                 className="footer-brand text-[clamp(3rem,8vw,7rem)] font-extralight leading-[0.9] tracking-[0.05em]"
-                style={{ color: "var(--text-primary)" }}
+                style={{ color: "var(--text-primary)", fontFamily: "var(--font-display)" }}
               >
                 IVANN
               </h2>
               <h2
                 data-brand
                 className="footer-brand text-[clamp(3rem,8vw,7rem)] font-extralight leading-[0.9] tracking-[0.05em]"
-                style={{ color: "var(--aura-gold)" }}
+                style={{ color: "var(--aura-gold)", fontFamily: "var(--font-display)" }}
               >
                 AURA
               </h2>
@@ -128,8 +129,8 @@ export default function Footer() {
               onClick={scrollToTop}
               aria-label="Volver al inicio de la página"
               className="flex flex-col items-center gap-2 group mb-4 magnetic-btn outline-none focus-visible:ring-1 focus-visible:ring-[var(--aura-gold)] rounded-sm"
-              onMouseEnter={() => { setCursorVariant("hover"); playHover(); }}
-              onMouseLeave={() => setCursorVariant("default")}
+              onMouseEnter={() => { setCursorVariant("hover"); setCursorLabel("Arriba"); playHover(); }}
+              onMouseLeave={() => { setCursorVariant("default"); setCursorLabel(null); }}
             >
               <div
                 className="w-12 h-12 rounded-full flex items-center justify-center transition-all duration-500 group-hover:bg-[var(--aura-gold)] group-hover:scale-110"
@@ -176,7 +177,7 @@ export default function Footer() {
           {/* Social */}
           <div data-reveal>
             <h3
-              className="text-[10px] tracking-[0.4em] uppercase mb-6"
+              className="text-[11px] tracking-[0.4em] uppercase mb-6"
               style={{ color: "var(--text-muted)" }}
             >
               Redes
@@ -189,8 +190,8 @@ export default function Footer() {
                   target="_blank"
                   rel="noopener noreferrer"
                   className="footer-social-link group flex items-center justify-between py-1 min-w-[44px] min-h-[44px] transition-all duration-300"
-                  onMouseEnter={() => { setCursorVariant("hover"); playHover(); }}
-                  onMouseLeave={() => setCursorVariant("default")}
+                  onMouseEnter={() => { setCursorVariant("hover"); setCursorLabel("Abrir"); playHover(); }}
+                  onMouseLeave={() => { setCursorVariant("default"); setCursorLabel(null); }}
                 >
                   <span className="flex items-center gap-0">
                     <span
@@ -215,7 +216,7 @@ export default function Footer() {
           {/* Contact */}
           <div data-reveal>
             <h3
-              className="text-[10px] tracking-[0.4em] uppercase mb-6"
+              className="text-[11px] tracking-[0.4em] uppercase mb-6"
               style={{ color: "var(--text-muted)" }}
             >
               Booking
@@ -224,8 +225,8 @@ export default function Footer() {
               href="mailto:booking@ivannaura.com"
               className="text-sm font-light tracking-wide transition-colors duration-300 hover:text-[var(--aura-gold)] block mb-3"
               style={{ color: "var(--text-secondary)" }}
-              onMouseEnter={() => { setCursorVariant("hover"); playHover(); }}
-              onMouseLeave={() => setCursorVariant("default")}
+              onMouseEnter={() => { setCursorVariant("hover"); setCursorLabel("Email"); playHover(); }}
+              onMouseLeave={() => { setCursorVariant("default"); setCursorLabel(null); }}
             >
               booking@ivannaura.com
             </a>
@@ -267,7 +268,7 @@ export default function Footer() {
                 className="mt-4"
               >
                 <cite
-                  className="text-[10px] tracking-[0.2em] not-italic"
+                  className="text-[11px] tracking-[0.2em] not-italic"
                   style={{ color: "var(--aura-gold-dim)" }}
                 >
                   — IVANN AURA

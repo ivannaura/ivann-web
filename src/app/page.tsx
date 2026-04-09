@@ -1,13 +1,15 @@
 "use client";
 
 import { useState, useCallback, useRef, useEffect } from "react";
-import CustomCursor from "@/components/ui/CustomCursor";
+import dynamic from "next/dynamic";
 import Navigation from "@/components/ui/Navigation";
-import ScrollVideoPlayer from "@/components/ui/ScrollVideoPlayer";
-import ScrollStoryOverlay from "@/components/ui/ScrollStoryOverlay";
-import Contact from "@/components/sections/Contact";
-import Footer from "@/components/ui/Footer";
 import PianoIndicator from "@/components/ui/PianoIndicator";
+
+const CustomCursor = dynamic(() => import("@/components/ui/CustomCursor"), { ssr: false });
+const ScrollVideoPlayer = dynamic(() => import("@/components/ui/ScrollVideoPlayer"), { ssr: false });
+const ScrollStoryOverlay = dynamic(() => import("@/components/ui/ScrollStoryOverlay"), { ssr: false });
+const Contact = dynamic(() => import("@/components/sections/Contact"), { ssr: false });
+const Footer = dynamic(() => import("@/components/ui/Footer"), { ssr: false });
 import { usePianoScroll } from "@/hooks/usePianoScroll";
 import { destroyMicroSounds } from "@/lib/micro-sounds";
 import { useUIStore } from "@/stores/useUIStore";
