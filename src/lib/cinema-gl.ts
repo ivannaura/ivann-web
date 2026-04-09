@@ -584,9 +584,9 @@ export function initCinemaGL(canvas: HTMLCanvasElement): CinemaGL | null {
   };
   canvas.addEventListener("webglcontextlost", onContextLost, false);
   const onContextRestored = () => {
-    contextLost = false;
-    // Re-create textures, programs, FBOs etc. would go here.
-    // For now, just flag that we're back so the render loop resumes.
+    // Context restore not supported — all GL resources (programs, textures, FBOs)
+    // are invalid after context loss. Stay in fallback mode (raw <video>).
+    // contextLost remains true intentionally.
   };
   canvas.addEventListener("webglcontextrestored", onContextRestored, false);
 

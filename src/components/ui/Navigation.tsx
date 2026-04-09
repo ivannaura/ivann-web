@@ -49,7 +49,7 @@ export default function Navigation({
       ticking = true;
       requestAnimationFrame(() => {
         const y = window.scrollY;
-        setScrolled(y > 80);
+        setScrolled(prev => (y > 80) === prev ? prev : y > 80);
 
         const docHeight = document.documentElement.scrollHeight - window.innerHeight;
         const progress = docHeight > 0 ? y / docHeight : 0;
@@ -61,7 +61,8 @@ export default function Navigation({
           progressDotRef.current.style.opacity = progress > 0.005 ? "1" : "0";
         }
 
-        if (!sectionEls) {
+        // Re-query if any section is still null (dynamic components may not have mounted yet)
+        if (!sectionEls || sectionEls.some(el => el === null)) {
           sectionEls = NAV_ITEMS.map((item) => document.querySelector(item.href));
         }
 
@@ -71,14 +72,14 @@ export default function Navigation({
           if (section) {
             const rect = section.getBoundingClientRect();
             if (rect.top <= window.innerHeight * 0.4) {
-              setActiveSection(i);
+              setActiveSection(prev => prev === i ? prev : i);
               found = true;
               break;
             }
           }
         }
         if (!found && y < window.innerHeight * 0.3) {
-          setActiveSection(0);
+          setActiveSection(prev => prev === 0 ? prev : 0);
         }
         ticking = false;
       });

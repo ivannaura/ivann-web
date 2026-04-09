@@ -288,7 +288,7 @@ input:focus-visible, textarea:focus-visible, select:focus-visible {
 /* Floating labels — Material Design refined */
 .contact-label {
   display: block;
-  font-size: 10px;
+  font-size: 11px;
   letter-spacing: 0.3em;
   text-transform: uppercase;
   color: var(--text-muted);
@@ -300,7 +300,7 @@ input:focus-visible, textarea:focus-visible, select:focus-visible {
 /* When field has a value OR is focused — label shrinks and turns gold */
 .contact-field:focus-within .contact-label,
 .contact-label.has-value {
-  font-size: 9px;
+  font-size: 10px;
   letter-spacing: 0.45em;
   color: var(--aura-gold-dim);
 }

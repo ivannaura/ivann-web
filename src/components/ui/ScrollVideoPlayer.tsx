@@ -262,6 +262,10 @@ export default function ScrollVideoPlayer({
     };
     resize();
 
+    // Initialize mouse to canvas center to avoid spotlight/CA artifact at (0,0)
+    mouseRef.current.x = Math.round(canvas.clientWidth * Math.min(window.devicePixelRatio, 2) / 2);
+    mouseRef.current.y = Math.round(canvas.clientHeight * Math.min(window.devicePixelRatio, 2) / 2);
+
     const ro = new ResizeObserver(resize);
     ro.observe(canvas);
 
