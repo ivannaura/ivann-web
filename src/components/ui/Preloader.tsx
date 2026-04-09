@@ -28,7 +28,6 @@ export default function Preloader() {
 
     let dismissTimeout: ReturnType<typeof setTimeout>;
     let progressInterval: ReturnType<typeof setInterval>;
-    let bindRetryTimeout: ReturnType<typeof setTimeout>;
     let videoEl: HTMLVideoElement | null = null;
     let introComplete = false;
     let exitStarted = false;
@@ -125,25 +124,56 @@ export default function Preloader() {
     progressInterval = setInterval(checkReady, 250);
     checkReady();
 
-    // Bind canplaythrough listener (video may mount after preloader)
+    // Bind to <video> element — it may mount late (dynamic import).
+    // Use MutationObserver to detect it instantly instead of polling.
     const onCanPlayThrough = () => {
       if (introComplete) startExit();
     };
-    const bindVideo = () => {
-      const video = document.querySelector("video");
-      if (video && !videoEl) {
-        videoEl = video;
-        if (video.readyState >= 4) {
-          onCanPlayThrough();
-        } else {
-          video.addEventListener("canplaythrough", onCanPlayThrough, {
-            once: true,
-          });
-        }
+    const bindVideo = (video: HTMLVideoElement) => {
+      if (videoEl) return;
+      videoEl = video;
+      if (video.readyState >= 4) {
+        onCanPlayThrough();
+      } else {
+        video.addEventListener("canplaythrough", onCanPlayThrough, {
+          once: true,
+        });
       }
+      // Trigger an immediate progress check now that we found the video
+      checkReady();
     };
-    bindVideo();
-    bindRetryTimeout = setTimeout(bindVideo, 500);
+
+    // Try immediately
+    const existing = document.querySelector("video");
+    if (existing) {
+      bindVideo(existing);
+    }
+
+    // Watch for <video> added later by dynamic import
+    let observer: MutationObserver | null = null;
+    if (!videoEl) {
+      observer = new MutationObserver((mutations) => {
+        for (const m of mutations) {
+          for (const node of m.addedNodes) {
+            if (node instanceof HTMLVideoElement) {
+              bindVideo(node);
+              observer?.disconnect();
+              return;
+            }
+            // Check descendants (video might be inside a dynamically added subtree)
+            if (node instanceof HTMLElement) {
+              const vid = node.querySelector("video");
+              if (vid) {
+                bindVideo(vid);
+                observer?.disconnect();
+                return;
+              }
+            }
+          }
+        }
+      });
+      observer.observe(document.body, { childList: true, subtree: true });
+    }
 
     // --- Intro animation ---
     const ctx = gsap.context(() => {
@@ -234,8 +264,8 @@ export default function Preloader() {
       ctx.revert();
       clearTimeout(fallback);
       clearTimeout(dismissTimeout);
-      clearTimeout(bindRetryTimeout);
       clearInterval(progressInterval);
+      observer?.disconnect();
       if (videoEl) {
         videoEl.removeEventListener("canplaythrough", onCanPlayThrough);
       }

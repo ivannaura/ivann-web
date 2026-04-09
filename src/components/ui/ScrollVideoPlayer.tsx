@@ -30,6 +30,7 @@ interface ScrollVideoPlayerProps {
   onProgressChange?: (progress: number) => void;
   onActTransition?: (value: number) => void;
   onError?: () => void;
+  onScrollDrift?: (deltaPixels: number) => void;
   audioMuted?: boolean;
   children?: React.ReactNode;
 }
@@ -54,6 +55,7 @@ export default function ScrollVideoPlayer({
   onProgressChange,
   onActTransition,
   onError,
+  onScrollDrift,
   audioMuted = false,
   children,
 }: ScrollVideoPlayerProps) {
@@ -85,6 +87,12 @@ export default function ScrollVideoPlayer({
   // Mouse tracking for cursor → WebGL interaction
   const mouseRef = useRef({ x: 0, y: 0 }); // DPR-scaled pixel coords (set on mousemove)
 
+  // requestVideoFrameCallback — tracks when a new decoded frame is available
+  // Start true so the first frame always uploads the texture
+  const newVideoFrameRef = useRef(true);
+  // Whether requestVideoFrameCallback is supported (determined in useEffect)
+  const hasRVFCRef = useRef(false);
+
   // Scroll velocity tracking (smoothed for shader)
   const velocityRef = useRef(0);
   const lastSeekTimeRef = useRef(0);
@@ -102,8 +110,13 @@ export default function ScrollVideoPlayer({
   onProgressChangeRef.current = onProgressChange;
   const onActTransitionRef = useRef(onActTransition);
   onActTransitionRef.current = onActTransition;
+  const onScrollDriftRef = useRef(onScrollDrift);
+  onScrollDriftRef.current = onScrollDrift;
   const audioMutedRef = useRef(audioMuted);
   audioMutedRef.current = audioMuted;
+
+  // Scroll direction tracking for vinyl drift
+  const scrollDirectionRef = useRef(1); // 1 = forward, -1 = backward
 
   // Reset ready state when video source changes (prevents stale readyRef)
   useEffect(() => {
@@ -187,6 +200,58 @@ export default function ScrollVideoPlayer({
   }, [markReady]);
 
   // ---------------------------------------------------------------------------
+  // Blob URL loading — progressive enhancement for instant seeks
+  // ---------------------------------------------------------------------------
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+
+    let aborted = false;
+    let blobUrl: string | null = null;
+
+    const loadBlob = async () => {
+      try {
+        const response = await fetch(videoSrc);
+        if (aborted || !response.ok) return;
+
+        const blob = await response.blob();
+        if (aborted) return;
+
+        blobUrl = URL.createObjectURL(blob);
+        if (aborted) {
+          URL.revokeObjectURL(blobUrl);
+          blobUrl = null;
+          return;
+        }
+
+        // Preserve current playback position before swapping src
+        const savedTime = video.currentTime;
+        video.src = blobUrl;
+
+        // Wait for the new source to be ready before restoring position
+        const onLoaded = () => {
+          video.removeEventListener("loadedmetadata", onLoaded);
+          if (!aborted) {
+            video.currentTime = savedTime;
+          }
+        };
+        video.addEventListener("loadedmetadata", onLoaded);
+      } catch {
+        // Fetch failed — keep using regular src (progressive enhancement)
+      }
+    };
+
+    loadBlob();
+
+    return () => {
+      aborted = true;
+      if (blobUrl) {
+        URL.revokeObjectURL(blobUrl);
+      }
+    };
+  }, [videoSrc]);
+
+  // ---------------------------------------------------------------------------
   // iOS touch unlock — retry if video isn't ready on first touch
   // ---------------------------------------------------------------------------
   useEffect(() => {
@@ -235,6 +300,34 @@ export default function ScrollVideoPlayer({
       return () => sticky.removeEventListener("mousemove", onMove);
     }
   }, []);
+
+  // ---------------------------------------------------------------------------
+  // requestVideoFrameCallback — signals when a new decoded frame is available.
+  // Prevents redundant texImage2D uploads on high-refresh-rate monitors (120Hz+)
+  // where the GSAP ticker runs faster than the video's native frame rate (~30fps).
+  // Progressive enhancement: if the API isn't available, cinema-gl falls back
+  // to its existing lastVideoTime guard.
+  // ---------------------------------------------------------------------------
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video || !ready) return;
+
+    if (!('requestVideoFrameCallback' in video)) return; // graceful fallback
+
+    hasRVFCRef.current = true;
+
+    let id: number;
+    const onFrame = () => {
+      newVideoFrameRef.current = true;
+      id = video.requestVideoFrameCallback(onFrame);
+    };
+    id = video.requestVideoFrameCallback(onFrame);
+
+    return () => {
+      video.cancelVideoFrameCallback(id);
+      hasRVFCRef.current = false;
+    };
+  }, [ready]);
 
   // ---------------------------------------------------------------------------
   // WebGL2 cinema canvas
@@ -358,6 +451,16 @@ export default function ScrollVideoPlayer({
         letterboxBottomRef.current.style.scale = `1 ${barScale}`;
       }
 
+      // Vinyl drift: when user stopped scrolling but energy lingers,
+      // push the page slightly in the last scroll direction. This creates
+      // the "gradually slowing down" effect on the video matching the audio.
+      const sVel = Math.abs(smoothVelocityRef.current);
+      if (e > 0.03 && sVel < 0.03 && onScrollDriftRef.current) {
+        // Exponential curve: drift decays faster at low energy
+        const driftPx = Math.pow(e, 1.5) * 3 * dt * scrollDirectionRef.current;
+        onScrollDriftRef.current(driftPx);
+      }
+
       // Unified cinema render (with context-loss fallback)
       const video = videoRef.current;
       const cinema = cinemaRef.current;
@@ -378,7 +481,15 @@ export default function ScrollVideoPlayer({
             mouseY: mouseRef.current.y,
             velocity: smoothVelocityRef.current,
             actTransition: actTransitionRef.current,
+            // Only pass newVideoFrame when requestVideoFrameCallback is active;
+            // undefined tells cinema-gl to use its lastVideoTime fallback.
+            newVideoFrame: hasRVFCRef.current ? newVideoFrameRef.current : undefined,
           });
+          // Reset the flag after render — next tick will skip upload unless
+          // requestVideoFrameCallback fires again with a new decoded frame.
+          if (hasRVFCRef.current) {
+            newVideoFrameRef.current = false;
+          }
         }
       }
     };
@@ -442,20 +553,26 @@ export default function ScrollVideoPlayer({
             // Fire progress callback
             onProgressChangeRef.current?.(self.progress);
 
-            // Scroll velocity → shader + audio impulse
+            // Scroll velocity → shader + audio energy
             if (!reduced) {
               const rawVelocity = Math.abs(self.getVelocity());
-              // Normalize: 0 at rest, 1 at ~5000px/s
-              velocityRef.current = Math.min(1.0, rawVelocity / 5000);
+              const normVel = Math.min(1.0, rawVelocity / 5000);
+              velocityRef.current = normVel;
 
-              if (rawVelocity > 50) {
-                // Pass normalized velocity to impulse (proportional)
-                const normVel = Math.min(1.0, rawVelocity / 5000);
-                momentumRef.current?.addImpulse(normVel);
+              // Track scroll direction for vinyl drift
+              scrollDirectionRef.current = self.direction;
 
-                // Whoosh sound on fast scroll (throttled to 1/sec)
+              // Non-cumulative: energy *follows* velocity instead of accumulating.
+              // Threshold at 200 prevents drift-induced micro-velocity from
+              // feeding back into the system (avoids energy floor bug).
+              if (rawVelocity > 200) {
+                momentumRef.current?.setScrollVelocity(normVel);
+              }
+
+              // Whoosh sound on fast scroll (throttled to 1/sec)
+              if (rawVelocity > 800) {
                 const now = performance.now();
-                if (rawVelocity > 800 && now - lastWhooshRef.current > 1000) {
+                if (now - lastWhooshRef.current > 1000) {
                   lastWhooshRef.current = now;
                   playWhoosh();
                 }

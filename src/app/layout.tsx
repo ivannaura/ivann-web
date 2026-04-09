@@ -128,6 +128,10 @@ export default function RootLayout({
   return (
     <html lang="es" className={`${display.variable} ${body.variable} antialiased`}>
       <head>
+        {/* Start video download during HTML parsing — ScrollVideoPlayer is
+            dynamically imported so its <video> element mounts late. as="fetch"
+            populates the HTTP cache (as="video" is spotty in Safari). */}
+        <link rel="preload" href="/videos/flamenco-graded.mp4" as="fetch" crossOrigin="anonymous" />
         <meta name="format-detection" content="telephone=no" />
         <meta name="color-scheme" content="dark" />
         {/* JSON-LD structured data */}

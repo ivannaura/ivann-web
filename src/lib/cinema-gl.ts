@@ -361,7 +361,7 @@ void main() {
 }`;
 
 const PARTICLE_FRAG = `#version 300 es
-precision highp float;
+precision mediump float;
 in float v_alpha;
 in float v_lum;
 uniform vec3 u_colorLow;
@@ -393,7 +393,7 @@ void main() {
 }`;
 
 const BLOOM_THRESH_FRAG = `#version 300 es
-precision highp float;
+precision mediump float;
 in vec2 v_uv;
 uniform sampler2D u_tex;
 uniform float u_threshold;
@@ -408,7 +408,7 @@ void main() {
 }`;
 
 const KAWASE_BLUR_FRAG = `#version 300 es
-precision highp float;
+precision mediump float;
 in vec2 v_uv;
 uniform sampler2D u_tex;
 uniform vec2 u_texelSize;
@@ -508,13 +508,16 @@ interface Particle {
 }
 
 function spawnParticle(w: number, h: number, isCursorTrail: boolean = false): Particle {
+  // Single random for life/maxLife — the old double Math.random() caused life !== maxLife,
+  // breaking the alpha fade formula (lifeFrac = life/maxLife produced values > 1 or < 1).
+  const life = isCursorTrail ? 0.8 + Math.random() * 0.5 : 3 + Math.random() * 5;
   return {
     x: Math.random() * w,
     y: Math.random() * h,
     vx: (Math.random() - 0.5) * 0.5,
     vy: (Math.random() - 0.5) * 0.3,
-    life: isCursorTrail ? 0.8 + Math.random() * 0.5 : 3 + Math.random() * 5,
-    maxLife: isCursorTrail ? 0.8 + Math.random() * 0.5 : 3 + Math.random() * 5,
+    life,
+    maxLife: life,
     size: isCursorTrail ? 1.5 + Math.random() * 2 : 1 + Math.random() * 3,
     isCursorTrail,
   };
@@ -545,6 +548,10 @@ export interface CinemaGLParams {
   mouseY: number;
   velocity: number;  // normalized 0-1
   actTransition: number; // 0-1, peaks at act boundaries
+  /** When provided, signals whether a new decoded video frame is available
+   *  (via requestVideoFrameCallback). If false, texImage2D upload is skipped.
+   *  When undefined (fallback), the existing lastVideoTime guard is used. */
+  newVideoFrame?: boolean;
 }
 
 export interface CinemaGL {
@@ -730,6 +737,7 @@ export function initCinemaGL(canvas: HTMLCanvasElement): CinemaGL | null {
   let h = canvas.height || 540;
   let lastTime = 0;
   let lastVideoTime = -1; // guard against redundant texImage2D uploads
+  let videoTexInitialized = false; // first upload uses texImage2D, subsequent use texSubImage2D
 
   // ---------------------------------------------------------------------------
   // Tier detection + FBO infrastructure
@@ -838,16 +846,22 @@ export function initCinemaGL(canvas: HTMLCanvasElement): CinemaGL | null {
   const _gradResult = { gx: 0, gy: 0 };
 
   function sampleLumGrad(px: number, py: number): { gx: number; gy: number } {
-    const gxIdx = Math.floor((px / w) * (GRID_W - 1));
+    // Clamp grid indices — particles can be up to 20px outside canvas before wrapping.
+    // Without clamping, out-of-bounds reads produce undefined → NaN propagation.
+    const gxIdx = Math.max(0, Math.min(GRID_W - 1, Math.floor((px / w) * (GRID_W - 1))));
     // py is screen pixels (y-down), but lumGrid was read from FBO (y-up via readPixels)
-    const gyIdx = (GRID_H - 1) - Math.floor((py / h) * (GRID_H - 1));
-    const idx = gyIdx * GRID_W + gxIdx;
-    const right = Math.min(idx + 1, lumGrid.length - 1);
-    const left = Math.max(idx - 1, 0);
-    const down = Math.min(idx + GRID_W, lumGrid.length - 1);
-    const up = Math.max(idx - GRID_W, 0);
-    _gradResult.gx = (lumGrid[right] - lumGrid[left]) * 0.5;
-    _gradResult.gy = (lumGrid[down] - lumGrid[up]) * 0.5;
+    const gyIdx = Math.max(0, Math.min(GRID_H - 1, (GRID_H - 1) - Math.floor((py / h) * (GRID_H - 1))));
+    // Column-aware neighbors — prevents X-gradient from wrapping across grid rows
+    const leftCol = Math.max(0, gxIdx - 1);
+    const rightCol = Math.min(GRID_W - 1, gxIdx + 1);
+    const leftIdx = gyIdx * GRID_W + leftCol;
+    const rightIdx = gyIdx * GRID_W + rightCol;
+    const upRow = Math.max(0, gyIdx - 1);
+    const downRow = Math.min(GRID_H - 1, gyIdx + 1);
+    const upIdx = upRow * GRID_W + gxIdx;
+    const downIdx = downRow * GRID_W + gxIdx;
+    _gradResult.gx = (lumGrid[rightIdx] - lumGrid[leftIdx]) * 0.5;
+    _gradResult.gy = (lumGrid[downIdx] - lumGrid[upIdx]) * 0.5;
     return _gradResult;
   }
 
@@ -932,7 +946,12 @@ export function initCinemaGL(canvas: HTMLCanvasElement): CinemaGL | null {
       if (contextLost || video.readyState < 2) return;
 
       // Idle gating: if all inputs are static, skip rendering (canvas retains last frame)
-      const videoFrameSame = video.currentTime === lastVideoTime;
+      // When newVideoFrame flag is available (requestVideoFrameCallback supported),
+      // use it for a more precise check — currentTime may change on 120Hz+ monitors
+      // without the browser having decoded a new frame yet.
+      const videoFrameSame = params.newVideoFrame !== undefined
+        ? !params.newVideoFrame
+        : video.currentTime === lastVideoTime;
       const inputsIdle =
         videoFrameSame &&
         energy < 0.005 &&
@@ -956,11 +975,26 @@ export function initCinemaGL(canvas: HTMLCanvasElement): CinemaGL | null {
       // Compute mood once per frame (used by bloom threshold + composite pass)
       const mood = getMoodCPU(progress);
 
-      // Upload video texture only when frame changed (avoids redundant GPU upload)
+      // Upload video texture only when a new decoded frame is available.
+      // Two guards (both must pass):
+      //   1. lastVideoTime: skips upload when video.currentTime hasn't changed
+      //   2. newVideoFrame (from requestVideoFrameCallback): skips upload when
+      //      currentTime changed but the browser hasn't decoded a new frame yet
+      //      (common on 120Hz+ monitors with 30fps video). When undefined (API
+      //      not supported), the lastVideoTime guard alone is used (existing behavior).
+      const shouldUpload = video.currentTime !== lastVideoTime &&
+        (params.newVideoFrame === undefined || params.newVideoFrame);
       gl.activeTexture(gl.TEXTURE0);
       gl.bindTexture(gl.TEXTURE_2D, tex);
-      if (video.currentTime !== lastVideoTime) {
-        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, video);
+      if (shouldUpload) {
+        if (videoTexInitialized) {
+          // Subsequent uploads: format/dimensions already known — faster path
+          gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, gl.RGBA, gl.UNSIGNED_BYTE, video);
+        } else {
+          // First upload: allocates the texture storage
+          gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, video);
+          videoTexInitialized = true;
+        }
         lastVideoTime = video.currentTime;
       }
 
@@ -1003,9 +1037,13 @@ export function initCinemaGL(canvas: HTMLCanvasElement): CinemaGL | null {
         // --- Pass 3: Kawase blur (FBO_B ↔ FBO_B2, KAWASE_ITERATIONS iterations) ---
         if (fboB2 && kawaseProg) {
           gl.useProgram(kawaseProg);
+          // Constant uniforms hoisted outside loop (texel size + texture unit don't change per iteration)
           const tw = 1.0 / fboB.width;
           const th = 1.0 / fboB.height;
           gl.uniform2f(kUTexelSize, tw, th);
+          gl.uniform1i(kUTex, 1);
+          gl.activeTexture(gl.TEXTURE1);
+          gl.bindVertexArray(cinemaVAO);
 
           for (let i = 0; i < KAWASE_ITERATIONS; i++) {
             const readFbo = i % 2 === 0 ? fboB : fboB2;
@@ -1013,11 +1051,8 @@ export function initCinemaGL(canvas: HTMLCanvasElement): CinemaGL | null {
 
             gl.bindFramebuffer(gl.FRAMEBUFFER, writeFbo.framebuffer);
             gl.viewport(0, 0, writeFbo.width, writeFbo.height);
-            gl.activeTexture(gl.TEXTURE1);
             gl.bindTexture(gl.TEXTURE_2D, readFbo.texture);
-            gl.uniform1i(kUTex, 1);
             gl.uniform1f(kUOffset, i);
-            gl.bindVertexArray(cinemaVAO);
             gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
           }
         }
@@ -1147,7 +1182,8 @@ export function initCinemaGL(canvas: HTMLCanvasElement): CinemaGL | null {
         }
 
         // Luminance gradient force (velocity persistence)
-        if (lumGridFrame >= LUM_GRID_INTERVAL) {
+        // Skip when energy is near zero — particles just drift in idle state
+        if (energy > 0.01 && lumGridFrame >= LUM_GRID_INTERVAL) {
           const grad = sampleLumGrad(p.x, p.y);
           p.vx += grad.gx * LUMINANCE_FORCE * energy * dt;
           p.vy += grad.gy * LUMINANCE_FORCE * energy * dt;
@@ -1238,6 +1274,9 @@ export function initCinemaGL(canvas: HTMLCanvasElement): CinemaGL | null {
       canvas.width = w;
       canvas.height = h;
       gl.viewport(0, 0, w, h);
+
+      // Video texture dimensions may change — force full texImage2D on next upload
+      videoTexInitialized = false;
 
       if (fboA) resizeFBO(gl, fboA, w, h);
       if (fboB) resizeFBO(gl, fboB, Math.ceil(w / 2), Math.ceil(h / 2));
