@@ -83,6 +83,11 @@ export class AudioMomentum {
   private lastTargetGain = 0;
   private analyseSkip = 0;
 
+  // Scroll-velocity tracking (non-cumulative, replaces addImpulse for scroll)
+  private scrollVelocity = 0;
+  // Accumulated dt for frequency analysis (runs every 2nd frame, needs total dt)
+  private accumulatedDt = 0;
+
   // ---- Public API ---------------------------------------------------------
 
   /** Create the audio element, configure it. Caller drives tick() via GSAP ticker. */
@@ -110,10 +115,20 @@ export class AudioMomentum {
     this.videoTimeGetter = getter;
   }
 
-  /** Inject energy from a user interaction (scroll / key / click). */
+  /** Inject energy from a discrete interaction (key press / click). */
   addImpulse(normalizedVelocity: number = 0.5): void {
     const amount = 0.1 + normalizedVelocity * 0.25; // 0.1 gentle → 0.35 aggressive
     this.energy = Math.min(1.0, this.energy + amount);
+  }
+
+  /**
+   * Set current scroll velocity (non-cumulative).
+   * Energy tracks this value via soft-follow — it rises to match but never
+   * stacks on top. This prevents the "enloquece" bug where 60fps addImpulse
+   * calls would saturate energy instantly.
+   */
+  setScrollVelocity(normalizedVelocity: number): void {
+    this.scrollVelocity = Math.min(1.0, normalizedVelocity);
   }
 
   /** Current energy level (0 – 1). */
@@ -143,14 +158,28 @@ export class AudioMomentum {
   tick(dt: number): void {
     if (!this.running) return;
 
+    // --- scroll velocity soft-follow (non-cumulative) ---
+    // Energy rises toward scroll velocity (fast attack) but never stacks.
+    // This replaces the old addImpulse-per-frame which saturated instantly.
+    if (this.scrollVelocity > this.energy) {
+      this.energy += (this.scrollVelocity - this.energy) * Math.min(1, 0.4 * dt);
+    }
+    // Scroll velocity decays 3× faster than energy — when user lifts finger,
+    // scrollVelocity drops quickly while energy lingers (= vinyl tail)
+    this.scrollVelocity *= Math.exp(LN_FRICTION * dt * 3);
+    if (this.scrollVelocity < 0.001) this.scrollVelocity = 0;
+
     // --- delta-time friction decay (exp-based for perf) ---
     this.energy *= Math.exp(LN_FRICTION * dt);
     if (this.energy < 0.001) this.energy = 0;
 
     // --- frequency analysis every 2nd frame (runs even when muted for visual reactivity) ---
+    // Accumulate dt so the EMA smoothing uses the correct total time span
+    this.accumulatedDt += dt;
     if (++this.analyseSkip >= 2) {
       this.analyseSkip = 0;
-      this.updateFrequencyBands(dt);
+      this.updateFrequencyBands(this.accumulatedDt);
+      this.accumulatedDt = 0;
     }
 
     // --- derived values ---
@@ -233,6 +262,7 @@ export class AudioMomentum {
     }
 
     this.energy = 0;
+    this.scrollVelocity = 0;
     this.wasPlaying = false;
     this.playPending = false;
     this.videoTimeGetter = null;
@@ -354,8 +384,8 @@ export class AudioMomentum {
       // Hard snap (safety net)
       this.syncToVideo();
     } else if (absDrift > 1.0) {
-      // Soft correction — nudge 10% per frame toward sync, scaled by dt
-      this.audio.currentTime -= drift * 0.1 * dt;
+      // Soft correction — exponential approach (dt-corrected, consistent across frame rates)
+      this.audio.currentTime -= drift * (1 - Math.pow(0.9, dt));
     }
   }
 }

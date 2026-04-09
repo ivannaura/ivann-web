@@ -60,7 +60,10 @@ export default function CustomCursor() {
       const currentScrollY = window.scrollY;
       const delta = currentScrollY - lastScrollY;
       lastScrollY = currentScrollY;
-      scrollVelocity += delta * VELOCITY_SCALE;
+      // Non-cumulative: directly set velocity from latest scroll delta.
+      // (Old code accumulated across multiple scroll events between frames,
+      // causing runaway velocity on trackpads that emit high-frequency events.)
+      scrollVelocity = Math.max(-1, Math.min(1, delta * VELOCITY_SCALE));
     };
 
     // Set initial off-screen position imperatively (avoids React re-render overwriting translate)

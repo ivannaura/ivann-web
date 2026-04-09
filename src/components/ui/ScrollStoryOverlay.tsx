@@ -724,6 +724,8 @@ function AnimatedBeat({ beat, progress, energy = 0, bands, actTransition = 0 }: 
   const tlRef = useRef<gsap.core.Timeline | null>(null);
   const entryCompleteRef = useRef(false);
   const reversedRef = useRef(false);
+  const progressRef = useRef(progress);
+  progressRef.current = progress;
 
   useLayoutEffect(() => {
     const el = ref.current;
@@ -797,7 +799,14 @@ function AnimatedBeat({ beat, progress, energy = 0, bands, actTransition = 0 }: 
           }
         });
 
-        tl.eventCallback("onComplete", () => { entryCompleteRef.current = true; });
+        tl.eventCallback("onComplete", () => {
+          entryCompleteRef.current = true;
+          // If user scrolled past exit threshold during entry animation, reverse now
+          if (progressRef.current > 0.8 && !reversedRef.current) {
+            reversedRef.current = true;
+            tl.reverse();
+          }
+        });
         tlRef.current = tl;
       } else if (staggerTargets.length > 0) {
         // Compound elements — stagger children

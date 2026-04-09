@@ -2,6 +2,7 @@
 
 import { useState, useCallback, useRef, useEffect } from "react";
 import dynamic from "next/dynamic";
+import { useLenis } from "lenis/react";
 import Navigation from "@/components/ui/Navigation";
 import PianoIndicator from "@/components/ui/PianoIndicator";
 
@@ -23,6 +24,9 @@ export default function Home() {
   const [currentFrame, setCurrentFrame] = useState(0);
   const soundMuted = useUIStore((s) => s.soundMuted);
   const toggleSoundMuted = useUIStore((s) => s.toggleSoundMuted);
+  const lenis = useLenis();
+  const lenisRef = useRef(lenis);
+  lenisRef.current = lenis;
 
   usePianoScroll({ enabled: true, onMuteToggle: toggleSoundMuted });
 
@@ -122,6 +126,14 @@ export default function Home() {
     actTransitionRef.current = value;
   }, []);
 
+  // Vinyl drift: when ScrollVideoPlayer's ticker detects energy lingering after
+  // scroll stops, it emits small pixel deltas. We apply them to Lenis to create
+  // the "gradually slowing down" vinyl effect on the video.
+  const handleScrollDrift = useCallback((deltaPixels: number) => {
+    const l = lenisRef.current;
+    if (l) l.scrollTo(l.scroll + deltaPixels, { immediate: true });
+  }, []);
+
   return (
     <>
       <CustomCursor />
@@ -143,6 +155,7 @@ export default function Home() {
           onBandsChange={handleBandsChange}
           onProgressChange={handleProgressChange}
           onActTransition={handleActTransition}
+          onScrollDrift={handleScrollDrift}
         >
           {/* Navigation anchors — invisible markers at narrative waypoints */}
           <div id="espectaculo" className="absolute left-0 w-0 h-0" style={{ top: '37%' }} aria-hidden="true" />
