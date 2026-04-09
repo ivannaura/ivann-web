@@ -72,10 +72,10 @@ export default function PianoIndicator({ energy, bands }: PianoIndicatorProps) {
         })}
       </div>
 
-      {/* Hint text */}
+      {/* Hint text — hidden on mobile (no keyboard), 11px minimum */}
       {showHint && !isActive && (
         <span
-          className="text-[9px] tracking-[0.2em] uppercase animate-pulse"
+          className="hidden md:inline text-[11px] tracking-[0.2em] uppercase animate-pulse"
           style={{ color: "var(--text-muted)" }}
         >
           Scroll o presiona teclas

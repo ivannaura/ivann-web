@@ -19,6 +19,12 @@ interface SmoothScrollProps {
   children: ReactNode;
 }
 
+// iOS: syncTouch hijacks native momentum scrolling, causing janky scroll +
+// conflict with Safari's rubber-band physics. Detect once at module load.
+const isIOS = typeof navigator !== 'undefined' &&
+  (/iPad|iPhone|iPod/.test(navigator.userAgent) ||
+  (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1));
+
 export default function SmoothScroll({ children }: SmoothScrollProps) {
   const lenisRef = useRef<LenisRef>(null);
 
@@ -48,7 +54,7 @@ export default function SmoothScroll({ children }: SmoothScrollProps) {
         wheelMultiplier: 1.2,
         touchMultiplier: 0.8,
         gestureOrientation: "vertical",
-        syncTouch: true,
+        syncTouch: !isIOS,
         easing: (t: number) => Math.min(1, 1.001 - Math.pow(2, -10 * t)),
       }}
     >

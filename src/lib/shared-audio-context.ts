@@ -53,16 +53,27 @@ export function resumeAudioContext(): void {
   }
 }
 
-/** Prime audio context on iOS via user gesture (touchstart/click). */
+/** Prime audio context on iOS via user gesture (touchstart/click).
+ *  Both listeners stay alive until resume() succeeds — on iOS, the first
+ *  programmatic click (e.g. from GSAP) won't actually resume the context
+ *  because it's not a real user gesture. */
 let primed = false;
 export function primerAudioContext(): void {
   if (primed || typeof window === 'undefined') return;
   const handler = () => {
-    resumeAudioContext();
-    primed = true;
-    document.removeEventListener('touchstart', handler);
-    document.removeEventListener('click', handler);
+    if (!ctx || ctx.state !== 'suspended') {
+      // Already running or no context — mark primed
+      primed = true;
+      document.removeEventListener('touchstart', handler);
+      document.removeEventListener('click', handler);
+      return;
+    }
+    ctx.resume().then(() => {
+      primed = true;
+      document.removeEventListener('touchstart', handler);
+      document.removeEventListener('click', handler);
+    }).catch(() => {});
   };
   document.addEventListener('touchstart', handler, { passive: true });
-  document.addEventListener('click', handler, { once: true });
+  document.addEventListener('click', handler, { passive: true });
 }

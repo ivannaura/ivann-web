@@ -3,7 +3,6 @@
 import { useEffect, useRef, useState } from "react";
 import gsap from "gsap";
 import { SplitText } from "gsap/SplitText";
-import { playClick } from "@/lib/micro-sounds";
 
 if (typeof window !== "undefined") {
   gsap.registerPlugin(SplitText);
@@ -17,6 +16,7 @@ export default function Preloader() {
   const subtitleRef = useRef<HTMLParagraphElement>(null);
   const barRef = useRef<HTMLDivElement>(null);
   const batonRef = useRef<HTMLDivElement>(null);
+  const pctRef = useRef<HTMLSpanElement>(null);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -27,6 +27,11 @@ export default function Preloader() {
     if (!container || !nameEl || !subtitleEl || !barEl || !batonEl) return;
 
     let dismissTimeout: ReturnType<typeof setTimeout>;
+    let progressInterval: ReturnType<typeof setInterval>;
+    let bindRetryTimeout: ReturnType<typeof setTimeout>;
+    let videoEl: HTMLVideoElement | null = null;
+    let introComplete = false;
+    let exitStarted = false;
 
     const dismiss = () => {
       setDismissed(true);
@@ -42,54 +47,121 @@ export default function Preloader() {
       };
     }
 
+    // --- Exit sequence: animate bar to 100%, then iris-close ---
+    const startExit = () => {
+      if (exitStarted) return;
+      exitStarted = true;
+      clearInterval(progressInterval);
+
+      // Bar to 100%
+      gsap.to(barEl, { scaleX: 1, duration: 0.3, ease: "power2.out" });
+      if (pctRef.current) pctRef.current.textContent = "100%";
+
+      // Brief hold then iris-close
+      gsap.delayedCall(0.35, () => {
+        if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+          dismiss();
+          return;
+        }
+        gsap.to(container, {
+          clipPath: "circle(0% at 50% 50%)",
+          duration: 1.0,
+          ease: "power3.inOut",
+          onComplete: dismiss,
+        });
+        gsap.to([nameEl, subtitleEl, barEl.parentElement], {
+          scale: 0.95,
+          opacity: 0,
+          duration: 0.6,
+          ease: "power2.in",
+        });
+      });
+    };
+
+    // --- Buffer progress tracking ---
+    const getBufferProgress = (): number => {
+      const video = videoEl || document.querySelector("video");
+      if (!videoEl && video) videoEl = video;
+      if (!video || !video.duration || !video.buffered.length) return 0;
+      let maxEnd = 0;
+      for (let i = 0; i < video.buffered.length; i++) {
+        if (video.buffered.start(i) <= 0.5) {
+          maxEnd = Math.max(maxEnd, video.buffered.end(i));
+        }
+      }
+      return maxEnd / video.duration;
+    };
+
+    const isVideoReady = (): boolean => {
+      const video = videoEl || document.querySelector("video");
+      if (!video) return false;
+      // Ready when 90%+ buffered or browser says canplaythrough (readyState 4)
+      return video.readyState >= 4 || getBufferProgress() >= 0.9;
+    };
+
+    const checkReady = () => {
+      const progress = getBufferProgress();
+      // Animate bar to real progress (minimum 2% so bar is visible)
+      gsap.to(barEl, {
+        scaleX: Math.max(0.02, progress),
+        duration: 0.4,
+        ease: "none",
+        overwrite: true,
+      });
+      if (pctRef.current) {
+        pctRef.current.textContent =
+          progress > 0.01
+            ? `${Math.round(progress * 100)}%`
+            : "Conectando...";
+      }
+      // If both intro is done AND video is ready, start exit
+      if (introComplete && isVideoReady()) {
+        startExit();
+      }
+    };
+
+    // Start polling buffer progress immediately
+    progressInterval = setInterval(checkReady, 250);
+    checkReady();
+
+    // Bind canplaythrough listener (video may mount after preloader)
+    const onCanPlayThrough = () => {
+      if (introComplete) startExit();
+    };
+    const bindVideo = () => {
+      const video = document.querySelector("video");
+      if (video && !videoEl) {
+        videoEl = video;
+        if (video.readyState >= 4) {
+          onCanPlayThrough();
+        } else {
+          video.addEventListener("canplaythrough", onCanPlayThrough, {
+            once: true,
+          });
+        }
+      }
+    };
+    bindVideo();
+    bindRetryTimeout = setTimeout(bindVideo, 500);
+
+    // --- Intro animation ---
     const ctx = gsap.context(() => {
-      // Split "IVANN AURA" into chars with word masking
       const nameSplit = SplitText.create(nameEl, {
         type: "words,chars",
         mask: "words",
       });
-
-      // Split subtitle into individual words for staggered reveal
       const subtitleSplit = SplitText.create(subtitleEl, {
         type: "words,chars",
       });
 
-      // Master timeline
       const tl = gsap.timeline({
         onComplete: () => {
-          // Wait for video readiness before iris-close exit
-          const video = document.querySelector("video");
-          const proceedDismiss = () => {
-            if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
-              dismiss();
-              return;
-            }
-
-            // Exit: cinematic iris-close — circle collapses to center, revealing page
-            gsap.to(container, {
-              clipPath: "circle(0% at 50% 50%)",
-              duration: 1.0,
-              ease: "power3.inOut",
-              onComplete: dismiss,
-            });
-
-            // Simultaneously scale content down for parallax depth
-            gsap.to([nameEl, subtitleEl, barEl.parentElement], {
-              scale: 0.95,
-              opacity: 0,
-              duration: 0.6,
-              ease: "power2.in",
-            });
-          };
-
-          // loadeddata (readyState >= 2) is sufficient for scroll-driven video —
-          // we don't need canplaythrough (readyState 4) because the video is never
-          // played continuously. canplaythrough on a 45MB video can take 5-20+ seconds.
-          if (video && video.readyState < 2) {
-            video.addEventListener("loadeddata", proceedDismiss, { once: true });
-          } else {
-            proceedDismiss();
+          introComplete = true;
+          // If video is already loaded, exit immediately
+          if (isVideoReady()) {
+            startExit();
           }
+          // Otherwise, the checkReady interval will trigger startExit
         },
       });
 
@@ -99,40 +171,18 @@ export default function Preloader() {
         stagger: 0.04,
         duration: 0.8,
         ease: "power3.out",
-        onComplete: () => playClick(), // Audio primer — primes AudioContext for iOS
       });
 
       // 1b. Conductor's baton — gold line draws across during name reveal
       tl.fromTo(
         batonEl,
         { scaleX: 0, opacity: 0 },
-        {
-          scaleX: 1,
-          opacity: 1,
-          duration: 0.9,
-          ease: "power2.inOut",
-        },
+        { scaleX: 1, opacity: 1, duration: 0.9, ease: "power2.inOut" },
         "-=0.6"
       );
-      // Baton fades out gracefully
-      tl.to(batonEl, {
-        opacity: 0,
-        duration: 0.4,
-        ease: "power2.in",
-      });
+      tl.to(batonEl, { opacity: 0, duration: 0.4, ease: "power2.in" });
 
-      // 2. Progress bar grows
-      tl.to(
-        barEl,
-        {
-          scaleX: 1,
-          duration: 1.2,
-          ease: "power2.inOut",
-        },
-        "-=0.5"
-      );
-
-      // 2b. Subtle float on the title during wait — gentle y oscillation
+      // 2b. Subtle float on the title during wait
       tl.to(
         nameEl,
         {
@@ -142,7 +192,7 @@ export default function Preloader() {
           yoyo: true,
           repeat: 1,
         },
-        "-=1.2"
+        "-=0.5"
       );
 
       // 3. Subtitle words fade in with staggered y-offset per word
@@ -174,13 +224,20 @@ export default function Preloader() {
       tl.to({}, { duration: 0.3 });
     }, container);
 
-    // Fallback: force dismiss after 8s
-    const fallback = setTimeout(dismiss, 8000);
+    // Fallback: force dismiss after 20s (even if video isn't fully loaded)
+    const fallback = setTimeout(() => {
+      if (!exitStarted) startExit();
+    }, 20000);
 
     return () => {
       ctx.revert();
       clearTimeout(fallback);
       clearTimeout(dismissTimeout);
+      clearTimeout(bindRetryTimeout);
+      clearInterval(progressInterval);
+      if (videoEl) {
+        videoEl.removeEventListener("canplaythrough", onCanPlayThrough);
+      }
     };
   }, []);
 
@@ -265,7 +322,7 @@ export default function Preloader() {
         <span style={{ color: "var(--aura-gold)" }}>AURA</span>
       </h1>
 
-      {/* Progress bar — starts at scaleX(0) */}
+      {/* Progress bar — tracks real video buffer progress */}
       <div
         style={{
           width: "clamp(120px, 40vw, 400px)",
@@ -290,6 +347,21 @@ export default function Preloader() {
           }}
         />
       </div>
+
+      {/* Loading percentage */}
+      <span
+        ref={pctRef}
+        aria-hidden="true"
+        style={{
+          fontSize: "clamp(9px, 1.2vw, 11px)",
+          letterSpacing: "0.3em",
+          color: "var(--text-muted)",
+          marginTop: 12,
+          fontVariantNumeric: "tabular-nums",
+        }}
+      >
+        Conectando...
+      </span>
 
       {/* Subtitle — word-staggered reveal with interpuncts */}
       <p

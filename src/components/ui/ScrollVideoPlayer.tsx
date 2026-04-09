@@ -156,7 +156,11 @@ export default function ScrollVideoPlayer({
       if (readyRef.current) return;
       const progress = getBufferProgress(video);
       setBufferProgress(progress);
-      if (progress >= 0.15 && video.duration) markReady();
+      // Start render pipeline when first frame is available (readyState >= 2).
+      // The Preloader covers the page until the video is fully loaded, so the
+      // pipeline can initialize early without the user seeing partial content.
+      // Old threshold of 15% buffer was too high for iOS cellular connections.
+      if (video.readyState >= 2 && video.duration) markReady();
     };
 
     if (video.readyState >= 4) {
@@ -183,14 +187,17 @@ export default function ScrollVideoPlayer({
   }, [markReady]);
 
   // ---------------------------------------------------------------------------
-  // iOS touch unlock
+  // iOS touch unlock — retry if video isn't ready on first touch
   // ---------------------------------------------------------------------------
   useEffect(() => {
     const video = videoRef.current;
     if (!video) return;
 
+    let unlocked = false;
     const unlock = () => {
-      if (video.readyState >= 1 && video.readyState < 4) {
+      if (unlocked) return;
+      if (video.readyState >= 1) {
+        unlocked = true;
         video
           .play()
           .then(() => {
@@ -198,10 +205,12 @@ export default function ScrollVideoPlayer({
             video.currentTime = 0;
           })
           .catch(() => {});
+        document.removeEventListener("touchstart", unlock);
       }
+      // If readyState is 0, DON'T remove listener — retry on next touch
     };
 
-    document.addEventListener("touchstart", unlock, { once: true });
+    document.addEventListener("touchstart", unlock, { passive: true });
     return () => document.removeEventListener("touchstart", unlock);
   }, []);
 
@@ -243,7 +252,9 @@ export default function ScrollVideoPlayer({
     cinemaRef.current = cinema;
 
     const resize = () => {
-      const dpr = Math.min(window.devicePixelRatio, 2);
+      // Cap DPR: 2 on desktop, 1.5 on mobile (reduces GPU fill rate on phones)
+      const isMobile = window.innerWidth < 768;
+      const dpr = Math.min(window.devicePixelRatio, isMobile ? 1.5 : 2);
       cinema.resize(
         Math.round(canvas.clientWidth * dpr),
         Math.round(canvas.clientHeight * dpr)
@@ -492,12 +503,12 @@ export default function ScrollVideoPlayer({
         <div
           ref={letterboxTopRef}
           className="absolute top-0 left-0 right-0 z-30 pointer-events-none"
-          style={{ background: 'var(--bg-void)', height: '4vh', transformOrigin: 'top', transition: 'scale 0.3s ease-out' }}
+          style={{ background: 'var(--bg-void)', height: '4dvh', transformOrigin: 'top', transition: 'scale 0.3s ease-out' }}
         />
         <div
           ref={letterboxBottomRef}
           className="absolute bottom-0 left-0 right-0 z-30 pointer-events-none"
-          style={{ background: 'var(--bg-void)', height: '4vh', transformOrigin: 'bottom', transition: 'scale 0.3s ease-out' }}
+          style={{ background: 'var(--bg-void)', height: '4dvh', transformOrigin: 'bottom', transition: 'scale 0.3s ease-out' }}
         />
 
         <video

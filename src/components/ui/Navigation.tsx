@@ -433,7 +433,7 @@ export default function Navigation({
         className="fixed inset-0 z-[999] md:hidden w-full h-full max-w-full max-h-full m-0 p-0 border-none"
         style={{ background: "var(--bg-void)" }}
       >
-        <div className="flex flex-col items-start justify-center h-full px-12 gap-2">
+        <div className="flex flex-col items-start justify-center h-full px-12 gap-2" style={{ paddingBottom: "max(2rem, env(safe-area-inset-bottom))" }}>
           {NAV_ITEMS.map((item, i) => (
             <a
               key={item.href}

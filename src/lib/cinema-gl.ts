@@ -43,12 +43,20 @@ const LN_DAMPING_60 = Math.log(PARTICLE_DAMPING) * 60;
 export type CinemaTier = 'high' | 'mid' | 'low';
 
 export function detectTier(gl: WebGL2RenderingContext): CinemaTier {
+  const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  if (reducedMotion) return 'low';
+
+  // iOS Safari never exposes navigator.deviceMemory (always undefined).
+  // The old ?? 8 fallback made ALL iPhones run the full 5-pass pipeline.
+  // iOS devices should cap at 'mid' (3 passes, 500 particles).
+  const ua = navigator.userAgent;
+  const isIOS = /iPad|iPhone|iPod/.test(ua) ||
+    (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  if (isIOS) return 'mid';
+
   const maxTexUnits = gl.getParameter(gl.MAX_TEXTURE_IMAGE_UNITS);
   const renderer = (gl.getParameter(gl.RENDERER) || '') as string;
   const deviceMemory = (navigator as any).deviceMemory ?? 8;
-  const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-
-  if (reducedMotion) return 'low';
   if (maxTexUnits >= 8 && deviceMemory >= 4 && !/Mali-4|Adreno 3|PowerVR SGX/i.test(renderer)) {
     return 'high';
   }

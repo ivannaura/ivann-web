@@ -130,8 +130,16 @@ export function usePianoScroll(options: UsePianoScrollOptions = {}) {
       addImpulse();
     };
 
-    // --- Click handler (cinema area only) ---
+    // --- Click handler (cinema area, desktop only) ---
+    // On mobile, taps fire click events but should NOT trigger scroll impulse —
+    // the user is trying to tap/scroll, not "piano scroll". We track whether the
+    // last pointerdown was a touch to skip the click handler on mobile.
+    let lastPointerWasTouch = false;
+    const onPointerDown = (e: PointerEvent) => {
+      lastPointerWasTouch = e.pointerType === 'touch';
+    };
     const onClick = (e: MouseEvent) => {
+      if (lastPointerWasTouch) return; // skip on touch devices
       const target = e.target as HTMLElement;
       if (target.closest("a, button, input, textarea, select, [role='button']"))
         return;
@@ -139,10 +147,12 @@ export function usePianoScroll(options: UsePianoScrollOptions = {}) {
       addImpulse();
     };
 
+    window.addEventListener("pointerdown", onPointerDown, { passive: true });
     window.addEventListener("keydown", onKeyDown);
     window.addEventListener("click", onClick);
 
     return () => {
+      window.removeEventListener("pointerdown", onPointerDown);
       window.removeEventListener("keydown", onKeyDown);
       window.removeEventListener("click", onClick);
       cancelAnimationFrame(rafRef.current);
