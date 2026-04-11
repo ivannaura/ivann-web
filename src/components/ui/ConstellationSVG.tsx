@@ -2,6 +2,7 @@
 
 import {
   useRef,
+  useState,
   useLayoutEffect,
   useCallback,
   forwardRef,
@@ -404,6 +405,33 @@ const ConstellationSVG = forwardRef<ConstellationSVGHandle, ConstellationSVGProp
   );
 
   // -------------------------------------------------------------------------
+  // Focus tracking for focus-visible ring
+  // -------------------------------------------------------------------------
+  const [focusedIndex, setFocusedIndex] = useState<number | null>(null);
+
+  const handleFocus = useCallback((index: number) => {
+    setFocusedIndex(index);
+  }, []);
+
+  const handleBlur = useCallback(() => {
+    setFocusedIndex(null);
+  }, []);
+
+  const handleKeyDown = useCallback(
+    (e: React.KeyboardEvent, node: ConstellationNode) => {
+      if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        if (node.active) {
+          onNodeClick(node);
+        } else {
+          showProximamente(node);
+        }
+      }
+    },
+    [onNodeClick, showProximamente],
+  );
+
+  // -------------------------------------------------------------------------
   // Render
   // -------------------------------------------------------------------------
   return (
@@ -417,10 +445,11 @@ const ConstellationSVG = forwardRef<ConstellationSVGHandle, ConstellationSVGProp
         width: "100%",
         height: "100%",
       }}
-      aria-hidden="true"
+      role="navigation"
+      aria-label="Portal de mundos de IVANN AURA"
     >
       {/* Layer 1: Stars (decorative, non-interactive) */}
-      <g style={{ pointerEvents: "none" }}>
+      <g style={{ pointerEvents: "none" }} aria-hidden="true">
         {STARS.map((star, i) => (
           <circle
             key={`star-${i}`}
@@ -437,7 +466,7 @@ const ConstellationSVG = forwardRef<ConstellationSVGHandle, ConstellationSVGProp
       </g>
 
       {/* Layer 2: Lines (connecting nodes, non-interactive) */}
-      <g style={{ pointerEvents: "none" }}>
+      <g style={{ pointerEvents: "none" }} aria-hidden="true">
         {LINES.map((line, i) => {
           const from = NODE_MAP.get(line.from);
           const to = NODE_MAP.get(line.to);
@@ -460,7 +489,7 @@ const ConstellationSVG = forwardRef<ConstellationSVGHandle, ConstellationSVGProp
         })}
       </g>
 
-      {/* Layer 3: Nodes (interactive) */}
+      {/* Layer 3: Nodes (interactive, keyboard-navigable) */}
       <g>
         {NODES.map((node, i) => (
           <g
@@ -468,12 +497,18 @@ const ConstellationSVG = forwardRef<ConstellationSVGHandle, ConstellationSVGProp
             ref={(el) => {
               nodeGroupRefs.current[i] = el;
             }}
-            style={{ cursor: "pointer", opacity: 0 }}
+            tabIndex={0}
+            role="link"
+            aria-label={`${node.label}${node.active ? "" : " — próximamente"}`}
+            style={{ cursor: "pointer", opacity: 0, outline: "none" }}
             onMouseEnter={() => handleMouseEnter(node, i)}
             onMouseLeave={() => handleMouseLeave(node, i)}
             onClick={() =>
               node.active ? onNodeClick(node) : showProximamente(node)
             }
+            onKeyDown={(e) => handleKeyDown(e, node)}
+            onFocus={() => handleFocus(i)}
+            onBlur={handleBlur}
           >
             {/* Transparent hit area for 44px touch targets */}
             <circle
@@ -483,6 +518,19 @@ const ConstellationSVG = forwardRef<ConstellationSVGHandle, ConstellationSVGProp
               fill="transparent"
               pointerEvents="all"
             />
+            {/* Focus-visible ring (gold) */}
+            {focusedIndex === i && (
+              <circle
+                cx={node.x}
+                cy={node.y}
+                r={GLOW_RADIUS_OUTER * node.scale + 1.5}
+                fill="none"
+                stroke="var(--aura-gold)"
+                strokeWidth={0.3}
+                opacity={0.8}
+                pointerEvents="none"
+              />
+            )}
             {/* Outer glow */}
             <circle
               ref={(el) => {
@@ -509,6 +557,7 @@ const ConstellationSVG = forwardRef<ConstellationSVGHandle, ConstellationSVGProp
               fontSize={2}
               fontFamily="var(--font-body)"
               textAnchor="middle"
+              aria-hidden="true"
             >
               {node.label}
             </text>

@@ -28,8 +28,34 @@ export default function Portal() {
   const setPortalRevealed = useUIStore((s) => s.setPortalRevealed);
   const setActiveWorld = useUIStore((s) => s.setActiveWorld);
 
+  // ---------- First-movement reveal (called once) ----------
+  const triggerReveal = useCallback(() => {
+    if (revealedRef.current) return;
+    revealedRef.current = true;
+    setPortalRevealed();
+  }, [setPortalRevealed]);
+
+  // ---------- Reduced-motion: reveal immediately, skip particles ----------
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const prefersReduced = window.matchMedia(
+      "(prefers-reduced-motion: reduce)",
+    ).matches;
+    if (prefersReduced) {
+      triggerReveal();
+    }
+  }, [triggerReveal]);
+
   // ---------- Particle system lifecycle ----------
   useEffect(() => {
+    // Skip particle system entirely for reduced-motion users
+    if (
+      typeof window !== "undefined" &&
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches
+    ) {
+      return;
+    }
+
     const particles = createPortalParticles();
     particlesRef.current = particles;
 
@@ -47,12 +73,23 @@ export default function Portal() {
     };
   }, []);
 
-  // ---------- First-movement reveal (called once) ----------
-  const triggerReveal = useCallback(() => {
-    if (revealedRef.current) return;
-    revealedRef.current = true;
-    setPortalRevealed();
-  }, [setPortalRevealed]);
+  // ---------- Preloader → Portal burst transition ----------
+  useEffect(() => {
+    const unsub = useUIStore.subscribe((state, prev) => {
+      if (state.preloaderDone && !prev.preloaderDone && particlesRef.current && canvasRef.current) {
+        const cx = canvasRef.current.clientWidth / 2;
+        const cy = canvasRef.current.clientHeight / 2;
+        particlesRef.current.burst(cx, cy, 24);
+      }
+    });
+    // If preloaderDone was already true before mount (e.g. fast HMR), fire burst now
+    if (useUIStore.getState().preloaderDone && particlesRef.current && canvasRef.current) {
+      const cx = canvasRef.current.clientWidth / 2;
+      const cy = canvasRef.current.clientHeight / 2;
+      particlesRef.current.burst(cx, cy, 24);
+    }
+    return unsub;
+  }, []);
 
   // ---------- Mouse tracking ----------
   const handleMouseMove = useCallback(
@@ -203,6 +240,7 @@ export default function Portal() {
         onTouchEnd={handleTouchEnd}
         onClick={handleClick}
       >
+        <h1 className="sr-only">IVANN AURA — Portal</h1>
         <canvas
           ref={canvasRef}
           className="absolute inset-0 pointer-events-none"
