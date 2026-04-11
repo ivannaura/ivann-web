@@ -1,10 +1,10 @@
-# IVANN AURA — Scroll Cinema Website
+# IVANN AURA — El Instrumento
 
 @AGENTS.md
 
 ## Project
 
-Awwwards-quality immersive website for IVANN AURA, a Colombian pianist and live show performer. The entire page is a single scroll-driven cinematic experience built on top of his concert video "Flamenco de Esfera".
+Awwwards-quality immersive website for IVANN AURA, a Colombian pianist and live show performer. The site is a multi-world "instrument" — a dark portal of interactive SVG constellations where the user's mouse, keyboard, and touch produce music and light. Each constellation node leads to a different world: the scroll-driven concert cinema, album experiences, biography, and booking.
 
 ## Stack
 
@@ -20,24 +20,48 @@ Awwwards-quality immersive website for IVANN AURA, a Colombian pianist and live 
 
 ```
 layout.tsx
- ├── Preloader             (cinematic SplitText entrance + decorative bar + iris-close exit + audio primer)
+ ├── Preloader             (converging golden SVG lines + collapse to cursor point + audio primer)
  ├── MagneticButtons       (global .magnetic-btn hover effect provider)
  └── SmoothScroll          (Lenis + GSAP single RAF loop)
-      └── page.tsx
-           ├── CustomCursor          (transform-based dot + ring, desktop only, viewport-aware)
-           ├── Navigation            (fixed nav, scroll progress, mobile <dialog>, sound toggle)
-           ├── PianoIndicator        (frequency-reactive equalizer: bass/mids/highs)
-           │
-           ├── ScrollVideoPlayer     (GSAP ScrollTrigger → video.currentTime + unified WebGL2 canvas)
-           │    ├── CinemaGL         (unified renderer: video shaders + luminance-reactive particles)
-           │    ├── AudioMomentum    (physics engine: Source→Analyser→GainNode→Dest, shared AudioContext)
-           │    └── ScrollStoryOverlay (20+ frame-synced story beats over video)
-           │
-           ├── Contact               (GSAP ScrollTrigger entrance, API route form, validation)
-           └── Footer                (GSAP SplitText entrance, real social links, micro-sounds)
+      │
+      ├── / (Portal)
+      │    ├── CustomCursor          (transform-based dot + ring, desktop only)
+      │    ├── ConstellationSVG      (SVG nodes + lines + stars + proximity glow + pulse + exit transition)
+      │    ├── PortalParticles       (golden cursor trail, 2D canvas, 150 particles, zero-GC)
+      │    └── PortalSounds          (proximity-aware E Phrygian notes per constellation node)
+      │
+      ├── /concierto (Scroll Cinema — the main show)
+      │    ├── CustomCursor
+      │    ├── Navigation            (fixed nav, scroll progress, mobile <dialog>, sound toggle)
+      │    ├── PianoIndicator        (frequency-reactive equalizer: bass/mids/highs)
+      │    ├── ScrollVideoPlayer     (GSAP ScrollTrigger → video.currentTime + unified WebGL2 canvas)
+      │    │    ├── CinemaGL         (unified renderer: video shaders + luminance-reactive particles)
+      │    │    ├── AudioMomentum    (physics engine: Source→Analyser→GainNode→Dest, shared AudioContext)
+      │    │    └── ScrollStoryOverlay (20+ frame-synced story beats over video)
+      │    ├── Contact               (GSAP ScrollTrigger entrance, API route form, validation)
+      │    └── Footer                (GSAP SplitText entrance, real social links, micro-sounds)
+      │
+      ├── /contratar (Booking — fast, no video)
+      │    ├── Contact
+      │    └── Footer
+      │
+      └── /mar, /apocalypsis, /pianista (Teaser Worlds)
+           └── TeaserWorld           (name + color glow + "Próximamente")
 ```
 
 ### Key Components
+
+#### Portal (new)
+
+| Component | File | Purpose |
+|-----------|------|---------|
+| `ConstellationSVG` | `ui/ConstellationSVG.tsx` | SVG constellation nodes + lines + stars, proximity glow (GSAP ticker), draw-on reveal, exit transition, pulse ripple on keypress, keyboard navigation (tabIndex + Enter/Space), 44px touch targets |
+| `PortalParticles` | `lib/portal-particles.ts` | 2D canvas golden cursor trail (150 particles, pre-allocated, delta-time corrected, zero-GC). `burst(x,y,count)` for preloader handoff. NOT WebGL (avoids GL context conflicts with CinemaGL) |
+| `PortalSounds` | `lib/portal-sounds.ts` | Proximity-aware E Phrygian notes via Web Audio. Per-node character: concierto=clean, mar=delay reverb, apocalypsis=low octave+distortion, pianista=warm sine. 3-voice GainNode pool, shared AudioContext |
+| `ConstellationData` | `lib/constellation-data.ts` | Typed node/line/star definitions. 5 nodes (concierto, mar, apocalypsis, pianista, contratar), 6 lines, 14 decorative stars. Positions as viewport percentages (0-100) |
+| `TeaserWorld` | `ui/TeaserWorld.tsx` | Reusable placeholder for upcoming album worlds. GSAP fade-in, radial color glow, "Proximamente" label, back-to-portal link |
+
+#### Scroll Cinema (existing)
 
 | Component | File | Purpose |
 |-----------|------|---------|
