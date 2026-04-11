@@ -23,6 +23,8 @@ export default function Portal() {
   const revealedRef = useRef(false);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const particlesRef = useRef<PortalParticles | null>(null);
+  const touchStartRef = useRef<{ x: number; y: number } | null>(null);
+  const suppressClickRef = useRef(false);
   const setPortalRevealed = useUIStore((s) => s.setPortalRevealed);
   const setActiveWorld = useUIStore((s) => s.setActiveWorld);
 
@@ -71,6 +73,7 @@ export default function Portal() {
       triggerReveal();
       const t = e.touches[0];
       if (t) {
+        touchStartRef.current = { x: t.clientX, y: t.clientY };
         mouseRef.current = {
           x: (t.clientX / window.innerWidth) * 100,
           y: (t.clientY / window.innerHeight) * 100,
@@ -91,6 +94,46 @@ export default function Portal() {
         };
         particlesRef.current?.updateMouse(t.clientX, t.clientY);
       }
+    },
+    [],
+  );
+
+  const handleTouchEnd = useCallback(
+    (e: React.TouchEvent<HTMLElement>) => {
+      const start = touchStartRef.current;
+      if (!start) return;
+      touchStartRef.current = null;
+
+      const t = e.changedTouches[0];
+      if (!t) return;
+
+      const dx = t.clientX - start.x;
+      const dy = t.clientY - start.y;
+      if (dx * dx + dy * dy > 100) return; // > 10px movement — not a tap
+
+      // Suppress the synthetic click that follows touchend
+      suppressClickRef.current = true;
+
+      const normalizedX = (t.clientX / window.innerWidth) * 100;
+      const normalizedY = (t.clientY / window.innerHeight) * 100;
+
+      // Visual pulse on constellation
+      constellationRef.current?.triggerPulse(normalizedX, normalizedY);
+
+      // Find nearest node for sound
+      let nearestId = NODES[0].id;
+      let nearestDist = Infinity;
+      for (const n of NODES) {
+        const ndx = normalizedX - n.x;
+        const ndy = normalizedY - n.y;
+        const d = ndx * ndx + ndy * ndy;
+        if (d < nearestDist) {
+          nearestDist = d;
+          nearestId = n.id;
+        }
+      }
+
+      playPortalNote(nearestId);
     },
     [],
   );
@@ -127,6 +170,17 @@ export default function Portal() {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, []);
 
+  // ---------- Suppress synthetic click after touch tap ----------
+  const handleClick = useCallback(
+    (_e: React.MouseEvent<HTMLElement>) => {
+      if (suppressClickRef.current) {
+        suppressClickRef.current = false;
+        // Click already handled by touchend — skip
+      }
+    },
+    [],
+  );
+
   // ---------- Node click handler ----------
   const handleNodeClick = useCallback(
     async (node: ConstellationNode) => {
@@ -146,6 +200,8 @@ export default function Portal() {
         onMouseMove={handleMouseMove}
         onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
+        onClick={handleClick}
       >
         <canvas
           ref={canvasRef}

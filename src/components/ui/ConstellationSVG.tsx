@@ -43,6 +43,7 @@ interface ConstellationSVGProps {
 const PROXIMITY_RADIUS = 20; // viewBox units
 const GLOW_RADIUS_OUTER = 3; // base outer glow radius
 const GLOW_RADIUS_INNER = 0.6; // core circle radius
+const HIT_AREA_RADIUS = 5; // ~44px at 1000px viewport (1 unit ≈ 10px)
 
 // ---------------------------------------------------------------------------
 // Component
@@ -474,6 +475,14 @@ const ConstellationSVG = forwardRef<ConstellationSVGHandle, ConstellationSVGProp
               node.active ? onNodeClick(node) : showProximamente(node)
             }
           >
+            {/* Transparent hit area for 44px touch targets */}
+            <circle
+              cx={node.x}
+              cy={node.y}
+              r={HIT_AREA_RADIUS}
+              fill="transparent"
+              pointerEvents="all"
+            />
             {/* Outer glow */}
             <circle
               ref={(el) => {
