@@ -40,7 +40,7 @@ export const NODES: ConstellationNode[] = [
     scale: 1,
     color: "#3B82C8",
     href: "/mar",
-    active: false,
+    active: true,
   },
   {
     id: "apocalypsis",
@@ -49,7 +49,7 @@ export const NODES: ConstellationNode[] = [
     scale: 1,
     color: "#8B2020",
     href: "/apocalypsis",
-    active: false,
+    active: true,
   },
   {
     id: "pianista",
@@ -58,7 +58,7 @@ export const NODES: ConstellationNode[] = [
     scale: 1,
     color: "#D4C9A8",
     href: "/pianista",
-    active: false,
+    active: true,
   },
   {
     id: "contratar",
