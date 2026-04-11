@@ -1,6 +1,12 @@
 "use client";
 
-import { useRef, useLayoutEffect, useCallback } from "react";
+import {
+  useRef,
+  useLayoutEffect,
+  useCallback,
+  forwardRef,
+  useImperativeHandle,
+} from "react";
 import gsap from "gsap";
 import { useUIStore } from "@/stores/useUIStore";
 import {
@@ -14,6 +20,13 @@ import {
 // Resolve line endpoints — pre-computed map for O(1) lookup
 // ---------------------------------------------------------------------------
 const NODE_MAP = new Map(NODES.map((n) => [n.id, n]));
+
+// ---------------------------------------------------------------------------
+// Public handle
+// ---------------------------------------------------------------------------
+export interface ConstellationSVGHandle {
+  playExitTransition(nodeId: string): Promise<void>;
+}
 
 // ---------------------------------------------------------------------------
 // Props
@@ -33,10 +46,8 @@ const GLOW_RADIUS_INNER = 0.6; // core circle radius
 // ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
-export default function ConstellationSVG({
-  mouseRef,
-  onNodeClick,
-}: ConstellationSVGProps) {
+const ConstellationSVG = forwardRef<ConstellationSVGHandle, ConstellationSVGProps>(
+  function ConstellationSVG({ mouseRef, onNodeClick }, ref) {
   const svgRef = useRef<SVGSVGElement>(null);
   const nodeGroupRefs = useRef<(SVGGElement | null)[]>([]);
   const glowRefs = useRef<(SVGCircleElement | null)[]>([]);
@@ -58,6 +69,107 @@ export default function ConstellationSVG({
       "(prefers-reduced-motion: reduce)",
     ).matches;
   }, []);
+
+  // -------------------------------------------------------------------------
+  // Exit transition — exposed via ref
+  // -------------------------------------------------------------------------
+  useImperativeHandle(ref, () => ({
+    playExitTransition(nodeId: string): Promise<void> {
+      return new Promise((resolve) => {
+        const nodeIndex = NODES.findIndex((n) => n.id === nodeId);
+        if (nodeIndex === -1 || !svgRef.current) {
+          resolve();
+          return;
+        }
+
+        // Reduced motion: skip animation
+        if (prefersReducedMotion.current) {
+          resolve();
+          return;
+        }
+
+        const clickedGlow = glowRefs.current[nodeIndex];
+        const tl = gsap.timeline({ onComplete: resolve });
+
+        // 1. Clicked node glow expands to fill viewport
+        if (clickedGlow) {
+          tl.to(
+            clickedGlow,
+            {
+              attr: { r: 100 },
+              opacity: 0.8,
+              duration: 0.8,
+              ease: "power2.in",
+            },
+            0,
+          );
+        }
+
+        // 2. All OTHER node groups fade out
+        nodeGroupRefs.current.forEach((group, i) => {
+          if (!group || i === nodeIndex) return;
+          tl.to(group, { opacity: 0, duration: 0.3, ease: "power2.out" }, 0);
+        });
+
+        // 3. All lines fade out
+        lineRefs.current.forEach((line) => {
+          if (!line) return;
+          tl.to(line, { opacity: 0, duration: 0.3, ease: "power2.out" }, 0);
+        });
+
+        // 4. Stars fade out
+        starRefs.current.forEach((star) => {
+          if (!star) return;
+          tl.to(star, { opacity: 0, duration: 0.3, ease: "power2.out" }, 0);
+        });
+      });
+    },
+  }));
+
+  // -------------------------------------------------------------------------
+  // "Próximamente" tooltip for inactive nodes
+  // -------------------------------------------------------------------------
+  const showProximamente = useCallback(
+    (node: ConstellationNode) => {
+      const svg = svgRef.current;
+      if (!svg || prefersReducedMotion.current) return;
+
+      const ns = "http://www.w3.org/2000/svg";
+      const text = document.createElementNS(ns, "text");
+      text.setAttribute("x", String(node.x));
+      text.setAttribute("y", String(node.y - GLOW_RADIUS_OUTER * node.scale - 2));
+      text.setAttribute("fill", "var(--text-muted)");
+      text.setAttribute("font-size", "1.5");
+      text.setAttribute("font-family", "var(--font-body)");
+      text.setAttribute("text-anchor", "middle");
+      text.setAttribute("pointer-events", "none");
+      text.textContent = "Próximamente";
+      svg.appendChild(text);
+
+      gsap.fromTo(
+        text,
+        { opacity: 0, y: 1 },
+        {
+          opacity: 1,
+          y: 0,
+          duration: 0.25,
+          ease: "power2.out",
+          onComplete: () => {
+            gsap.to(text, {
+              opacity: 0,
+              delay: 1,
+              duration: 0.25,
+              ease: "power2.in",
+              onComplete: () => {
+                text.remove();
+              },
+            });
+          },
+        },
+      );
+    },
+    [],
+  );
 
   // -------------------------------------------------------------------------
   // Reveal animation
@@ -287,7 +399,9 @@ export default function ConstellationSVG({
             style={{ cursor: "pointer", opacity: 0 }}
             onMouseEnter={() => handleMouseEnter(node, i)}
             onMouseLeave={() => handleMouseLeave(node, i)}
-            onClick={() => onNodeClick(node)}
+            onClick={() =>
+              node.active ? onNodeClick(node) : showProximamente(node)
+            }
           >
             {/* Outer glow */}
             <circle
@@ -323,4 +437,7 @@ export default function ConstellationSVG({
       </g>
     </svg>
   );
-}
+  },
+);
+
+export default ConstellationSVG;
