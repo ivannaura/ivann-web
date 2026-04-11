@@ -13,6 +13,8 @@ interface UIState {
   setCursorLabel: (label: string | null) => void;
   setSoundMuted: (muted: boolean) => void;
   toggleSoundMuted: () => void;
+  preloaderDone: boolean;
+  setPreloaderDone: (done: boolean) => void;
   portalRevealed: boolean;
   activeWorld: string | null;
   setPortalRevealed: () => void;
@@ -42,6 +44,8 @@ export const useUIStore = create<UIState>()((set) => ({
     try { localStorage.setItem('ivann-sound-muted', String(next)); } catch {}
     return { soundMuted: next };
   }),
+  preloaderDone: false,
+  setPreloaderDone: (done) => set({ preloaderDone: done }),
   portalRevealed: false,
   activeWorld: null,
   setPortalRevealed: () => set({ portalRevealed: true }),

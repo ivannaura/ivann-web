@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, useCallback } from "react";
 import gsap from "gsap";
+import { useUIStore } from "@/stores/useUIStore";
 
 /* ───────────────────────────────────────────────────────────── */
 /*  Constellation Preloader                                     */
@@ -104,6 +105,7 @@ export default function Preloader() {
     let exitStarted = false;
 
     const dismiss = () => {
+      useUIStore.getState().setPreloaderDone(true);
       setDismissed(true);
       dismissTimeout = setTimeout(() => setHidden(true), 800);
     };

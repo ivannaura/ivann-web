@@ -4,6 +4,7 @@
 export interface PortalParticles {
   start(canvas: HTMLCanvasElement): void;
   updateMouse(x: number, y: number): void;
+  burst(x: number, y: number, count: number): void;
   stop(): void;
   destroy(): void;
   resize(): void;
@@ -57,6 +58,22 @@ function resetParticle(p: Particle, x: number, y: number): void {
   p.life = life;
   p.maxLife = life; // same random value, no mismatch
   p.size = Math.random() * 2.5 + 1;
+  p.alpha = 1;
+  p.active = true;
+}
+
+/** Reset a particle for a radial burst — higher velocity, larger size, longer life */
+function resetBurstParticle(p: Particle, x: number, y: number): void {
+  const angle = Math.random() * Math.PI * 2;
+  const speed = Math.random() * 2.5 + 0.8;
+  p.x = x;
+  p.y = y;
+  p.vx = Math.cos(angle) * speed;
+  p.vy = Math.sin(angle) * speed;
+  const life = Math.random() * 50 + 30;
+  p.life = life;
+  p.maxLife = life;
+  p.size = Math.random() * 3 + 1.5;
   p.alpha = 1;
   p.active = true;
 }
@@ -179,6 +196,15 @@ export function createPortalParticles(): PortalParticles {
       mouseX = x;
       mouseY = y;
       mouseActive = true;
+    },
+
+    burst(x: number, y: number, count: number): void {
+      const n = Math.min(count, MAX_PARTICLES);
+      for (let i = 0; i < n; i++) {
+        const p = pool[spawnIndex];
+        resetBurstParticle(p, x, y);
+        spawnIndex = (spawnIndex + 1) % MAX_PARTICLES;
+      }
     },
 
     stop(): void {
