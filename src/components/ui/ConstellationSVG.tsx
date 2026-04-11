@@ -26,6 +26,7 @@ const NODE_MAP = new Map(NODES.map((n) => [n.id, n]));
 // ---------------------------------------------------------------------------
 export interface ConstellationSVGHandle {
   playExitTransition(nodeId: string): Promise<void>;
+  triggerPulse(mouseX: number, mouseY: number): void;
 }
 
 // ---------------------------------------------------------------------------
@@ -123,6 +124,76 @@ const ConstellationSVG = forwardRef<ConstellationSVGHandle, ConstellationSVGProp
           tl.to(star, { opacity: 0, duration: 0.3, ease: "power2.out" }, 0);
         });
       });
+    },
+
+    triggerPulse(mouseX: number, mouseY: number): void {
+      if (prefersReducedMotion.current) return;
+      const svg = svgRef.current;
+      if (!svg) return;
+
+      // 1. Find nearest node to (mouseX, mouseY) — both in 0-100 viewBox coords
+      let nearestIdx = 0;
+      let nearestDist = Infinity;
+      for (let i = 0; i < NODES.length; i++) {
+        const n = NODES[i];
+        const dx = mouseX - n.x;
+        const dy = mouseY - n.y;
+        const d = dx * dx + dy * dy;
+        if (d < nearestDist) {
+          nearestDist = d;
+          nearestIdx = i;
+        }
+      }
+
+      const nearest = NODES[nearestIdx];
+      const ns = "http://www.w3.org/2000/svg";
+
+      // 2. Expanding ripple circle at nearest node
+      const ripple = document.createElementNS(ns, "circle");
+      ripple.setAttribute("cx", String(nearest.x));
+      ripple.setAttribute("cy", String(nearest.y));
+      ripple.setAttribute("r", "0.5");
+      ripple.setAttribute("fill", "var(--aura-gold)");
+      ripple.setAttribute("opacity", "0.8");
+      ripple.setAttribute("pointer-events", "none");
+      svg.appendChild(ripple);
+
+      gsap.to(ripple, {
+        attr: { r: 4 },
+        opacity: 0,
+        duration: 0.6,
+        ease: "power2.out",
+        onComplete: () => { ripple.remove(); },
+      });
+
+      // 3. Traveling dots along connected lines
+      const nearestId = nearest.id;
+      for (const line of LINES) {
+        let targetId: string | null = null;
+        if (line.from === nearestId) targetId = line.to;
+        else if (line.to === nearestId) targetId = line.from;
+        if (!targetId) continue;
+
+        const target = NODE_MAP.get(targetId);
+        if (!target) continue;
+
+        const dot = document.createElementNS(ns, "circle");
+        dot.setAttribute("cx", String(nearest.x));
+        dot.setAttribute("cy", String(nearest.y));
+        dot.setAttribute("r", "0.3");
+        dot.setAttribute("fill", "var(--aura-gold)");
+        dot.setAttribute("opacity", "0.6");
+        dot.setAttribute("pointer-events", "none");
+        svg.appendChild(dot);
+
+        gsap.to(dot, {
+          attr: { cx: target.x, cy: target.y },
+          opacity: 0,
+          duration: 0.4,
+          ease: "power2.out",
+          onComplete: () => { dot.remove(); },
+        });
+      }
     },
   }));
 

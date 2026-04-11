@@ -7,7 +7,8 @@ import ConstellationSVG from "@/components/ui/ConstellationSVG";
 import type { ConstellationSVGHandle } from "@/components/ui/ConstellationSVG";
 import { useUIStore } from "@/stores/useUIStore";
 import { createPortalParticles } from "@/lib/portal-particles";
-import type { ConstellationNode } from "@/lib/constellation-data";
+import { NODES, type ConstellationNode } from "@/lib/constellation-data";
+import { playPortalNote } from "@/lib/portal-sounds";
 import type { PortalParticles } from "@/lib/portal-particles";
 
 const CustomCursor = dynamic(
@@ -93,6 +94,38 @@ export default function Portal() {
     },
     [],
   );
+
+  // ---------- Keypress → SVG pulse + portal note ----------
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Only letter keys a-z (same filter as usePianoScroll)
+      if (e.key.length !== 1 || !/[a-z]/i.test(e.key)) return;
+      // Do NOT preventDefault — WCAG 2.1.4
+
+      const mouse = mouseRef.current;
+
+      // Trigger visual pulse on constellation
+      constellationRef.current?.triggerPulse(mouse.x, mouse.y);
+
+      // Find nearest node for sound character
+      let nearestId = NODES[0].id;
+      let nearestDist = Infinity;
+      for (const n of NODES) {
+        const dx = mouse.x - n.x;
+        const dy = mouse.y - n.y;
+        const d = dx * dx + dy * dy;
+        if (d < nearestDist) {
+          nearestDist = d;
+          nearestId = n.id;
+        }
+      }
+
+      playPortalNote(nearestId);
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
 
   // ---------- Node click handler ----------
   const handleNodeClick = useCallback(
