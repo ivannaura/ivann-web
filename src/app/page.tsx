@@ -1,188 +1,254 @@
 "use client";
 
-import { useState, useCallback, useRef, useEffect } from "react";
+import { useRef, useCallback, useEffect } from "react";
 import dynamic from "next/dynamic";
-import { useLenis } from "lenis/react";
-import Navigation from "@/components/ui/Navigation";
-import PianoIndicator from "@/components/ui/PianoIndicator";
-
-const CustomCursor = dynamic(() => import("@/components/ui/CustomCursor"), { ssr: false });
-const ScrollVideoPlayer = dynamic(() => import("@/components/ui/ScrollVideoPlayer"), { ssr: false });
-const ScrollStoryOverlay = dynamic(() => import("@/components/ui/ScrollStoryOverlay"), { ssr: false });
-const Contact = dynamic(() => import("@/components/sections/Contact"), { ssr: false });
-const Footer = dynamic(() => import("@/components/ui/Footer"), { ssr: false });
-import { usePianoScroll } from "@/hooks/usePianoScroll";
-import { destroyMicroSounds } from "@/lib/micro-sounds";
+import { useRouter } from "next/navigation";
+import ConstellationSVG from "@/components/ui/ConstellationSVG";
+import type { ConstellationSVGHandle } from "@/components/ui/ConstellationSVG";
 import { useUIStore } from "@/stores/useUIStore";
-import type { FrequencyBands } from "@/lib/audio-momentum";
-import { getMoodCPU } from "@/lib/mood";
+import { createPortalParticles } from "@/lib/portal-particles";
+import { NODES, type ConstellationNode } from "@/lib/constellation-data";
+import { playPortalNote } from "@/lib/portal-sounds";
+import type { PortalParticles } from "@/lib/portal-particles";
 
-const VIDEO_SRC = "/videos/flamenco-graded.mp4";
-const AUDIO_SRC = "/audio/flamenco.m4a";
+const CustomCursor = dynamic(
+  () => import("@/components/ui/CustomCursor"),
+  { ssr: false },
+);
 
-export default function Home() {
-  const [currentFrame, setCurrentFrame] = useState(0);
-  const soundMuted = useUIStore((s) => s.soundMuted);
-  const toggleSoundMuted = useUIStore((s) => s.toggleSoundMuted);
-  const lenis = useLenis();
-  const lenisRef = useRef(lenis);
-  lenisRef.current = lenis;
+export default function Portal() {
+  const router = useRouter();
+  const mouseRef = useRef<{ x: number; y: number }>({ x: 50, y: 50 });
+  const constellationRef = useRef<ConstellationSVGHandle>(null);
+  const revealedRef = useRef(false);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const particlesRef = useRef<PortalParticles | null>(null);
+  const touchStartRef = useRef<{ x: number; y: number } | null>(null);
+  const suppressClickRef = useRef(false);
+  const setPortalRevealed = useUIStore((s) => s.setPortalRevealed);
+  const setActiveWorld = useUIStore((s) => s.setActiveWorld);
 
-  usePianoScroll({ enabled: true, onMuteToggle: toggleSoundMuted });
+  // ---------- First-movement reveal (called once) ----------
+  const triggerReveal = useCallback(() => {
+    if (revealedRef.current) return;
+    revealedRef.current = true;
+    setPortalRevealed();
+  }, [setPortalRevealed]);
 
-  // Progress ref for atmospheric haze color
-  const progressRef = useRef(0);
-  const hazeRef = useRef<HTMLDivElement>(null);
-
-  // Energy + bands + actTransition via refs to avoid 60fps re-renders, throttled to ~10fps for display
-  const energyRef = useRef(0);
-  const bandsRef = useRef<FrequencyBands>({ bass: 0, mids: 0, highs: 0 });
-  const actTransitionRef = useRef(0);
-  const [displayEnergy, setDisplayEnergy] = useState(0);
-  const [displayBands, setDisplayBands] = useState<FrequencyBands>({ bass: 0, mids: 0, highs: 0 });
-  const [displayActTransition, setDisplayActTransition] = useState(0);
-
+  // ---------- Reduced-motion: reveal immediately, skip particles ----------
   useEffect(() => {
-    let lastHazeProgress = 0;
-    const id = setInterval(() => {
-      // Equality guards: skip React re-render when values haven't meaningfully changed
-      // (prevents 10fps re-renders of entire component tree during idle state)
-      setDisplayEnergy(prev => {
-        const next = energyRef.current;
-        return Math.abs(prev - next) < 0.005 ? prev : next;
-      });
-      setDisplayActTransition(prev => {
-        const next = actTransitionRef.current;
-        return Math.abs(prev - next) < 0.01 ? prev : next;
-      });
-      const newBands = bandsRef.current;
-      setDisplayBands(prev => {
-        if (Math.abs(prev.bass - newBands.bass) < 0.01 &&
-            Math.abs(prev.mids - newBands.mids) < 0.01 &&
-            Math.abs(prev.highs - newBands.highs) < 0.01) {
-          return prev; // same reference, no re-render
-        }
-        return { ...newBands };
-      });
+    if (typeof window === "undefined") return;
+    const prefersReduced = window.matchMedia(
+      "(prefers-reduced-motion: reduce)",
+    ).matches;
+    if (prefersReduced) {
+      triggerReveal();
+    }
+  }, [triggerReveal]);
 
-      // Update atmospheric haze color — smooth interpolation via mood curve
-      // Mood range: 0.5 (calm) → 1.2 (climax), mirrors CinemaGL narrative arc
-      // Only update haze if progress actually changed (avoids redundant style writes)
-      if (hazeRef.current && Math.abs(progressRef.current - lastHazeProgress) > 0.005) {
-        lastHazeProgress = progressRef.current;
-        const mood = getMoodCPU(progressRef.current);
-        // Normalize mood 0.5-1.2 → t 0-1
-        const t = Math.min(Math.max((mood - 0.5) / 0.7, 0), 1);
-        // Lerp between cool blue (calm) → warm amber (rising) → crimson (climax)
-        // Two-segment lerp: t < 0.5 = blue→amber, t >= 0.5 = amber→crimson
-        let r: number, g: number, b: number, a: number;
-        if (t < 0.5) {
-          const s = t * 2; // 0-1 within first segment
-          r = 10 + s * 15;   // 10 → 25
-          g = 15 - s * 0;    // 15 → 15 (stay neutral then drop)
-          b = 30 - s * 20;   // 30 → 10
-          a = 0.08 + s * 0.02; // 0.08 → 0.10
-        } else {
-          const s = (t - 0.5) * 2; // 0-1 within second segment
-          r = 25 + s * 5;    // 25 → 30
-          g = 15 - s * 7;    // 15 → 8
-          b = 10 - s * 2;    // 10 → 8
-          a = 0.10 + s * 0.02; // 0.10 → 0.12
-        }
-        hazeRef.current.style.setProperty(
-          '--haze-color',
-          `rgba(${Math.round(r)},${Math.round(g)},${Math.round(b)},${a.toFixed(2)})`
-        );
+  // ---------- Particle system lifecycle ----------
+  useEffect(() => {
+    // Skip particle system entirely for reduced-motion users
+    if (
+      typeof window !== "undefined" &&
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches
+    ) {
+      return;
+    }
+
+    const particles = createPortalParticles();
+    particlesRef.current = particles;
+
+    if (canvasRef.current) {
+      particles.start(canvasRef.current);
+    }
+
+    const handleResize = () => particles.resize();
+    window.addEventListener("resize", handleResize);
+
+    return () => {
+      window.removeEventListener("resize", handleResize);
+      particles.destroy();
+      particlesRef.current = null;
+    };
+  }, []);
+
+  // ---------- Preloader → Portal burst transition ----------
+  useEffect(() => {
+    const unsub = useUIStore.subscribe((state, prev) => {
+      if (state.preloaderDone && !prev.preloaderDone && particlesRef.current && canvasRef.current) {
+        const cx = canvasRef.current.clientWidth / 2;
+        const cy = canvasRef.current.clientHeight / 2;
+        particlesRef.current.burst(cx, cy, 24);
       }
-    }, 100);
-    return () => clearInterval(id);
+    });
+    // If preloaderDone was already true before mount (e.g. fast HMR), fire burst now
+    if (useUIStore.getState().preloaderDone && particlesRef.current && canvasRef.current) {
+      const cx = canvasRef.current.clientWidth / 2;
+      const cy = canvasRef.current.clientHeight / 2;
+      particlesRef.current.burst(cx, cy, 24);
+    }
+    return unsub;
   }, []);
 
-  // Cleanup micro-sounds on unmount
-  useEffect(() => {
-    return () => destroyMicroSounds();
-  }, []);
-
-  const handleFrameChange = useCallback(
-    (frameIndex: number, _direction: "forward" | "backward") => {
-      setCurrentFrame(frameIndex);
+  // ---------- Mouse tracking ----------
+  const handleMouseMove = useCallback(
+    (e: React.MouseEvent<HTMLElement>) => {
+      triggerReveal();
+      mouseRef.current = {
+        x: (e.clientX / window.innerWidth) * 100,
+        y: (e.clientY / window.innerHeight) * 100,
+      };
+      particlesRef.current?.updateMouse(e.clientX, e.clientY);
     },
-    []
+    [triggerReveal],
   );
 
-  const handleEnergyChange = useCallback((e: number) => {
-    energyRef.current = e;
+  // ---------- Touch tracking (mobile) ----------
+  const handleTouchStart = useCallback(
+    (e: React.TouchEvent<HTMLElement>) => {
+      triggerReveal();
+      const t = e.touches[0];
+      if (t) {
+        touchStartRef.current = { x: t.clientX, y: t.clientY };
+        mouseRef.current = {
+          x: (t.clientX / window.innerWidth) * 100,
+          y: (t.clientY / window.innerHeight) * 100,
+        };
+        particlesRef.current?.updateMouse(t.clientX, t.clientY);
+      }
+    },
+    [triggerReveal],
+  );
+
+  const handleTouchMove = useCallback(
+    (e: React.TouchEvent<HTMLElement>) => {
+      const t = e.touches[0];
+      if (t) {
+        mouseRef.current = {
+          x: (t.clientX / window.innerWidth) * 100,
+          y: (t.clientY / window.innerHeight) * 100,
+        };
+        particlesRef.current?.updateMouse(t.clientX, t.clientY);
+      }
+    },
+    [],
+  );
+
+  const handleTouchEnd = useCallback(
+    (e: React.TouchEvent<HTMLElement>) => {
+      const start = touchStartRef.current;
+      if (!start) return;
+      touchStartRef.current = null;
+
+      const t = e.changedTouches[0];
+      if (!t) return;
+
+      const dx = t.clientX - start.x;
+      const dy = t.clientY - start.y;
+      if (dx * dx + dy * dy > 100) return; // > 10px movement — not a tap
+
+      // Suppress the synthetic click that follows touchend
+      suppressClickRef.current = true;
+
+      const normalizedX = (t.clientX / window.innerWidth) * 100;
+      const normalizedY = (t.clientY / window.innerHeight) * 100;
+
+      // Visual pulse on constellation
+      constellationRef.current?.triggerPulse(normalizedX, normalizedY);
+
+      // Find nearest node for sound
+      let nearestId = NODES[0].id;
+      let nearestDist = Infinity;
+      for (const n of NODES) {
+        const ndx = normalizedX - n.x;
+        const ndy = normalizedY - n.y;
+        const d = ndx * ndx + ndy * ndy;
+        if (d < nearestDist) {
+          nearestDist = d;
+          nearestId = n.id;
+        }
+      }
+
+      playPortalNote(nearestId);
+    },
+    [],
+  );
+
+  // ---------- Keypress → SVG pulse + portal note ----------
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Only letter keys a-z (same filter as usePianoScroll)
+      if (e.key.length !== 1 || !/[a-z]/i.test(e.key)) return;
+      // Do NOT preventDefault — WCAG 2.1.4
+
+      const mouse = mouseRef.current;
+
+      // Trigger visual pulse on constellation
+      constellationRef.current?.triggerPulse(mouse.x, mouse.y);
+
+      // Find nearest node for sound character
+      let nearestId = NODES[0].id;
+      let nearestDist = Infinity;
+      for (const n of NODES) {
+        const dx = mouse.x - n.x;
+        const dy = mouse.y - n.y;
+        const d = dx * dx + dy * dy;
+        if (d < nearestDist) {
+          nearestDist = d;
+          nearestId = n.id;
+        }
+      }
+
+      playPortalNote(nearestId);
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
   }, []);
 
-  const handleBandsChange = useCallback((b: FrequencyBands) => {
-    bandsRef.current = b;
-  }, []);
+  // ---------- Suppress synthetic click after touch tap ----------
+  const handleClick = useCallback(
+    (_e: React.MouseEvent<HTMLElement>) => {
+      if (suppressClickRef.current) {
+        suppressClickRef.current = false;
+        // Click already handled by touchend — skip
+      }
+    },
+    [],
+  );
 
-  const handleProgressChange = useCallback((p: number) => {
-    progressRef.current = p;
-  }, []);
-
-  const handleActTransition = useCallback((value: number) => {
-    actTransitionRef.current = value;
-  }, []);
-
-  // Vinyl drift: when ScrollVideoPlayer's ticker detects energy lingering after
-  // scroll stops, it emits small pixel deltas. We apply them to Lenis to create
-  // the "gradually slowing down" vinyl effect on the video.
-  const handleScrollDrift = useCallback((deltaPixels: number) => {
-    const l = lenisRef.current;
-    if (l) l.scrollTo(l.scroll + deltaPixels, { immediate: true });
-  }, []);
+  // ---------- Node click handler ----------
+  const handleNodeClick = useCallback(
+    async (node: ConstellationNode) => {
+      if (!node.active) return;
+      setActiveWorld(node.id);
+      await constellationRef.current?.playExitTransition(node.id);
+      router.push(node.href);
+    },
+    [setActiveWorld, router],
+  );
 
   return (
     <>
       <CustomCursor />
-      <Navigation
-        audioActive={displayEnergy > 0.05}
-      />
-      <PianoIndicator energy={displayEnergy} bands={displayBands} />
-
-      <main id="main-content" tabIndex={-1} aria-label="Contenido principal">
-        <div id="top" />
-        <h1 className="sr-only">IVANN AURA — Live Experience</h1>
-        <ScrollVideoPlayer
-          videoSrc={VIDEO_SRC}
-          audioSrc={AUDIO_SRC}
-          scrollHeight={1200}
-          audioMuted={soundMuted}
-          onFrameChange={handleFrameChange}
-          onEnergyChange={handleEnergyChange}
-          onBandsChange={handleBandsChange}
-          onProgressChange={handleProgressChange}
-          onActTransition={handleActTransition}
-          onScrollDrift={handleScrollDrift}
-        >
-          {/* Navigation anchors — invisible markers at narrative waypoints */}
-          <div id="espectaculo" className="absolute left-0 w-0 h-0" style={{ top: '37%' }} aria-hidden="true" />
-          <div id="musica" className="absolute left-0 w-0 h-0" style={{ top: '47%' }} aria-hidden="true" />
-          {/* Atmospheric haze — shifts color with narrative progress */}
-          <div
-            ref={hazeRef}
-            className="absolute inset-0 pointer-events-none"
-            style={{
-              background: 'radial-gradient(ellipse at 50% 100%, var(--haze-color, rgba(10,15,30,0.08)), transparent 70%)',
-              opacity: 0.6,
-              zIndex: 10,
-            }}
-          />
-          <ScrollStoryOverlay
-            currentFrame={currentFrame}
-            energy={displayEnergy}
-            bands={displayBands}
-            actTransition={displayActTransition}
-          />
-        </ScrollVideoPlayer>
-
-        <div className="h-[8vh] bg-gradient-to-b from-[var(--bg-void)] to-[var(--bg-surface)]" />
-        <Contact />
+      <main
+        className="fixed inset-0 bg-[var(--bg-void)] overflow-hidden"
+        onMouseMove={handleMouseMove}
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
+        onClick={handleClick}
+      >
+        <h1 className="sr-only">IVANN AURA — Portal</h1>
+        <canvas
+          ref={canvasRef}
+          className="absolute inset-0 pointer-events-none"
+          style={{ zIndex: 0 }}
+          aria-hidden="true"
+        />
+        <ConstellationSVG ref={constellationRef} mouseRef={mouseRef} onNodeClick={handleNodeClick} />
       </main>
-
-      <Footer />
     </>
   );
 }

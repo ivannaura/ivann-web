@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, useCallback } from "react";
+import { usePathname } from "next/navigation";
 import { useLenis } from "lenis/react";
 import { useUIStore } from "@/stores/useUIStore";
 import { playHover, playClick } from "@/lib/micro-sounds";
@@ -20,6 +21,7 @@ interface NavigationProps {
 export default function Navigation({
   audioActive = false,
 }: NavigationProps) {
+  const pathname = usePathname();
   const soundMuted = useUIStore((s) => s.soundMuted);
   const toggleSoundMuted = useUIStore((s) => s.toggleSoundMuted);
   const [scrolled, setScrolled] = useState(false);
@@ -146,6 +148,9 @@ export default function Navigation({
       if (el) lenisRef.current?.scrollTo(el);
     }
   }, [setMenuOpen]);
+
+  // Portal has its own UI — don't render Navigation there
+  if (pathname === "/") return null;
 
   return (
     <>

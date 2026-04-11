@@ -1,30 +1,102 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import gsap from "gsap";
-import { SplitText } from "gsap/SplitText";
+import { useUIStore } from "@/stores/useUIStore";
 
-if (typeof window !== "undefined") {
-  gsap.registerPlugin(SplitText);
+/* ───────────────────────────────────────────────────────────── */
+/*  Constellation Preloader                                     */
+/*  Golden SVG lines converge from viewport edges → center      */
+/*  Collapses to a point when buffer >= 99%                     */
+/* ───────────────────────────────────────────────────────────── */
+
+interface ConstellationLine {
+  /** Start position on a viewport edge (0-100 viewBox units) */
+  x1: number;
+  y1: number;
+  /** End position near center (with slight organic offset) */
+  x2: number;
+  y2: number;
+  /** Total drawn length for stroke-dasharray */
+  length: number;
+}
+
+/** Generate 14 lines from random edge positions converging near center */
+function generateLines(count: number): ConstellationLine[] {
+  const lines: ConstellationLine[] = [];
+  const cx = 50;
+  const cy = 50;
+
+  for (let i = 0; i < count; i++) {
+    // Distribute lines across all 4 edges with some randomness
+    const edge = i % 4;
+    let x1: number, y1: number;
+
+    switch (edge) {
+      case 0: // top
+        x1 = 10 + Math.random() * 80;
+        y1 = -2;
+        break;
+      case 1: // right
+        x1 = 102;
+        y1 = 10 + Math.random() * 80;
+        break;
+      case 2: // bottom
+        x1 = 10 + Math.random() * 80;
+        y1 = 102;
+        break;
+      default: // left
+        x1 = -2;
+        y1 = 10 + Math.random() * 80;
+        break;
+    }
+
+    // End near center with slight organic offset (not perfect bullseye)
+    const offsetX = (Math.random() - 0.5) * 6;
+    const offsetY = (Math.random() - 0.5) * 6;
+    const x2 = cx + offsetX;
+    const y2 = cy + offsetY;
+
+    // Euclidean length in viewBox units
+    const dx = x2 - x1;
+    const dy = y2 - y1;
+    const length = Math.sqrt(dx * dx + dy * dy);
+
+    lines.push({ x1, y1, x2, y2, length });
+  }
+
+  return lines;
+}
+
+const LINE_COUNT = 14;
+// Pre-generate so layout is stable across renders (but random per mount)
+let cachedLines: ConstellationLine[] | null = null;
+function getLines(): ConstellationLine[] {
+  if (!cachedLines) cachedLines = generateLines(LINE_COUNT);
+  return cachedLines;
 }
 
 export default function Preloader() {
   const [hidden, setHidden] = useState(false);
   const [dismissed, setDismissed] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
-  const nameRef = useRef<HTMLHeadingElement>(null);
-  const subtitleRef = useRef<HTMLParagraphElement>(null);
-  const barRef = useRef<HTMLDivElement>(null);
-  const batonRef = useRef<HTMLDivElement>(null);
+  const svgRef = useRef<SVGSVGElement>(null);
+  const lineRefs = useRef<(SVGLineElement | null)[]>([]);
+  const flashRef = useRef<SVGCircleElement>(null);
   const pctRef = useRef<HTMLSpanElement>(null);
+
+  const setLineRef = useCallback(
+    (index: number) => (el: SVGLineElement | null) => {
+      lineRefs.current[index] = el;
+    },
+    [],
+  );
 
   useEffect(() => {
     const container = containerRef.current;
-    const nameEl = nameRef.current;
-    const subtitleEl = subtitleRef.current;
-    const barEl = barRef.current;
-    const batonEl = batonRef.current;
-    if (!container || !nameEl || !subtitleEl || !barEl || !batonEl) return;
+    const svg = svgRef.current;
+    const flash = flashRef.current;
+    if (!container || !svg || !flash) return;
 
     let dismissTimeout: ReturnType<typeof setTimeout>;
     let progressInterval: ReturnType<typeof setInterval>;
@@ -33,11 +105,12 @@ export default function Preloader() {
     let exitStarted = false;
 
     const dismiss = () => {
+      useUIStore.getState().setPreloaderDone(true);
       setDismissed(true);
-      dismissTimeout = setTimeout(() => setHidden(true), 1100);
+      dismissTimeout = setTimeout(() => setHidden(true), 800);
     };
 
-    // Reduced-motion: skip all animations, show static content briefly, dismiss
+    // Reduced-motion: skip all animations, dismiss quickly
     if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
       const rmTimeout = setTimeout(dismiss, 500);
       return () => {
@@ -46,35 +119,45 @@ export default function Preloader() {
       };
     }
 
-    // --- Exit sequence: animate bar to 100%, then iris-close ---
+    // --- Exit sequence: lines converge to center, flash, fade out ---
     const startExit = () => {
       if (exitStarted) return;
       exitStarted = true;
       clearInterval(progressInterval);
 
-      // Bar to 100%
-      gsap.to(barEl, { scaleX: 1, duration: 0.3, ease: "power2.out" });
       if (pctRef.current) pctRef.current.textContent = "100%";
 
-      // Brief hold then iris-close
-      gsap.delayedCall(0.35, () => {
-        if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
-          dismiss();
-          return;
-        }
-        gsap.to(container, {
-          clipPath: "circle(0% at 50% 50%)",
-          duration: 1.0,
-          ease: "power3.inOut",
-          onComplete: dismiss,
-        });
-        gsap.to([nameEl, subtitleEl, barEl.parentElement], {
-          scale: 0.95,
-          opacity: 0,
-          duration: 0.6,
-          ease: "power2.in",
-        });
+      if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+        dismiss();
+        return;
+      }
+
+      const lines = lineRefs.current.filter(Boolean) as SVGLineElement[];
+      const tl = gsap.timeline({ onComplete: dismiss });
+
+      // All lines snap endpoints to exact center (50,50)
+      tl.to(lines, {
+        attr: { x1: 50, y1: 50, x2: 50, y2: 50 },
+        duration: 0.5,
+        ease: "power3.in",
+        stagger: 0.02,
       });
+
+      // Golden flash at center
+      tl.fromTo(
+        flash,
+        { attr: { r: 0 }, opacity: 1 },
+        { attr: { r: 8 }, opacity: 0, duration: 0.4, ease: "power2.out" },
+        "-=0.15",
+      );
+
+      // Fade percentage text
+      if (pctRef.current) {
+        tl.to(pctRef.current, { opacity: 0, duration: 0.25 }, "-=0.4");
+      }
+
+      // Container fade out
+      tl.to(container, { opacity: 0, duration: 0.4, ease: "power2.inOut" });
     };
 
     // --- Buffer progress tracking ---
@@ -94,27 +177,17 @@ export default function Preloader() {
     const isVideoReady = (): boolean => {
       const video = videoEl || document.querySelector("video");
       if (!video) return false;
-      // Wait for full download — ensures buttery-smooth scroll scrubbing
-      // with zero buffering pauses. 0.99 avoids floating-point edge cases.
       return getBufferProgress() >= 0.99;
     };
 
     const checkReady = () => {
       const progress = getBufferProgress();
-      // Animate bar to real progress (minimum 2% so bar is visible)
-      gsap.to(barEl, {
-        scaleX: Math.max(0.02, progress),
-        duration: 0.4,
-        ease: "none",
-        overwrite: true,
-      });
       if (pctRef.current) {
         pctRef.current.textContent =
           progress > 0.01
             ? `${Math.round(progress * 100)}%`
             : "Conectando...";
       }
-      // If both intro is done AND video is ready, start exit
       if (introComplete && isVideoReady()) {
         startExit();
       }
@@ -139,7 +212,6 @@ export default function Preloader() {
           once: true,
         });
       }
-      // Trigger an immediate progress check now that we found the video
       checkReady();
     };
 
@@ -160,7 +232,6 @@ export default function Preloader() {
               observer?.disconnect();
               return;
             }
-            // Check descendants (video might be inside a dynamically added subtree)
             if (node instanceof HTMLElement) {
               const vid = node.querySelector("video");
               if (vid) {
@@ -175,87 +246,60 @@ export default function Preloader() {
       observer.observe(document.body, { childList: true, subtree: true });
     }
 
-    // --- Intro animation ---
+    // --- Intro animation: lines draw in from edges toward center ---
+    const linesData = getLines();
+    const lineEls = lineRefs.current.filter(Boolean) as SVGLineElement[];
+
     const ctx = gsap.context(() => {
-      const nameSplit = SplitText.create(nameEl, {
-        type: "words,chars",
-        mask: "words",
-      });
-      const subtitleSplit = SplitText.create(subtitleEl, {
-        type: "words,chars",
+      // Set initial state: each line fully hidden via stroke-dashoffset
+      lineEls.forEach((line, i) => {
+        const data = linesData[i];
+        if (!data) return;
+        // Scale the SVG viewBox length to approximate rendered pixel length
+        // We use the viewBox-unit length directly since dasharray is in viewBox coords
+        const len = data.length;
+        gsap.set(line, {
+          attr: { "stroke-dasharray": len, "stroke-dashoffset": len },
+          opacity: 0,
+        });
       });
 
       const tl = gsap.timeline({
         onComplete: () => {
           introComplete = true;
-          // If video is already loaded, exit immediately
           if (isVideoReady()) {
             startExit();
           }
-          // Otherwise, the checkReady interval will trigger startExit
         },
       });
 
-      // 1. Name reveal — chars slide up from masked words
-      tl.from(nameSplit.chars, {
-        yPercent: 100,
-        stagger: 0.04,
-        duration: 0.8,
-        ease: "power3.out",
+      // Lines fade in and draw toward center with stagger
+      lineEls.forEach((line, i) => {
+        const data = linesData[i];
+        if (!data) return;
+        const delay = i * 0.07;
+
+        tl.to(
+          line,
+          { opacity: 0.7 + Math.random() * 0.3, duration: 0.3 },
+          delay,
+        );
+        tl.to(
+          line,
+          {
+            attr: { "stroke-dashoffset": 0 },
+            duration: 1.2 + Math.random() * 0.4,
+            ease: "power2.inOut",
+          },
+          delay,
+        );
       });
 
-      // 1b. Conductor's baton — gold line draws across during name reveal
-      tl.fromTo(
-        batonEl,
-        { scaleX: 0, opacity: 0 },
-        { scaleX: 1, opacity: 1, duration: 0.9, ease: "power2.inOut" },
-        "-=0.6"
-      );
-      tl.to(batonEl, { opacity: 0, duration: 0.4, ease: "power2.in" });
-
-      // 2b. Subtle float on the title during wait
-      tl.to(
-        nameEl,
-        {
-          y: -4,
-          duration: 1.6,
-          ease: "sine.inOut",
-          yoyo: true,
-          repeat: 1,
-        },
-        "-=0.5"
-      );
-
-      // 3. Subtitle words fade in with staggered y-offset per word
-      tl.from(
-        subtitleSplit.words,
-        {
-          opacity: 0,
-          y: 12,
-          stagger: 0.12,
-          duration: 0.5,
-          ease: "power3.out",
-        },
-        "-=1.8"
-      );
-
-      // 3b. Then individual chars within each word sharpen into place
-      tl.from(
-        subtitleSplit.chars,
-        {
-          opacity: 0,
-          stagger: 0.015,
-          duration: 0.3,
-          ease: "power2.out",
-        },
-        "-=1.2"
-      );
-
-      // 4. Brief pause to let user read
+      // Brief hold so the constellation is visible before exit check
       tl.to({}, { duration: 0.3 });
     }, container);
 
-    // Fallback: force dismiss after 45s (allows full 44MB download on slower connections)
+    // Fallback: force dismiss after 45s
     const fallback = setTimeout(() => {
       if (!exitStarted) startExit();
     }, 45000);
@@ -274,6 +318,8 @@ export default function Preloader() {
 
   if (hidden) return null;
 
+  const lines = getLines();
+
   return (
     <div
       ref={containerRef}
@@ -286,7 +332,6 @@ export default function Preloader() {
         zIndex: 100000,
         background: "var(--bg-void)",
         display: "flex",
-        flexDirection: "column",
         alignItems: "center",
         justifyContent: "center",
         pointerEvents: dismissed ? "none" : "auto",
@@ -306,107 +351,66 @@ export default function Preloader() {
         }}
       />
 
-      {/* Conductor's baton — gold line that sweeps across during name reveal */}
-      <div
-        ref={batonRef}
+      {/* SVG constellation container */}
+      <svg
+        ref={svgRef}
         aria-hidden="true"
-        style={{
-          position: "absolute",
-          top: "calc(50% - 40px)",
-          left: "20%",
-          width: "60%",
-          height: "1px",
-          background:
-            "linear-gradient(to right, transparent, var(--aura-gold-dim), var(--aura-gold), var(--aura-gold-dim), transparent)",
-          transformOrigin: "left",
-          transform: "scaleX(0)",
-          opacity: 0,
-          pointerEvents: "none",
-        }}
-      />
-
-      {/* Ambient depth layer — subtle gold radial behind title */}
-      <div
-        aria-hidden="true"
+        viewBox="0 0 100 100"
+        preserveAspectRatio="none"
         style={{
           position: "absolute",
           inset: 0,
+          width: "100%",
+          height: "100%",
           pointerEvents: "none",
-          background:
-            "radial-gradient(ellipse 60% 40% at 50% 50%, rgba(201,168,76,0.04) 0%, transparent 70%)",
-        }}
-      />
-
-      {/* Name — masked char reveal */}
-      <h1
-        ref={nameRef}
-        style={{
-          fontSize: "clamp(2.5rem, 8vw, 7rem)",
-          letterSpacing: "0.35em",
-          fontWeight: 300,
-          fontFamily: "var(--font-display)",
-          color: "var(--text-primary)",
-          marginBottom: 24,
         }}
       >
-        <span style={{ color: "var(--text-secondary)" }}>IVANN </span>
-        <span style={{ color: "var(--aura-gold)" }}>AURA</span>
-      </h1>
+        {/* Converging golden lines */}
+        {lines.map((line, i) => (
+          <line
+            key={i}
+            ref={setLineRef(i)}
+            x1={line.x1}
+            y1={line.y1}
+            x2={line.x2}
+            y2={line.y2}
+            stroke="var(--aura-gold)"
+            strokeWidth={0.15}
+            strokeLinecap="round"
+            opacity={0}
+          />
+        ))}
 
-      {/* Progress bar — tracks real video buffer progress */}
-      <div
-        style={{
-          width: "clamp(120px, 40vw, 400px)",
-          height: 1,
-          background: "var(--border-subtle)",
-          position: "relative",
-        }}
-      >
-        <div
-          ref={barRef}
-          className="preloader-bar-glow"
-          style={{
-            position: "absolute",
-            left: 0,
-            top: 0,
-            height: "100%",
-            width: "100%",
-            background:
-              "linear-gradient(to right, var(--aura-gold-dim), var(--aura-gold))",
-            transformOrigin: "left",
-            transform: "scaleX(0)",
-          }}
+        {/* Golden flash circle at center (hidden until exit) */}
+        <circle
+          ref={flashRef}
+          cx={50}
+          cy={50}
+          r={0}
+          fill="none"
+          stroke="var(--aura-gold-bright)"
+          strokeWidth={0.3}
+          opacity={0}
         />
-      </div>
+      </svg>
 
-      {/* Loading percentage */}
+      {/* Loading percentage — bottom-right */}
       <span
         ref={pctRef}
         aria-hidden="true"
         style={{
+          position: "absolute",
+          bottom: "clamp(16px, 4vh, 32px)",
+          right: "clamp(16px, 4vw, 32px)",
           fontSize: "clamp(11px, 1.2vw, 13px)",
           letterSpacing: "0.3em",
           color: "var(--text-muted)",
-          marginTop: 12,
+          fontFamily: "var(--font-body)",
           fontVariantNumeric: "tabular-nums",
         }}
       >
         Conectando...
       </span>
-
-      {/* Subtitle — word-staggered reveal with interpuncts */}
-      <p
-        ref={subtitleRef}
-        style={{
-          fontSize: "clamp(11px, 1.5vw, 13px)",
-          letterSpacing: "0.3em",
-          textTransform: "uppercase",
-          color: "var(--text-muted)",
-          marginTop: 24,
-        }}
-      >
-        Pianista &middot; Compositor &middot; Live Experience
-      </p>
     </div>
   );
 }
