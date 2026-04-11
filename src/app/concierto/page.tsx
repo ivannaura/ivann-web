@@ -143,13 +143,14 @@ export default function Concierto() {
       />
       <PianoIndicator energy={displayEnergy} bands={displayBands} />
 
-      {/* Back to portal link — styled in Task 8 */}
+      {/* Back to portal link */}
       <Link
         href="/"
-        className="fixed top-6 left-6 z-50 text-[var(--text-muted)] text-xs tracking-widest uppercase font-light hover:text-[var(--aura-gold)] transition-colors duration-300"
+        className="magnetic-btn fixed z-50 text-[var(--text-muted)] text-xs tracking-widest uppercase font-light hover:text-[var(--aura-gold)] transition-colors duration-300"
+        style={{ top: "max(1.5rem, env(safe-area-inset-top))", left: "1.5rem" }}
         aria-label="Volver al portal"
       >
-        Portal
+        &larr; Portal
       </Link>
 
       <main id="main-content" tabIndex={-1} aria-label="Contenido principal">
