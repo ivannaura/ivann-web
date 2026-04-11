@@ -1,11 +1,14 @@
 "use client";
 
-import { useRef, useCallback } from "react";
+import { useRef, useCallback, useEffect } from "react";
 import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import ConstellationSVG from "@/components/ui/ConstellationSVG";
+import type { ConstellationSVGHandle } from "@/components/ui/ConstellationSVG";
 import { useUIStore } from "@/stores/useUIStore";
+import { createPortalParticles } from "@/lib/portal-particles";
 import type { ConstellationNode } from "@/lib/constellation-data";
+import type { PortalParticles } from "@/lib/portal-particles";
 
 const CustomCursor = dynamic(
   () => import("@/components/ui/CustomCursor"),
@@ -15,9 +18,31 @@ const CustomCursor = dynamic(
 export default function Portal() {
   const router = useRouter();
   const mouseRef = useRef<{ x: number; y: number }>({ x: 50, y: 50 });
+  const constellationRef = useRef<ConstellationSVGHandle>(null);
   const revealedRef = useRef(false);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const particlesRef = useRef<PortalParticles | null>(null);
   const setPortalRevealed = useUIStore((s) => s.setPortalRevealed);
   const setActiveWorld = useUIStore((s) => s.setActiveWorld);
+
+  // ---------- Particle system lifecycle ----------
+  useEffect(() => {
+    const particles = createPortalParticles();
+    particlesRef.current = particles;
+
+    if (canvasRef.current) {
+      particles.start(canvasRef.current);
+    }
+
+    const handleResize = () => particles.resize();
+    window.addEventListener("resize", handleResize);
+
+    return () => {
+      window.removeEventListener("resize", handleResize);
+      particles.destroy();
+      particlesRef.current = null;
+    };
+  }, []);
 
   // ---------- First-movement reveal (called once) ----------
   const triggerReveal = useCallback(() => {
@@ -34,6 +59,7 @@ export default function Portal() {
         x: (e.clientX / window.innerWidth) * 100,
         y: (e.clientY / window.innerHeight) * 100,
       };
+      particlesRef.current?.updateMouse(e.clientX, e.clientY);
     },
     [triggerReveal],
   );
@@ -48,6 +74,7 @@ export default function Portal() {
           x: (t.clientX / window.innerWidth) * 100,
           y: (t.clientY / window.innerHeight) * 100,
         };
+        particlesRef.current?.updateMouse(t.clientX, t.clientY);
       }
     },
     [triggerReveal],
@@ -61,6 +88,7 @@ export default function Portal() {
           x: (t.clientX / window.innerWidth) * 100,
           y: (t.clientY / window.innerHeight) * 100,
         };
+        particlesRef.current?.updateMouse(t.clientX, t.clientY);
       }
     },
     [],
@@ -68,9 +96,10 @@ export default function Portal() {
 
   // ---------- Node click handler ----------
   const handleNodeClick = useCallback(
-    (node: ConstellationNode) => {
+    async (node: ConstellationNode) => {
       if (!node.active) return;
       setActiveWorld(node.id);
+      await constellationRef.current?.playExitTransition(node.id);
       router.push(node.href);
     },
     [setActiveWorld, router],
@@ -85,7 +114,13 @@ export default function Portal() {
         onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}
       >
-        <ConstellationSVG mouseRef={mouseRef} onNodeClick={handleNodeClick} />
+        <canvas
+          ref={canvasRef}
+          className="absolute inset-0 pointer-events-none"
+          style={{ zIndex: 0 }}
+          aria-hidden="true"
+        />
+        <ConstellationSVG ref={constellationRef} mouseRef={mouseRef} onNodeClick={handleNodeClick} />
       </main>
     </>
   );
