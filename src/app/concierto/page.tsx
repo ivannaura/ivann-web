@@ -10,6 +10,7 @@ import PianoIndicator from "@/components/ui/PianoIndicator";
 const CustomCursor = dynamic(() => import("@/components/ui/CustomCursor"), { ssr: false });
 const ScrollVideoPlayer = dynamic(() => import("@/components/ui/ScrollVideoPlayer"), { ssr: false });
 const ScrollStoryOverlay = dynamic(() => import("@/components/ui/ScrollStoryOverlay"), { ssr: false });
+const AutoplayTimeline = dynamic(() => import("@/components/ui/AutoplayTimeline"), { ssr: false });
 const Contact = dynamic(() => import("@/components/sections/Contact"), { ssr: false });
 const Footer = dynamic(() => import("@/components/ui/Footer"), { ssr: false });
 import { usePianoScroll } from "@/hooks/usePianoScroll";
@@ -25,6 +26,8 @@ export default function Concierto() {
   const [currentFrame, setCurrentFrame] = useState(0);
   const soundMuted = useUIStore((s) => s.soundMuted);
   const toggleSoundMuted = useUIStore((s) => s.toggleSoundMuted);
+  const autoplayActive = useUIStore((s) => s.autoplayActive);
+  const setAutoplayActive = useUIStore((s) => s.setAutoplayActive);
   const lenis = useLenis();
   const lenisRef = useRef(lenis);
   lenisRef.current = lenis;
@@ -42,6 +45,7 @@ export default function Concierto() {
   const [displayEnergy, setDisplayEnergy] = useState(0);
   const [displayBands, setDisplayBands] = useState<FrequencyBands>({ bass: 0, mids: 0, highs: 0 });
   const [displayActTransition, setDisplayActTransition] = useState(0);
+  const [displayProgress, setDisplayProgress] = useState(0);
 
   useEffect(() => {
     let lastHazeProgress = 0;
@@ -55,6 +59,10 @@ export default function Concierto() {
       setDisplayActTransition(prev => {
         const next = actTransitionRef.current;
         return Math.abs(prev - next) < 0.01 ? prev : next;
+      });
+      setDisplayProgress(prev => {
+        const next = progressRef.current;
+        return Math.abs(prev - next) < 0.002 ? prev : next;
       });
       const newBands = bandsRef.current;
       setDisplayBands(prev => {
@@ -102,6 +110,68 @@ export default function Concierto() {
   // Cleanup micro-sounds on unmount
   useEffect(() => {
     return () => destroyMicroSounds();
+  }, []);
+
+  // Autoplay: auto-scroll Lenis at constant velocity
+  useEffect(() => {
+    if (!autoplayActive) return;
+
+    const l = lenisRef.current;
+    if (!l) return;
+
+    const totalScroll = document.documentElement.scrollHeight - window.innerHeight;
+    const speed = totalScroll / 150; // 150 seconds to complete (~2.5 min)
+
+    let rafId: number;
+    let lastTime = performance.now();
+
+    const tick = () => {
+      const now = performance.now();
+      const dt = (now - lastTime) / 1000;
+      lastTime = now;
+
+      const currentLenis = lenisRef.current;
+      if (currentLenis) {
+        const delta = speed * dt;
+        const currentTotal = document.documentElement.scrollHeight - window.innerHeight;
+        const newScroll = Math.min(currentLenis.scroll + delta, currentTotal);
+        currentLenis.scrollTo(newScroll, { immediate: true });
+
+        if (newScroll >= currentTotal) {
+          setAutoplayActive(false);
+          return;
+        }
+      }
+
+      rafId = requestAnimationFrame(tick);
+    };
+
+    rafId = requestAnimationFrame(tick);
+
+    return () => cancelAnimationFrame(rafId);
+  }, [autoplayActive, setAutoplayActive]);
+
+  // Pause autoplay on manual user interaction (wheel or touch)
+  useEffect(() => {
+    if (!autoplayActive) return;
+
+    const pause = () => setAutoplayActive(false);
+
+    window.addEventListener("wheel", pause, { once: true, passive: true });
+    window.addEventListener("touchmove", pause, { once: true, passive: true });
+
+    return () => {
+      window.removeEventListener("wheel", pause);
+      window.removeEventListener("touchmove", pause);
+    };
+  }, [autoplayActive, setAutoplayActive]);
+
+  // Seek handler for timeline scrubber
+  const handleSeek = useCallback((p: number) => {
+    const l = lenisRef.current;
+    if (!l) return;
+    const totalScroll = document.documentElement.scrollHeight - window.innerHeight;
+    l.scrollTo(p * totalScroll, { immediate: true });
   }, []);
 
   const handleFrameChange = useCallback(
@@ -194,6 +264,11 @@ export default function Concierto() {
       </main>
 
       <Footer />
+
+      <AutoplayTimeline
+        progress={displayProgress}
+        onSeek={handleSeek}
+      />
     </>
   );
 }
