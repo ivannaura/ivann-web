@@ -54,7 +54,7 @@ const ConstellationSVG = forwardRef<ConstellationSVGHandle, ConstellationSVGProp
   const svgRef = useRef<SVGSVGElement>(null);
   const nodeGroupRefs = useRef<(SVGGElement | null)[]>([]);
   const glowRefs = useRef<(SVGCircleElement | null)[]>([]);
-  const lineRefs = useRef<(SVGLineElement | null)[]>([]);
+  const lineRefs = useRef<(SVGPathElement | null)[]>([]);
   const starRefs = useRef<(SVGCircleElement | null)[]>([]);
   const tickerAddedRef = useRef(false);
   const revealedRef = useRef(false);
@@ -168,32 +168,57 @@ const ConstellationSVG = forwardRef<ConstellationSVGHandle, ConstellationSVGProp
         onComplete: () => { ripple.remove(); },
       });
 
-      // 3. Traveling dots along connected lines
+      // 3. Traveling dots along connected lines (follow Catmull-Rom paths)
       const nearestId = nearest.id;
-      for (const line of LINES) {
-        let targetId: string | null = null;
-        if (line.from === nearestId) targetId = line.to;
-        else if (line.to === nearestId) targetId = line.from;
-        if (!targetId) continue;
+      for (let li = 0; li < LINES.length; li++) {
+        const line = LINES[li];
+        let reverse = false;
+        if (line.from === nearestId) {
+          reverse = false;
+        } else if (line.to === nearestId) {
+          reverse = true;
+        } else {
+          continue;
+        }
 
-        const target = NODE_MAP.get(targetId);
-        if (!target) continue;
+        // Use the actual SVG <path> element for getPointAtLength
+        const pathEl = lineRefs.current[li];
+        if (!pathEl) continue;
+
+        const totalLen = pathEl.getTotalLength();
 
         const dot = document.createElementNS(ns, "circle");
-        dot.setAttribute("cx", String(nearest.x));
-        dot.setAttribute("cy", String(nearest.y));
+        const startPt = pathEl.getPointAtLength(reverse ? totalLen : 0);
+        dot.setAttribute("cx", String(startPt.x));
+        dot.setAttribute("cy", String(startPt.y));
         dot.setAttribute("r", "0.3");
         dot.setAttribute("fill", "var(--aura-gold)");
         dot.setAttribute("opacity", "0.6");
         dot.setAttribute("pointer-events", "none");
         svg.appendChild(dot);
 
+        // Animate a progress value 0→1 and sample the path
+        const proxy = { t: 0 };
+        gsap.to(proxy, {
+          t: 1,
+          duration: 0.4,
+          ease: "power2.out",
+          onUpdate: () => {
+            const len = reverse
+              ? totalLen * (1 - proxy.t)
+              : totalLen * proxy.t;
+            const pt = pathEl.getPointAtLength(len);
+            dot.setAttribute("cx", String(pt.x));
+            dot.setAttribute("cy", String(pt.y));
+          },
+          onComplete: () => { dot.remove(); },
+        });
+
+        // Fade out separately
         gsap.to(dot, {
-          attr: { cx: target.x, cy: target.y },
           opacity: 0,
           duration: 0.4,
           ease: "power2.out",
-          onComplete: () => { dot.remove(); },
         });
       }
     },
@@ -467,26 +492,19 @@ const ConstellationSVG = forwardRef<ConstellationSVGHandle, ConstellationSVGProp
 
       {/* Layer 2: Lines (connecting nodes, non-interactive) */}
       <g style={{ pointerEvents: "none" }} aria-hidden="true">
-        {LINES.map((line, i) => {
-          const from = NODE_MAP.get(line.from);
-          const to = NODE_MAP.get(line.to);
-          if (!from || !to) return null;
-          return (
-            <line
-              key={`line-${line.from}-${line.to}`}
-              ref={(el) => {
-                lineRefs.current[i] = el;
-              }}
-              x1={from.x}
-              y1={from.y}
-              x2={to.x}
-              y2={to.y}
-              stroke="var(--aura-gold)"
-              strokeWidth={0.15}
-              opacity={0}
-            />
-          );
-        })}
+        {LINES.map((line, i) => (
+          <path
+            key={`line-${line.from}-${line.to}`}
+            ref={(el) => {
+              lineRefs.current[i] = el;
+            }}
+            d={line.path}
+            fill="none"
+            stroke="var(--aura-gold)"
+            strokeWidth={0.15}
+            opacity={0}
+          />
+        ))}
       </g>
 
       {/* Layer 3: Nodes (interactive, keyboard-navigable) */}
