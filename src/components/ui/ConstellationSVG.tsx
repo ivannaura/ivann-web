@@ -66,7 +66,7 @@ const ConstellationSVG = forwardRef<ConstellationSVGHandle, ConstellationSVGProp
   const portalRevealed = useUIStore((s) => s.portalRevealed);
 
   // -------------------------------------------------------------------------
-  // Reduced motion check
+  // Reduced motion + desktop detection
   // -------------------------------------------------------------------------
   const prefersReducedMotion = useRef(false);
   useLayoutEffect(() => {
@@ -74,6 +74,7 @@ const ConstellationSVG = forwardRef<ConstellationSVGHandle, ConstellationSVGProp
     prefersReducedMotion.current = window.matchMedia(
       "(prefers-reduced-motion: reduce)",
     ).matches;
+    isDesktopRef.current = window.matchMedia("(hover: hover)").matches;
   }, []);
 
   // -------------------------------------------------------------------------
@@ -466,7 +467,7 @@ const ConstellationSVG = forwardRef<ConstellationSVGHandle, ConstellationSVGProp
     <svg
       ref={svgRef}
       viewBox="0 0 100 100"
-      preserveAspectRatio="none"
+      preserveAspectRatio="xMidYMid slice"
       style={{
         position: "absolute",
         inset: 0,
@@ -476,7 +477,7 @@ const ConstellationSVG = forwardRef<ConstellationSVGHandle, ConstellationSVGProp
       role="navigation"
       aria-label="Portal de mundos de IVANN AURA"
     >
-      {/* SVG filter defs for multi-layer glow */}
+      {/* SVG filter defs for multi-layer glow + energy displacement */}
       <defs>
         <filter id="glow-soft" x="-50%" y="-50%" width="200%" height="200%">
           <feGaussianBlur in="SourceGraphic" stdDeviation="0.8" />
@@ -486,6 +487,11 @@ const ConstellationSVG = forwardRef<ConstellationSVGHandle, ConstellationSVGProp
         </filter>
         <filter id="glow-wide" x="-150%" y="-150%" width="400%" height="400%">
           <feGaussianBlur in="SourceGraphic" stdDeviation="3" />
+        </filter>
+        {/* feTurbulence energy filter — living energy on constellation lines (desktop only) */}
+        <filter id="energy-line" x="-5%" y="-5%" width="110%" height="110%">
+          <feTurbulence type="fractalNoise" baseFrequency="0.04" numOctaves={2} seed="42" result="noise" />
+          <feDisplacementMap in="SourceGraphic" in2="noise" scale="0.8" xChannelSelector="R" yChannelSelector="G" />
         </filter>
       </defs>
 
@@ -519,6 +525,7 @@ const ConstellationSVG = forwardRef<ConstellationSVGHandle, ConstellationSVGProp
             stroke="var(--aura-gold)"
             strokeWidth={0.15}
             opacity={0}
+            filter={isDesktopRef.current ? "url(#energy-line)" : undefined}
           />
         ))}
       </g>
