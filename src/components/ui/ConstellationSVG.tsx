@@ -42,8 +42,10 @@ interface ConstellationSVGProps {
 // Constants
 // ---------------------------------------------------------------------------
 const PROXIMITY_RADIUS = 20; // viewBox units
-const GLOW_RADIUS_OUTER = 3; // base outer glow radius
-const GLOW_RADIUS_INNER = 0.6; // core circle radius
+const GLOW_RADIUS_WIDE = 3; // outermost glow radius multiplier
+const GLOW_RADIUS_MEDIUM = 1.8; // medium glow radius multiplier
+const GLOW_RADIUS_SOFT = 1; // soft glow radius multiplier
+const GLOW_RADIUS_CORE = 0.4; // sharp core radius multiplier
 const HIT_AREA_RADIUS = 5; // ~44px at 1000px viewport (1 unit ≈ 10px)
 
 // ---------------------------------------------------------------------------
@@ -54,16 +56,17 @@ const ConstellationSVG = forwardRef<ConstellationSVGHandle, ConstellationSVGProp
   const svgRef = useRef<SVGSVGElement>(null);
   const nodeGroupRefs = useRef<(SVGGElement | null)[]>([]);
   const glowRefs = useRef<(SVGCircleElement | null)[]>([]);
-  const lineRefs = useRef<(SVGLineElement | null)[]>([]);
+  const lineRefs = useRef<(SVGPathElement | null)[]>([]);
   const starRefs = useRef<(SVGCircleElement | null)[]>([]);
   const tickerAddedRef = useRef(false);
   const revealedRef = useRef(false);
+  const isDesktopRef = useRef(false);
 
   // Subscribe to portalRevealed
   const portalRevealed = useUIStore((s) => s.portalRevealed);
 
   // -------------------------------------------------------------------------
-  // Reduced motion check
+  // Reduced motion + desktop detection
   // -------------------------------------------------------------------------
   const prefersReducedMotion = useRef(false);
   useLayoutEffect(() => {
@@ -71,6 +74,7 @@ const ConstellationSVG = forwardRef<ConstellationSVGHandle, ConstellationSVGProp
     prefersReducedMotion.current = window.matchMedia(
       "(prefers-reduced-motion: reduce)",
     ).matches;
+    isDesktopRef.current = window.matchMedia("(hover: hover)").matches;
   }, []);
 
   // -------------------------------------------------------------------------
@@ -168,32 +172,57 @@ const ConstellationSVG = forwardRef<ConstellationSVGHandle, ConstellationSVGProp
         onComplete: () => { ripple.remove(); },
       });
 
-      // 3. Traveling dots along connected lines
+      // 3. Traveling dots along connected lines (follow Catmull-Rom paths)
       const nearestId = nearest.id;
-      for (const line of LINES) {
-        let targetId: string | null = null;
-        if (line.from === nearestId) targetId = line.to;
-        else if (line.to === nearestId) targetId = line.from;
-        if (!targetId) continue;
+      for (let li = 0; li < LINES.length; li++) {
+        const line = LINES[li];
+        let reverse = false;
+        if (line.from === nearestId) {
+          reverse = false;
+        } else if (line.to === nearestId) {
+          reverse = true;
+        } else {
+          continue;
+        }
 
-        const target = NODE_MAP.get(targetId);
-        if (!target) continue;
+        // Use the actual SVG <path> element for getPointAtLength
+        const pathEl = lineRefs.current[li];
+        if (!pathEl) continue;
+
+        const totalLen = pathEl.getTotalLength();
 
         const dot = document.createElementNS(ns, "circle");
-        dot.setAttribute("cx", String(nearest.x));
-        dot.setAttribute("cy", String(nearest.y));
+        const startPt = pathEl.getPointAtLength(reverse ? totalLen : 0);
+        dot.setAttribute("cx", String(startPt.x));
+        dot.setAttribute("cy", String(startPt.y));
         dot.setAttribute("r", "0.3");
         dot.setAttribute("fill", "var(--aura-gold)");
         dot.setAttribute("opacity", "0.6");
         dot.setAttribute("pointer-events", "none");
         svg.appendChild(dot);
 
+        // Animate a progress value 0→1 and sample the path
+        const proxy = { t: 0 };
+        gsap.to(proxy, {
+          t: 1,
+          duration: 0.4,
+          ease: "power2.out",
+          onUpdate: () => {
+            const len = reverse
+              ? totalLen * (1 - proxy.t)
+              : totalLen * proxy.t;
+            const pt = pathEl.getPointAtLength(len);
+            dot.setAttribute("cx", String(pt.x));
+            dot.setAttribute("cy", String(pt.y));
+          },
+          onComplete: () => { dot.remove(); },
+        });
+
+        // Fade out separately
         gsap.to(dot, {
-          attr: { cx: target.x, cy: target.y },
           opacity: 0,
           duration: 0.4,
           ease: "power2.out",
-          onComplete: () => { dot.remove(); },
         });
       }
     },
@@ -210,7 +239,7 @@ const ConstellationSVG = forwardRef<ConstellationSVGHandle, ConstellationSVGProp
       const ns = "http://www.w3.org/2000/svg";
       const text = document.createElementNS(ns, "text");
       text.setAttribute("x", String(node.x));
-      text.setAttribute("y", String(node.y - GLOW_RADIUS_OUTER * node.scale - 2));
+      text.setAttribute("y", String(node.y - GLOW_RADIUS_WIDE * node.scale - 2));
       text.setAttribute("fill", "var(--text-muted)");
       text.setAttribute("font-size", "1.5");
       text.setAttribute("font-family", "var(--font-body)");
@@ -344,11 +373,11 @@ const ConstellationSVG = forwardRef<ConstellationSVGHandle, ConstellationSVGProp
         const dist = Math.sqrt(dx * dx + dy * dy);
 
         if (dist < PROXIMITY_RADIUS) {
-          // Inverse distance: closer = brighter (0.05 base → 0.5 max)
+          // Inverse distance: closer = brighter (0.15 base → 0.5 max)
           const t = 1 - dist / PROXIMITY_RADIUS;
-          glow.setAttribute("opacity", String(0.05 + t * 0.45));
+          glow.setAttribute("opacity", String(0.15 + t * 0.35));
         } else {
-          glow.setAttribute("opacity", "0.05");
+          glow.setAttribute("opacity", "0.15");
         }
       }
     };
@@ -375,10 +404,10 @@ const ConstellationSVG = forwardRef<ConstellationSVGHandle, ConstellationSVGProp
           transformOrigin: "center center",
         });
       }
-      // Brighten outer glow on hover
+      // Brighten medium glow on hover
       const glow = glowRefs.current[index];
       if (glow) {
-        glow.setAttribute("opacity", "0.6");
+        glow.setAttribute("opacity", "0.5");
       }
     },
     [],
@@ -398,7 +427,7 @@ const ConstellationSVG = forwardRef<ConstellationSVGHandle, ConstellationSVGProp
       }
       const glow = glowRefs.current[index];
       if (glow) {
-        glow.setAttribute("opacity", "0.05");
+        glow.setAttribute("opacity", "0.15");
       }
     },
     [],
@@ -438,7 +467,7 @@ const ConstellationSVG = forwardRef<ConstellationSVGHandle, ConstellationSVGProp
     <svg
       ref={svgRef}
       viewBox="0 0 100 100"
-      preserveAspectRatio="none"
+      preserveAspectRatio="xMidYMid slice"
       style={{
         position: "absolute",
         inset: 0,
@@ -448,6 +477,24 @@ const ConstellationSVG = forwardRef<ConstellationSVGHandle, ConstellationSVGProp
       role="navigation"
       aria-label="Portal de mundos de IVANN AURA"
     >
+      {/* SVG filter defs for multi-layer glow + energy displacement */}
+      <defs>
+        <filter id="glow-soft" x="-50%" y="-50%" width="200%" height="200%">
+          <feGaussianBlur in="SourceGraphic" stdDeviation="0.8" />
+        </filter>
+        <filter id="glow-medium" x="-100%" y="-100%" width="300%" height="300%">
+          <feGaussianBlur in="SourceGraphic" stdDeviation="1.5" />
+        </filter>
+        <filter id="glow-wide" x="-150%" y="-150%" width="400%" height="400%">
+          <feGaussianBlur in="SourceGraphic" stdDeviation="3" />
+        </filter>
+        {/* feTurbulence energy filter — living energy on constellation lines (desktop only) */}
+        <filter id="energy-line" x="-5%" y="-5%" width="110%" height="110%">
+          <feTurbulence type="fractalNoise" baseFrequency="0.04" numOctaves={2} seed="42" result="noise" />
+          <feDisplacementMap in="SourceGraphic" in2="noise" scale="0.8" xChannelSelector="R" yChannelSelector="G" />
+        </filter>
+      </defs>
+
       {/* Layer 1: Stars (decorative, non-interactive) */}
       <g style={{ pointerEvents: "none" }} aria-hidden="true">
         {STARS.map((star, i) => (
@@ -467,26 +514,20 @@ const ConstellationSVG = forwardRef<ConstellationSVGHandle, ConstellationSVGProp
 
       {/* Layer 2: Lines (connecting nodes, non-interactive) */}
       <g style={{ pointerEvents: "none" }} aria-hidden="true">
-        {LINES.map((line, i) => {
-          const from = NODE_MAP.get(line.from);
-          const to = NODE_MAP.get(line.to);
-          if (!from || !to) return null;
-          return (
-            <line
-              key={`line-${line.from}-${line.to}`}
-              ref={(el) => {
-                lineRefs.current[i] = el;
-              }}
-              x1={from.x}
-              y1={from.y}
-              x2={to.x}
-              y2={to.y}
-              stroke="var(--aura-gold)"
-              strokeWidth={0.15}
-              opacity={0}
-            />
-          );
-        })}
+        {LINES.map((line, i) => (
+          <path
+            key={`line-${line.from}-${line.to}`}
+            ref={(el) => {
+              lineRefs.current[i] = el;
+            }}
+            d={line.path}
+            fill="none"
+            stroke="var(--aura-gold)"
+            strokeWidth={0.15}
+            opacity={0}
+            filter={isDesktopRef.current ? "url(#energy-line)" : undefined}
+          />
+        ))}
       </g>
 
       {/* Layer 3: Nodes (interactive, keyboard-navigable) */}
@@ -523,7 +564,7 @@ const ConstellationSVG = forwardRef<ConstellationSVGHandle, ConstellationSVGProp
               <circle
                 cx={node.x}
                 cy={node.y}
-                r={GLOW_RADIUS_OUTER * node.scale + 1.5}
+                r={GLOW_RADIUS_WIDE * node.scale + 1.5}
                 fill="none"
                 stroke="var(--aura-gold)"
                 strokeWidth={0.3}
@@ -531,28 +572,55 @@ const ConstellationSVG = forwardRef<ConstellationSVGHandle, ConstellationSVGProp
                 pointerEvents="none"
               />
             )}
-            {/* Outer glow */}
+            {/* Wide glow (outermost, static) */}
+            <circle
+              cx={node.x}
+              cy={node.y}
+              r={GLOW_RADIUS_WIDE * node.scale}
+              fill={node.color}
+              opacity={0.06}
+              filter="url(#glow-wide)"
+              style={{ mixBlendMode: "screen" }}
+              pointerEvents="none"
+            />
+            {/* Medium glow (proximity-reactive) */}
             <circle
               ref={(el) => {
                 glowRefs.current[i] = el;
               }}
               cx={node.x}
               cy={node.y}
-              r={GLOW_RADIUS_OUTER * node.scale}
+              r={GLOW_RADIUS_MEDIUM * node.scale}
               fill={node.color}
-              opacity={0.05}
+              opacity={0.15}
+              filter="url(#glow-medium)"
+              style={{ mixBlendMode: "screen" }}
+              pointerEvents="none"
             />
-            {/* Inner core */}
+            {/* Soft glow (inner, static) */}
             <circle
               cx={node.x}
               cy={node.y}
-              r={GLOW_RADIUS_INNER * node.scale}
+              r={GLOW_RADIUS_SOFT * node.scale}
               fill={node.color}
+              opacity={0.3}
+              filter="url(#glow-soft)"
+              style={{ mixBlendMode: "screen" }}
+              pointerEvents="none"
+            />
+            {/* Core (sharp, no filter) */}
+            <circle
+              cx={node.x}
+              cy={node.y}
+              r={GLOW_RADIUS_CORE * node.scale}
+              fill={node.color}
+              opacity={0.9}
+              pointerEvents="none"
             />
             {/* Label */}
             <text
               x={node.x}
-              y={node.y + GLOW_RADIUS_OUTER * node.scale + 2}
+              y={node.y + GLOW_RADIUS_WIDE * node.scale + 2}
               fill="var(--text-muted)"
               fontSize={2}
               fontFamily="var(--font-body)"

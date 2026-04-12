@@ -15,6 +15,9 @@ const MAX_VOLUME = 0.7;
 const PLAY_THRESHOLD = 0.05;
 const STOP_THRESHOLD = 0.02;
 const DRIFT_THRESHOLD = 3.0;
+const ENERGY_CAP = 0.6;        // comfortable maximum
+const ENERGY_SOFTCAP = 0.65;   // overshoot margin before elastic damping
+const ENERGY_MIN_ACTIVE = 0.08; // minimum to keep audio "alive" while decaying
 
 // Precomputed ln(FRICTION) for exp-based decay: Math.exp(LN_FRICTION * dt)
 const LN_FRICTION = Math.log(FRICTION);
@@ -118,7 +121,7 @@ export class AudioMomentum {
   /** Inject energy from a discrete interaction (key press / click). */
   addImpulse(normalizedVelocity: number = 0.5): void {
     const amount = 0.1 + normalizedVelocity * 0.25; // 0.1 gentle → 0.35 aggressive
-    this.energy = Math.min(1.0, this.energy + amount);
+    this.energy = Math.min(ENERGY_CAP, this.energy + amount);
   }
 
   /**
@@ -128,7 +131,7 @@ export class AudioMomentum {
    * calls would saturate energy instantly.
    */
   setScrollVelocity(normalizedVelocity: number): void {
-    this.scrollVelocity = Math.min(1.0, normalizedVelocity);
+    this.scrollVelocity = Math.min(ENERGY_CAP, normalizedVelocity);
   }
 
   /** Current energy level (0 – 1). */
@@ -180,6 +183,17 @@ export class AudioMomentum {
       this.analyseSkip = 0;
       this.updateFrequencyBands(this.accumulatedDt);
       this.accumulatedDt = 0;
+    }
+
+    // Elastic energy cap — prevent explosive accumulation
+    if (this.energy > ENERGY_SOFTCAP) {
+      // Decay overshoot exponentially back toward cap (faster than normal friction)
+      this.energy = ENERGY_CAP + (this.energy - ENERGY_CAP) * Math.exp(LN_FRICTION * dt * 2);
+    }
+
+    // Minimum active floor — keep audio alive while decaying
+    if (this.wasPlaying && this.energy > STOP_THRESHOLD && this.energy < ENERGY_MIN_ACTIVE) {
+      this.energy = ENERGY_MIN_ACTIVE;
     }
 
     // --- derived values ---

@@ -19,6 +19,9 @@ interface UIState {
   activeWorld: string | null;
   setPortalRevealed: () => void;
   setActiveWorld: (world: string | null) => void;
+  autoplayActive: boolean;
+  setAutoplayActive: (active: boolean) => void;
+  toggleAutoplay: () => void;
 }
 
 const getInitialMuted = (): boolean => {
@@ -50,4 +53,7 @@ export const useUIStore = create<UIState>()((set) => ({
   activeWorld: null,
   setPortalRevealed: () => set({ portalRevealed: true }),
   setActiveWorld: (world) => set({ activeWorld: world }),
+  autoplayActive: false,
+  setAutoplayActive: (active) => set({ autoplayActive: active }),
+  toggleAutoplay: () => set((s) => ({ autoplayActive: !s.autoplayActive })),
 }));

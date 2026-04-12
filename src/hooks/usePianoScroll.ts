@@ -12,7 +12,7 @@ const LN_FRICTION = Math.log(FRICTION); // precomputed for Math.exp path
 const VELOCITY_SCALE = 8; // energy → px/frame
 const RHYTHM_BONUS = 1.6; // multiplier when tapping rhythmically (< 400ms)
 const HOLD_DAMPEN = 0.3; // multiplier for held key repeat (< 50ms)
-const MAX_ENERGY = 1.0; // cap to prevent runaway
+const MAX_ENERGY = 0.6; // cap to prevent runaway (matches ENERGY_CAP in audio-momentum)
 const STOP_THRESHOLD = 0.005; // below this, stop the rAF loop
 const RHYTHM_WINDOW = 400; // ms — taps faster than this get bonus
 const REPEAT_THRESHOLD = 50; // ms — intervals below this = held key

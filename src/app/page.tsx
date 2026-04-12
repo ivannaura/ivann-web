@@ -7,9 +7,11 @@ import ConstellationSVG from "@/components/ui/ConstellationSVG";
 import type { ConstellationSVGHandle } from "@/components/ui/ConstellationSVG";
 import { useUIStore } from "@/stores/useUIStore";
 import { createPortalParticles } from "@/lib/portal-particles";
+import { createPortalNebula } from "@/lib/portal-nebula";
 import { NODES, type ConstellationNode } from "@/lib/constellation-data";
 import { playPortalNote } from "@/lib/portal-sounds";
 import type { PortalParticles } from "@/lib/portal-particles";
+import type { PortalNebula } from "@/lib/portal-nebula";
 
 const CustomCursor = dynamic(
   () => import("@/components/ui/CustomCursor"),
@@ -22,7 +24,9 @@ export default function Portal() {
   const constellationRef = useRef<ConstellationSVGHandle>(null);
   const revealedRef = useRef(false);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const nebulaCanvasRef = useRef<HTMLCanvasElement>(null);
   const particlesRef = useRef<PortalParticles | null>(null);
+  const nebulaRef = useRef<PortalNebula | null>(null);
   const touchStartRef = useRef<{ x: number; y: number } | null>(null);
   const suppressClickRef = useRef(false);
   const setPortalRevealed = useUIStore((s) => s.setPortalRevealed);
@@ -70,6 +74,25 @@ export default function Portal() {
       window.removeEventListener("resize", handleResize);
       particles.destroy();
       particlesRef.current = null;
+    };
+  }, []);
+
+  // ---------- Nebula background lifecycle ----------
+  useEffect(() => {
+    const nebula = createPortalNebula();
+    nebulaRef.current = nebula;
+
+    if (nebulaCanvasRef.current) {
+      nebula.start(nebulaCanvasRef.current);
+    }
+
+    const handleResize = () => nebula.resize();
+    window.addEventListener("resize", handleResize);
+
+    return () => {
+      window.removeEventListener("resize", handleResize);
+      nebula.destroy();
+      nebulaRef.current = null;
     };
   }, []);
 
@@ -241,6 +264,12 @@ export default function Portal() {
         onClick={handleClick}
       >
         <h1 className="sr-only">IVANN AURA — Portal</h1>
+        <canvas
+          ref={nebulaCanvasRef}
+          className="absolute inset-0 pointer-events-none"
+          style={{ zIndex: -1 }}
+          aria-hidden="true"
+        />
         <canvas
           ref={canvasRef}
           className="absolute inset-0 pointer-events-none"
