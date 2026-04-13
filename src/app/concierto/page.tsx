@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useLenis } from "lenis/react";
 import Navigation from "@/components/ui/Navigation";
 import PianoIndicator from "@/components/ui/PianoIndicator";
+import Preloader from "@/components/ui/Preloader";
 
 const CustomCursor = dynamic(() => import("@/components/ui/CustomCursor"), { ssr: false });
 const ScrollVideoPlayer = dynamic(() => import("@/components/ui/ScrollVideoPlayer"), { ssr: false });
@@ -105,6 +106,17 @@ export default function Concierto() {
       }
     }, 100);
     return () => clearInterval(id);
+  }, []);
+
+  // Preload video only on this route (was in layout.tsx, wasting 44MB on other pages)
+  useEffect(() => {
+    const link = document.createElement('link');
+    link.rel = 'preload';
+    link.href = '/videos/flamenco-graded.mp4';
+    link.as = 'fetch';
+    link.crossOrigin = 'anonymous';
+    document.head.appendChild(link);
+    return () => { document.head.removeChild(link); };
   }, []);
 
   // Cleanup micro-sounds on unmount
@@ -207,6 +219,7 @@ export default function Concierto() {
 
   return (
     <>
+      <Preloader />
       <CustomCursor />
       <Navigation
         audioActive={displayEnergy > 0.05}
