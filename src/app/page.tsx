@@ -3,6 +3,7 @@
 import { useRef, useCallback, useEffect } from "react";
 import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
+import FractalPreloader from "@/components/ui/FractalPreloader";
 import ConstellationSVG from "@/components/ui/ConstellationSVG";
 import type { ConstellationSVGHandle } from "@/components/ui/ConstellationSVG";
 import { useUIStore } from "@/stores/useUIStore";
@@ -254,6 +255,7 @@ export default function Portal() {
 
   return (
     <>
+      <FractalPreloader />
       <CustomCursor />
       <main
         className="fixed inset-0 bg-[var(--bg-void)] overflow-hidden"

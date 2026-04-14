@@ -164,7 +164,7 @@ export function createFractalRenderer(
   // Reduced motion check — return null so preloader falls back gracefully
   if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return null;
 
-  const gl = canvas.getContext('webgl2', {
+  const glMaybe = canvas.getContext('webgl2', {
     alpha: true, // true is better on iOS than false
     antialias: false,
     depth: false,
@@ -172,7 +172,8 @@ export function createFractalRenderer(
     premultipliedAlpha: false,
     preserveDrawingBuffer: false,
   });
-  if (!gl) return null;
+  if (!glMaybe) return null;
+  const gl = glMaybe; // non-null binding for closures (TS narrows const but not in closures)
 
   // Track context loss — skip render calls while lost
   let contextLost = false;
