@@ -19,46 +19,52 @@ Awwwards-quality immersive website for IVANN AURA, a Colombian pianist and live 
 ## Architecture
 
 ```
-layout.tsx
- ├── Preloader             (converging golden SVG lines + collapse to cursor point + audio primer)
+layout.tsx (NO preloader, NO video preload — lightweight shell)
  ├── MagneticButtons       (global .magnetic-btn hover effect provider)
  └── SmoothScroll          (Lenis + GSAP single RAF loop)
       │
       ├── / (Portal)
+      │    ├── FractalPreloader      (Julia Set WebGL2 implosion → gold explosion → reveal)
       │    ├── CustomCursor          (transform-based dot + ring, desktop only)
-      │    ├── ConstellationSVG      (SVG nodes + lines + stars + proximity glow + pulse + exit transition)
+      │    ├── ConstellationSVG      (Fibonacci-positioned nodes + Catmull-Rom curves + 3-layer glow)
+      │    ├── PortalNebula          (procedural value noise + twinkling stars, Canvas 2D, ~12fps)
       │    ├── PortalParticles       (golden cursor trail, 2D canvas, 150 particles, zero-GC)
       │    └── PortalSounds          (proximity-aware E Phrygian notes per constellation node)
       │
       ├── /concierto (Scroll Cinema — the main show)
+      │    ├── Preloader             (video buffer tracking + SVG convergence + iris-close)
       │    ├── CustomCursor
-      │    ├── Navigation            (fixed nav, scroll progress, mobile <dialog>, sound toggle)
+      │    ├── Navigation            (fixed nav, scroll progress, mobile <dialog>, sound toggle, route-aware)
       │    ├── PianoIndicator        (frequency-reactive equalizer: bass/mids/highs)
       │    ├── ScrollVideoPlayer     (GSAP ScrollTrigger → video.currentTime + unified WebGL2 canvas)
       │    │    ├── CinemaGL         (unified renderer: video shaders + luminance-reactive particles)
-      │    │    ├── AudioMomentum    (physics engine: Source→Analyser→GainNode→Dest, shared AudioContext)
+      │    │    ├── AudioMomentum    (physics engine: energy cap 0.6, elastic damping, min floor 0.08)
       │    │    └── ScrollStoryOverlay (20+ frame-synced story beats over video)
+      │    ├── AutoplayTimeline      (play/pause toggle + draggable scrubber + auto-scroll via Lenis)
       │    ├── Contact               (GSAP ScrollTrigger entrance, API route form, validation)
       │    └── Footer                (GSAP SplitText entrance, real social links, micro-sounds)
       │
-      ├── /contratar (Booking — fast, no video)
+      ├── /contratar (Booking — fast, no video, no preloader)
       │    ├── Contact
       │    └── Footer
       │
-      └── /mar, /apocalypsis, /pianista (Teaser Worlds)
+      └── /mar, /apocalypsis, /pianista (Teaser Worlds — no preloader)
            └── TeaserWorld           (name + color glow + "Próximamente")
 ```
 
 ### Key Components
 
-#### Portal (new)
+#### Portal
 
 | Component | File | Purpose |
 |-----------|------|---------|
-| `ConstellationSVG` | `ui/ConstellationSVG.tsx` | SVG constellation nodes + lines + stars, proximity glow (GSAP ticker), draw-on reveal, exit transition, pulse ripple on keypress, keyboard navigation (tabIndex + Enter/Space), 44px touch targets |
-| `PortalParticles` | `lib/portal-particles.ts` | 2D canvas golden cursor trail (150 particles, pre-allocated, delta-time corrected, zero-GC). `burst(x,y,count)` for preloader handoff. NOT WebGL (avoids GL context conflicts with CinemaGL) |
-| `PortalSounds` | `lib/portal-sounds.ts` | Proximity-aware E Phrygian notes via Web Audio. Per-node character: concierto=clean, mar=delay reverb, apocalypsis=low octave+distortion, pianista=warm sine. 3-voice GainNode pool, shared AudioContext |
-| `ConstellationData` | `lib/constellation-data.ts` | Typed node/line/star definitions. 5 nodes (concierto, mar, apocalypsis, pianista, contratar), 6 lines, 14 decorative stars. Positions as viewport percentages (0-100) |
+| `FractalPreloader` | `ui/FractalPreloader.tsx` | Julia Set fractal implosion preloader. WebGL2 fullscreen quad, GSAP-driven progress (3.5s, power2.in), gold explosion + clip-path reveal, audio primer. WebGL context destroyed after exit. Reduced-motion fallback: static "IVANN AURA" text |
+| `FractalGL` | `lib/fractal-gl.ts` | WebGL2 Julia Set renderer. Gold Inigo Quilez cosine palette, smooth iteration count, vignette, fake bloom. `setProgress(0-1)` drives c parameter collapse (0.7885→~0.024). Context lost/restored handlers. DPR cap 1.5 |
+| `ConstellationSVG` | `ui/ConstellationSVG.tsx` | SVG nodes (Fibonacci golden-angle positions) + Catmull-Rom curved lines + 3-layer premium glow (soft/medium/wide blur + screen blend) + feTurbulence energy filter (desktop only) + proximity glow + draw-on reveal + exit transition + pulse ripple + keyboard nav (tabIndex + Enter/Space) + 44px touch targets. preserveAspectRatio xMidYMid slice |
+| `PortalNebula` | `lib/portal-nebula.ts` | Procedural background: 3-octave value noise in dark gold tones + 30-50 twinkling stars + central radial glow. Canvas 2D, ~12fps, DPR 1. Reduced-motion: single static frame |
+| `PortalParticles` | `lib/portal-particles.ts` | Golden cursor trail (150 particles, pre-allocated, delta-time corrected, zero-GC). `burst(x,y,count)` for preloader handoff. Canvas 2D (avoids GL context conflicts) |
+| `PortalSounds` | `lib/portal-sounds.ts` | Proximity-aware E Phrygian notes. Per-node character: concierto=clean, mar=delay reverb, apocalypsis=low octave+distortion, pianista=warm sine. 3-voice GainNode pool, shared AudioContext |
+| `ConstellationData` | `lib/constellation-data.ts` | Fibonacci golden-angle node distribution + Catmull-Rom path generation + deterministic jitter. 5 nodes, 6 curved lines, 14 stars. `catmullRomToPath()` export |
 | `TeaserWorld` | `ui/TeaserWorld.tsx` | Reusable placeholder for upcoming album worlds. GSAP fade-in, radial color glow, "Proximamente" label, back-to-portal link |
 
 #### Scroll Cinema (existing)
@@ -76,7 +82,8 @@ layout.tsx
 | `Navigation` | `ui/Navigation.tsx` | Fixed nav (4 items: Inicio/Espectáculo/Música/Contacto), GPU scaleX progress bar, native `<dialog>` with CSS entrance/exit animations |
 | `CustomCursor` | `ui/CustomCursor.tsx` | GPU-composited transform cursor + scale-based ring hover + scroll velocity stretch |
 | `MagneticButtons` | `providers/MagneticButtons.tsx` | Global `.magnetic-btn` hover effect + mouseout reset (desktop, reduced-motion aware) |
-| `Preloader` | `ui/Preloader.tsx` | Cinematic preloader: SplitText reveal (font-display) + decorative bar + fractal noise grain + iris-close exit + audio primer |
+| `Preloader` | `ui/Preloader.tsx` | Video buffer preloader for /concierto only: SVG convergence + iris-close exit + audio primer + MutationObserver video detection + 99% buffer threshold |
+| `AutoplayTimeline` | `ui/AutoplayTimeline.tsx` | Optional autoplay for /concierto: play/pause button (40px, bottom-right) + full-width draggable timeline scrubber. Auto-scrolls Lenis at constant velocity (150s traversal). Manual scroll pauses. Does NOT bypass ScrollTrigger |
 | `SmoothScroll` | `providers/SmoothScroll.tsx` | Lenis + GSAP single RAF loop (lerp 0.08, vinyl easing, autoRaf false) |
 | `Contact` | `sections/Contact.tsx` | GSAP ScrollTrigger entrance + SplitText heading + API route form + loading/error/success states |
 | `Footer` | `ui/Footer.tsx` | GSAP SplitText entrance (staggered AURA heading) + real social links + micro-sounds |
